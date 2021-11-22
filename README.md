@@ -1,2 +1,3 @@
-# wreath-looper
-A peculiar looper for the Daisy platform
+# Wreath
+
+A multifaceted looper for the Daisy platform.

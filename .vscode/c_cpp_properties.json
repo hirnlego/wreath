@@ -9,11 +9,16 @@
                 "../DaisyExamples/DaisySp/**",
                 "../kxmx_bluemchen/src/**"
             ],
-            "defines": [],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
             "macFrameworkPath": [],
             "compilerPath": "/usr/local/bin/arm-none-eabi-g++",
-            "cStandard": "gnu11",
-            "cppStandard": "gnu++17"
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "macos-gcc-arm"
         }
     ],
     "version": 4

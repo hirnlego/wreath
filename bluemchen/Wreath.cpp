@@ -1,17 +1,18 @@
-#include "daisysp.h"
 #include "../../kxmx_bluemchen/src/kxmx_bluemchen.h"
+#include "../looper.h"
 #include <string>
 
 using namespace kxmx;
+using namespace wreath;
 using namespace daisy;
-using namespace daisysp;
 
 Bluemchen bluemchen;
 
-#define BUFFER_SECONDS 60         // 60 seconds
-#define BUFFER_SAMPLES 48000 * 60 // 60 seconds at 48kHz
+#define BUFFER_SECONDS 60 // 60 seconds
 #define MAX_PAGES 5
 #define MIN_LENGTH 12 // Minimum loop length in samples
+
+constexpr size_t BUFFER_SAMPLES = 48000 * BUFFER_SECONDS; // 60 seconds at 48kHz
 
 float DSY_SDRAM_BSS buffer_l[BUFFER_SAMPLES];
 float DSY_SDRAM_BSS buffer_r[BUFFER_SAMPLES];
@@ -26,272 +27,6 @@ float Crossfade(float a, float b, float fade)
     return a + (b - a) * fade;
 }
 
-struct looper
-{
-    enum class Mode
-    {
-        MIMEO,
-        MODE2,
-        MODE3,
-    };
-    Mode mode;
-
-    enum class Direction
-    {
-        FORWARD,
-        BACKWARDS,
-        PENDULUM,
-        RANDOM,
-    };
-    Direction direction;
-    bool forward;
-
-    float *buffer;
-    size_t initBufferSize;
-    size_t bufferSize;
-
-    float readPos;
-    size_t writePos;
-    size_t loopStart;
-    size_t loopEnd;
-    size_t loopLength;
-    
-    size_t fadeIndex;
-    
-    bool freeze;
-    float feedback;
-    bool feedbackPickup;
-    float dryWet;
-
-    float speed;
-
-    int stage;
-
-    void ResetBuffer()
-    {
-        std::fill(&buffer[0], &buffer[initBufferSize - 1], 0);
-        bufferSize = 0;
-        stage = 0;
-        freeze = false;
-        feedback = 0;
-        feedbackPickup = false;
-        readPos = 0;
-        writePos = 0;
-        loopStart = 0;
-        loopEnd = 0;
-        speed = 1.f;
-    }
-
-    void Init(float *mem, size_t size)
-    {
-        buffer = mem;
-        initBufferSize = size;
-        ResetBuffer();
-
-        stage = -1;
-
-        mode = Mode::MIMEO;
-        direction = Direction::BACKWARDS;
-        forward = Direction::FORWARD == direction;
-    }
-
-    void ToggleFreeze()
-    {
-        freeze = !freeze;
-        if (freeze) {
-            feedbackPickup = false;
-            // Frozen.
-            if (readPos < loopStart) {
-                //readPos = loopStart;
-            }
-        } else {
-            // Not frozen anymore.
-            loopStart = 0;
-        }
-    }
-
-    void ChangeLoopLength(float l)
-    {
-        loopLength = l;
-        loopEnd = loopLength - 1;
-    }
-
-    // Reads from a specified point in the delay line using linear interpolation.
-    // Also applies a fade in and out to the loop.
-    float Read(float pos, bool fade = true)
-    {
-        float a, b, frac;
-        uint32_t i_idx = static_cast<uint32_t>(pos);
-        frac = pos - i_idx;
-        a = buffer[i_idx];
-        b = buffer[(i_idx + (forward ? 1 : -1)) % static_cast<uint32_t>(loopLength)];
-
-        float val = a + (b - a) * frac;
-
-        float samples = loopLength > 1200 ? 1200 : loopLength / 2.f;
-        float kWindowFactor = (1.f / samples);
-        if (forward) {
-            // When going forward we consider read and write position aligned.
-            if (pos < samples) {
-                // Fade in.
-                val = std::sin(HALFPI_F * pos * kWindowFactor) * val;
-            } else if (pos >= loopLength - samples) {
-                // Fade out.
-                val = std::sin(HALFPI_F * (loopLength - pos) * kWindowFactor) * val;
-            }
-        } else {
-            // When going backwards read and write position cross in the middle and at beginning/end.
-            float diff = pos - writePos;
-            if (diff > 0 && diff < samples) {
-                // Fade in.
-                val = std::sin(HALFPI_F * diff * kWindowFactor) * val;
-            }
-        }
-        
-        
-        return val;
-    }
-    
-    void Write(size_t pos, float value)
-    {
-        buffer[pos] = value;
-    }
-
-    void StopBuffering()
-    {
-        loopLength = bufferSize;
-        loopStart = 0;
-        loopEnd = loopLength - 1;
-        readPos = forward ? loopStart : loopEnd;
-        writePos = 0;
-        stage++;
-    }
-
-    float Process(const float input, const int currentSample)
-    {
-        float readSig = 0.f;
-
-        // Wait a few samples to avoid potential clicking on startup.
-        if (-1 == stage) {
-            fadeIndex += 1;
-            if (fadeIndex > 48000) {
-                stage++;
-            }
-        }
-
-        // Fill up the buffer the first time.
-        if (0 == stage) {   
-            Write(writePos, input);
-            writePos += 1;
-            bufferSize = writePos;
-            
-            // Handle end of buffer.
-            if (writePos > initBufferSize - 1) {
-                StopBuffering();
-            }   
-        } 
-
-        if (stage == 1) {
-            readSig = Read(readPos);
-            
-            if (Mode::MIMEO == mode) {
-                if (freeze) {
-                    // When frozen, the feedback knob sets the starting point. No writing is done.
-                    size_t start = std::floor(feedback * bufferSize);
-                    // Pick up where the loop start point is.
-                    if (std::abs((int)start - (int)loopStart) < MIN_LENGTH && !feedbackPickup) {
-                        feedbackPickup = true;
-                    }
-                    if (feedbackPickup) {
-                        loopStart = start;
-                    }
-                    if (loopStart + loopLength > bufferSize) {
-                        loopEnd = loopStart + loopLength - bufferSize;    
-                    } else {
-                        loopEnd = loopStart + loopLength - 1;
-                    }
-                } else {
-                    // Clamp to prevent feedback going out of control.
-                    Write(writePos, Clamp(input + (readSig * feedback), 1, -1));
-                }
-
-                // Always write forward at original speed.
-                writePos += 1;
-                if (writePos > loopEnd) {
-                    writePos = loopStart;
-                }
-            } else {
-                float readSig2 = Read(writePos);
-                // In this mode there always is writing, but when frozen writes the looped signal. 
-                float writeSig = freeze ? readSig : input + (readSig2 * feedback);
-                // Clamp to prevent feedback going out of control.
-                Write(writePos, Clamp(writeSig, 1, -1));
-                // Always write forward at single speed.
-                writePos += 1;
-                if (writePos > bufferSize - 1) {
-                    writePos = 0;
-                }
-            }
-
-            // Move the reading position.
-            readPos = forward ? readPos + speed : readPos - speed;
-
-            // Handle normal loop boundaries.
-            if (loopEnd > loopStart) {
-                // Forward direction.
-                if (forward && readPos > loopEnd) {
-                    readPos = loopStart;
-                    // Invert direction when in pendulum.
-                    if (Direction::PENDULUM == direction) {
-                        readPos = loopEnd;
-                        forward = !forward;
-                    }
-                } 
-                // Backwards direction.
-                else if (!forward && readPos < loopStart) {
-                    readPos = loopEnd;
-                    // Invert direction when in pendulum.
-                    if (Direction::PENDULUM == direction) {
-                        readPos = loopStart;
-                        forward = !forward;
-                    }
-                }
-
-            } 
-            // Handle inverted loop boundaries (end point comes before start point).
-            else {
-                if (forward) {
-                    if (readPos > bufferSize) {
-                        // Wrap-around.
-                        readPos = 0;
-                    } else if (readPos > loopEnd && readPos < loopStart) {
-                        readPos = loopStart;
-                        // Invert direction when in pendulum.
-                        if (Direction::PENDULUM == direction) {
-                            readPos = loopEnd;
-                            forward = !forward;
-                        }
-                    } 
-                } else {
-                    if (readPos < 0) {
-                        // Wrap-around.
-                        readPos = bufferSize - 1;
-                    } else if (readPos > loopEnd && readPos < loopStart) {
-                        readPos = loopEnd;
-                        // Invert direction when in pendulum.
-                        if (Direction::PENDULUM == direction) {
-                            readPos = loopStart;
-                            forward = !forward;
-                        }
-                    } 
-                }
-            }
-        }
-
-        return readSig;
-    }
-};
-
 // Dry/wet
 Parameter knob1;
 Parameter knob1_dac;
@@ -304,7 +39,7 @@ Parameter knob2_dac;
 // Clock
 Parameter cv2;
 
-looper loopers[2];
+Looper loopers[2];
 
 const char *pageNames[MAX_PAGES] = {
     "Wreath",
@@ -483,7 +218,7 @@ void UpdateMenu()
                 // Page 2: Length.
                 for (int i = 0; i < 2; i++) {
                     float loopLength = 0.f;
-                    int step = loopers[i].loopLength > 480 ? std::floor(loopers[i].loopLength * 0.1) : 12;
+                    int step = loopers[i].loopLength > 880 ? std::floor(loopers[i].loopLength * 0.1) : 12;
                     if (bluemchen.encoder.Increment() > 0 && loopers[i].loopLength < loopers[i].bufferSize) {
                         loopLength = loopers[i].loopLength + step;
                         if (loopLength > loopers[i].bufferSize) {

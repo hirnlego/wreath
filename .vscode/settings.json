@@ -65,5 +65,6 @@
         "thread": "cpp",
         "typeinfo": "cpp",
         "variant": "cpp"
-    }
+    },
+    "C_Cpp.default.intelliSenseMode": "gcc-arm"
 }

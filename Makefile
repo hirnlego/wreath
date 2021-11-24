@@ -1,8 +1,13 @@
 # Project Name
-TARGET = Wreath
+TARGET ?= Wreath
+
+DEBUG = 1
+OPT = -O0
 
 # Sources
-CPP_SOURCES = ../kxmx_bluemchen/src/kxmx_bluemchen.cpp ./kxmx_bluemchen/Wreath.cpp
+CPP_SOURCES = ../kxmx_bluemchen/src/kxmx_bluemchen.cpp ./bluemchen/Wreath.cpp
+
+USE_FATFS = 1
 
 # Library Locations
 LIBDAISY_DIR = ../DaisyExamples/libdaisy/

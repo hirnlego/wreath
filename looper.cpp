@@ -1,4 +1,5 @@
 #include "looper.h"
+#include "dsp.h"
 
 using namespace wreath;
 using namespace daisysp;
@@ -6,7 +7,7 @@ using namespace daisysp;
 void Looper::Init(float *mem, size_t size)
 {
     buffer_ = mem;
-    initBufferSize_ = size;
+    initBufferSamples_ = size;
     ResetBuffer();
 
     stage_ = -1;
@@ -15,15 +16,22 @@ void Looper::Init(float *mem, size_t size)
     forward_ = Direction::FORWARD == direction_;
 }
 
+void Looper::SetSpeed(float speed) 
+{ 
+    speed_ = fclamp(speed, 0, MAX_SPEED); 
+}
+
 void Looper::ResetBuffer()
 {
-    std::fill(&buffer_[0], &buffer_[initBufferSize_ - 1], 0);
-    bufferSize_ = 0;
+    std::fill(&buffer_[0], &buffer_[initBufferSamples_ - 1], 0);
+    bufferSamples_ = 0;
+    bufferSeconds_ = 0;
     stage_ = 0;
     freeze_ = false;
     feedback_ = 0;
     feedbackPickup_ = false;
     readPos_ = 0;
+    readPosSeconds_ = 0;
     writePos_ = 0;
     loopStart_ = 0;
     loopEnd_ = 0;
@@ -49,25 +57,20 @@ void Looper::ToggleFreeze()
     }
 }
 
-void Looper::ChangeLoopLength(float length)
-{
-    loopLength_ = length;
-    loopEnd_ = loopLength_ - 1;
-}
-
 void Looper::StopBuffering()
 {
-    loopLength_ = bufferSize_;
+    bufferSeconds_ = bufferSamples_ / 48000.f;
+    loopLength_ = bufferSamples_;
     loopStart_ = 0;
     loopEnd_ = loopLength_ - 1;
-    readPos_ = forward_ ? loopStart_ : loopEnd_;
+    SetReadPos(forward_ ? loopStart_ : loopEnd_);
     writePos_ = 0;
     stage_++;
 }
 
 float Looper::Process(const float input, const int currentSample)
 {
-    float readSig = 0.f;
+    float output = 0.f;
 
     // Wait a few samples to avoid potential clicking on startup.
     if (-1 == stage_)
@@ -84,10 +87,10 @@ float Looper::Process(const float input, const int currentSample)
     {
         Write(writePos_, input);
         writePos_ += 1;
-        bufferSize_ = writePos_;
+        bufferSamples_ = writePos_;
 
         // Handle end of buffer.
-        if (writePos_ > initBufferSize_ - 1)
+        if (writePos_ > initBufferSamples_ - 1)
         {
             StopBuffering();
         }
@@ -95,14 +98,14 @@ float Looper::Process(const float input, const int currentSample)
 
     if (1 == stage_)
     {
-        readSig = Read(readPos_);
+        output = Read(readPos_);
 
         if (Mode::MIMEO == mode_)
         {
             if (freeze_)
             {
                 // When frozen, the feedback knob sets the starting point. No writing is done.
-                size_t start = std::floor(feedback_ * bufferSize_);
+                size_t start = std::floor(feedback_ * bufferSamples_);
                 // Pick up where the loop start point is.
                 if (std::abs((int)start - (int)loopStart_) < MIN_LENGTH && !feedbackPickup_)
                 {
@@ -112,9 +115,9 @@ float Looper::Process(const float input, const int currentSample)
                 {
                     loopStart_ = start;
                 }
-                if (loopStart_ + loopLength_ > bufferSize_)
+                if (loopStart_ + loopLength_ > bufferSamples_)
                 {
-                    loopEnd_ = loopStart_ + loopLength_ - bufferSize_;
+                    loopEnd_ = loopStart_ + loopLength_ - bufferSamples_;
                 }
                 else
                 {
@@ -123,7 +126,7 @@ float Looper::Process(const float input, const int currentSample)
             }
             else
             {
-                Write(writePos_, SoftLimit(input + (readSig * feedback_)));
+                Write(writePos_, SoftLimit(input + (output * feedback_)));
             }
 
             // Always write forward at original speed.
@@ -135,20 +138,20 @@ float Looper::Process(const float input, const int currentSample)
         }
         else
         {
-            float readSig2 = Read(writePos_);
+            float output2 = Read(writePos_);
             // In this mode there always is writing, but when frozen writes the looped signal.
-            float writeSig = freeze_ ? readSig : input + (readSig2 * feedback_);
+            float writeSig = freeze_ ? output : input + (output2 * feedback_);
             Write(writePos_, SoftLimit(writeSig));
             // Always write forward at single speed.
             writePos_ += 1;
-            if (writePos_ > bufferSize_ - 1)
+            if (writePos_ > bufferSamples_ - 1)
             {
                 writePos_ = 0;
             }
         }
 
         // Move the reading position.
-        readPos_ = forward_ ? readPos_ + speed_ : readPos_ - speed_;
+        SetReadPos(forward_ ? readPos_ + speed_ : readPos_ - speed_);
 
         // Handle normal loop boundaries.
         if (loopEnd_ > loopStart_)
@@ -156,22 +159,22 @@ float Looper::Process(const float input, const int currentSample)
             // Forward direction.
             if (forward_ && readPos_ > loopEnd_)
             {
-                readPos_ = loopStart_;
+                SetReadPos(loopStart_);
                 // Invert direction when in pendulum.
                 if (Direction::PENDULUM == direction_)
                 {
-                    readPos_ = loopEnd_;
+                    SetReadPos(loopEnd_);
                     forward_ = !forward_;
                 }
             }
             // Backwards direction.
             else if (!forward_ && readPos_ < loopStart_)
             {
-                readPos_ = loopEnd_;
+                SetReadPos(loopEnd_);
                 // Invert direction when in pendulum.
                 if (Direction::PENDULUM == direction_)
                 {
-                    readPos_ = loopStart_;
+                    SetReadPos(loopStart_);
                     forward_ = !forward_;
                 }
             }
@@ -181,18 +184,18 @@ float Looper::Process(const float input, const int currentSample)
         {
             if (forward_)
             {
-                if (readPos_ > bufferSize_)
+                if (readPos_ > bufferSamples_)
                 {
                     // Wrap-around.
-                    readPos_ = 0;
+                    SetReadPos(0);
                 }
                 else if (readPos_ > loopEnd_ && readPos_ < loopStart_)
                 {
-                    readPos_ = loopStart_;
+                    SetReadPos(loopStart_);
                     // Invert direction when in pendulum.
                     if (Direction::PENDULUM == direction_)
                     {
-                        readPos_ = loopEnd_;
+                        SetReadPos(loopEnd_);
                         forward_ = !forward_;
                     }
                 }
@@ -202,15 +205,15 @@ float Looper::Process(const float input, const int currentSample)
                 if (readPos_ < 0)
                 {
                     // Wrap-around.
-                    readPos_ = bufferSize_ - 1;
+                    SetReadPos(bufferSamples_ - 1);
                 }
                 else if (readPos_ > loopEnd_ && readPos_ < loopStart_)
                 {
-                    readPos_ = loopEnd_;
+                    SetReadPos(loopEnd_);
                     // Invert direction when in pendulum.
                     if (Direction::PENDULUM == direction_)
                     {
-                        readPos_ = loopStart_;
+                        SetReadPos(loopStart_);
                         forward_ = !forward_;
                     }
                 }
@@ -218,12 +221,12 @@ float Looper::Process(const float input, const int currentSample)
         }
     }
 
-    return readSig;
+    return output;
 }
 
 // Reads from a specified point in the delay line using linear interpolation.
 // Also applies a fade in and out to the loop.
-float Looper::Read(float pos, bool fade = true)
+float Looper::Read(float pos)
 {
     float a, b, frac;
     uint32_t i_idx = static_cast<uint32_t>(pos);
@@ -261,9 +264,4 @@ float Looper::Read(float pos, bool fade = true)
     }
 
     return val;
-}
-
-void Looper::Write(size_t pos, float value)
-{
-    buffer_[pos] = value;
 }

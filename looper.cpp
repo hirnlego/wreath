@@ -60,7 +60,6 @@ void Looper::ToggleFreeze()
 
 void Looper::StopBuffering()
 {
-    bufferSeconds_ = bufferSamples_ / (float)sampleRate_;
     loopLength_ = bufferSamples_;
     loopStart_ = 0;
     loopEnd_ = loopLength_ - 1;
@@ -71,7 +70,7 @@ void Looper::StopBuffering()
 
 float Looper::Process(const float input, const int currentSample)
 {
-    float output = 0.f;
+    float output{0.f};
 
     // Wait a few samples to avoid potential clicking on startup.
     if (IsStartingUp())
@@ -90,6 +89,7 @@ float Looper::Process(const float input, const int currentSample)
         Write(writePos_, input);
         writePos_ += 1;
         bufferSamples_ = writePos_;
+        bufferSeconds_ = bufferSamples_ / (float)sampleRate_;
 
         // Handle end of buffer.
         if (writePos_ > initBufferSamples_ - 1)
@@ -140,9 +140,9 @@ float Looper::Process(const float input, const int currentSample)
         }
         else
         {
-            float output2 = Read(writePos_);
+            float output2{Read(writePos_)};
             // In this mode there always is writing, but when frozen writes the looped signal.
-            float writeSig = IsFrozen() ? output : input + (output2 * feedback_);
+            float writeSig{IsFrozen() ? output : input + (output2 * feedback_)};
             Write(writePos_, SoftLimit(writeSig));
             // Always write forward at single speed.
             writePos_ += 1;
@@ -231,15 +231,15 @@ float Looper::Process(const float input, const int currentSample)
 float Looper::Read(float pos)
 {
     float a, b, frac;
-    uint32_t i_idx = static_cast<uint32_t>(pos);
+    uint32_t i_idx{static_cast<uint32_t>(pos)};
     frac = pos - i_idx;
     a = buffer_[i_idx];
     b = buffer_[(i_idx + (forward_ ? 1 : -1)) % static_cast<uint32_t>(loopLength_)];
 
-    float val = a + (b - a) * frac;
+    float val{a + (b - a) * frac};
 
-    float samples = loopLength_ > 1200 ? 1200 : loopLength_ / 2.f;
-    float kWindowFactor = (1.f / samples);
+    float samples{loopLength_ > 1200 ? 1200 : loopLength_ / 2.f};
+    float kWindowFactor{1.f / samples};
     if (forward_)
     {
         // When going forward we consider read and write position aligned.
@@ -257,7 +257,7 @@ float Looper::Read(float pos)
     else
     {
         // When going backwards read and write position cross in the middle and at beginning/end.
-        float diff = pos - writePos_;
+        float diff{pos - writePos_};
         if (diff > 0 && diff < samples)
         {
             // Fade in.

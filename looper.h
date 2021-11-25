@@ -81,29 +81,27 @@ namespace wreath
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
         inline void IncrementLoopLength(size_t step)
         {
-            size_t length = 0;
             if (loopLength_ < bufferSamples_)
             {
-                length = loopLength_ + step;
+                size_t length{loopLength_ + step};
                 if (length > bufferSamples_)
                 {
                     length = bufferSamples_;
                 }
+                SetLoopLength(length);
             }
-            SetLoopLength(length);
         };
         inline void DecrementLoopLength(size_t step)
         {
-            size_t length = 0;
             if (loopLength_ > 0)
             {
-                length = loopLength_ - step;
+                size_t length{loopLength_ - step};
                 if (length < 0)
                 {
                     length = 0;
                 }
+                SetLoopLength(length);
             }
-            SetLoopLength(length);
         };
         inline void SetLoopLength(size_t length)
         {

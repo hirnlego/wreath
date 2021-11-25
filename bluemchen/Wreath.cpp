@@ -1,6 +1,7 @@
 #include "kxmx_bluemchen.h"
 #include "../looper.h"
 #include <string>
+#include <string.h>
 
 using namespace kxmx;
 using namespace wreath;
@@ -65,6 +66,45 @@ const char *directionNames[4] = {
 const char *modeNames[1] = {
     "Mimeo",
 };
+
+
+
+/** The DSY_QSPI_BSS attribute places your array in QSPI memory */
+
+float DSY_QSPI_BSS qspi_buffer[5];
+
+struct CONFIGURATION
+{
+
+};
+
+CONFIGURATION curent_config;
+
+// https://forum.electro-smith.com/t/persisting-data-to-from-flash/502/27
+void SaveConfig(uint32_t slot)
+{
+    /*
+    size_t size = sizeof(wavform_ram[0]) * WAVE_LENGTH;
+    // Grab physical address from pointer
+    size_t address = (size_t)qspi_buffer;
+    // Erase qspi and then write that wave
+    hw.qspi.Erase(address, address + size);
+    hw.qspi.Write(address, size, (uint8_t *)wavform_ram);
+    */
+
+    uint32_t base = 0x90000000;
+    base += slot * 4096; // works only because sizeof(CONFIGURATION) < 4096
+    bluemchen.seed.qspi.Erase(base, base + sizeof(CONFIGURATION));
+    bluemchen.seed.qspi.Write(base, sizeof(CONFIGURATION), (uint8_t *)&curent_config);
+}
+
+void LoadConfig(uint32_t slot)
+{
+    memcpy(&curent_config, reinterpret_cast<void *>(0x90000000 + (slot * 4096)), sizeof(CONFIGURATION));
+}
+
+
+
 
 void UpdateControls()
 {
@@ -145,7 +185,6 @@ void UpdateOled()
         // Draw the loop bar.
         int start = std::floor(loopers[0].GetLoopStart() * step);
         int end = std::floor(loopers[0].GetLoopEnd() * step);
-        bluemchen.display.DrawRect(0, 27, width, 28, false);
         if (loopers[0].GetLoopStart() < loopers[0].GetLoopEnd())
         {
             bluemchen.display.DrawRect(start, 27, end, 28, true, true);
@@ -243,7 +282,7 @@ void UpdateMenu()
                 for (int i = 0; i < 2; i++)
                 {
                     // TODO: micro-steps for v/oct. Also, step should always be integer!
-                    int step = loopers[i].GetLoopLength() > 880 ? std::floor(loopers[i].GetLoopLength() * 0.1) : 12;
+                    int step{loopers[i].GetLoopLength() > 880 ? std::floor(loopers[i].GetLoopLength() * 0.1) : 12};
                     if (bluemchen.encoder.Increment() > 0)
                     {
                         loopers[i].IncrementLoopLength(step);
@@ -320,11 +359,11 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 {
     for (size_t i = 0; i < size; i++)
     {
-        float dry_l = IN_L[i];
-        float dry_r = IN_R[i];
+        float dry_l{IN_L[i]};
+        float dry_r{IN_R[i]};
 
-        float wet_l = loopers[0].Process(dry_l, i);
-        float wet_r = loopers[1].Process(dry_r, i);
+        float wet_l{loopers[0].Process(dry_l, i)};
+        float wet_r{loopers[1].Process(dry_r, i)};
 
         OUT_L[i] = dry_l * (1 - dryWet) + wet_l * dryWet;
         OUT_R[i] = dry_r * (1 - dryWet) + wet_r * dryWet;

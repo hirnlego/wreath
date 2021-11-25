@@ -8,14 +8,15 @@ using namespace daisy;
 
 Bluemchen bluemchen;
 
-#define BUFFER_SECONDS 60 // 60 seconds
 #define MAX_PAGES 5
-#define MIN_LENGTH 12 // Minimum loop length in samples
 
-constexpr size_t BUFFER_SAMPLES = 48000 * BUFFER_SECONDS; // 60 seconds at 48kHz
+constexpr size_t kSampleRate{48000};
+constexpr int kBufferSeconds{120}; // 2 minutes max
 
-float DSY_SDRAM_BSS buffer_l[BUFFER_SAMPLES];
-float DSY_SDRAM_BSS buffer_r[BUFFER_SAMPLES];
+const size_t kBufferSamples{kSampleRate * kBufferSeconds};
+
+float DSY_SDRAM_BSS buffer_l[kBufferSamples];
+float DSY_SDRAM_BSS buffer_r[kBufferSamples];
 
 // Dry/wet
 Parameter knob1;
@@ -77,6 +78,10 @@ void UpdateControls()
     // Update loopers values.
     loopers[0].SetDryWet(dryWet);
     loopers[1].SetDryWet(dryWet);
+    /*
+    – use a higher-order filter (2 or 4 poles), but with a reasonable cutoff frequency.
+    – use a dead zone, a hysteresis effect on a small range. For example if the current delay is set to T, any target delay value in the [T-d, T+d] range won’t change the current time.
+    */
     loopers[0].SetFeedback(knob2.Value());
     loopers[1].SetFeedback(knob2.Value());
 
@@ -119,7 +124,7 @@ void UpdateOled()
         float seconds = loopers[0].GetBufferSeconds();
         float frac = seconds - (int)seconds;
         float inte = seconds - frac;
-        str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + " / " + std::to_string(BUFFER_SECONDS);
+        str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + " / " + std::to_string(kBufferSeconds);
         bluemchen.display.SetCursor(0, 24);
         bluemchen.display.WriteString(cstr, Font_6x8, true);
     }
@@ -185,7 +190,7 @@ void UpdateOled()
             int x = std::floor(loopers[0].GetLoopLength() * step);
             bluemchen.display.DrawRect(0, 11, x, 12, true, true);
             // Write the loop length in seconds.
-            float loopLength = loopers[0].GetLoopLength() / 48000.f;
+            float loopLength = loopers[0].GetLoopLength() / (float)kSampleRate;
             float frac = loopLength - (int)loopLength;
             float inte = loopLength - frac;
             str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
@@ -237,6 +242,7 @@ void UpdateMenu()
                 // Page 2: Length.
                 for (int i = 0; i < 2; i++)
                 {
+                    // TODO: micro-steps for v/oct. Also, step should always be integer!
                     int step = loopers[i].GetLoopLength() > 880 ? std::floor(loopers[i].GetLoopLength() * 0.1) : 12;
                     if (bluemchen.encoder.Increment() > 0)
                     {
@@ -328,6 +334,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 int main(void)
 {
     bluemchen.Init();
+    bluemchen.SetAudioSampleRate(static_cast<daisy::SaiHandle::Config::SampleRate>(kSampleRate));
     bluemchen.StartAdc();
 
     knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
@@ -339,8 +346,8 @@ int main(void)
     cv1.Init(bluemchen.controls[bluemchen.CTRL_3], 0.0f, 1.0f, Parameter::LINEAR);
     cv2.Init(bluemchen.controls[bluemchen.CTRL_4], 0.0f, 1.0f, Parameter::LINEAR);
 
-    loopers[0].Init(buffer_l, BUFFER_SAMPLES);
-    loopers[1].Init(buffer_r, BUFFER_SAMPLES);
+    loopers[0].Init(kSampleRate, buffer_l, kBufferSeconds);
+    loopers[1].Init(kSampleRate, buffer_r, kBufferSeconds);
 
     bluemchen.StartAudio(AudioCallback);
 

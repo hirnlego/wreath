@@ -4,13 +4,14 @@
 using namespace wreath;
 using namespace daisysp;
 
-void Looper::Init(float *mem, size_t size)
+void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
 {
+    sampleRate_ = sampleRate;
     buffer_ = mem;
-    initBufferSamples_ = size;
+    initBufferSamples_ = sampleRate * maxBufferSeconds;
     ResetBuffer();
 
-    stage_ = -1;
+    state_ = State::INIT;
     mode_ = Mode::MIMEO;
     direction_ = Direction::FORWARD;
     forward_ = Direction::FORWARD == direction_;
@@ -18,7 +19,7 @@ void Looper::Init(float *mem, size_t size)
 
 void Looper::SetSpeed(float speed) 
 { 
-    speed_ = fclamp(speed, 0, MAX_SPEED); 
+    speed_ = speed; 
 }
 
 void Looper::ResetBuffer()
@@ -26,8 +27,7 @@ void Looper::ResetBuffer()
     std::fill(&buffer_[0], &buffer_[initBufferSamples_ - 1], 0);
     bufferSamples_ = 0;
     bufferSeconds_ = 0;
-    stage_ = 0;
-    freeze_ = false;
+    state_ = State::BUFFERING;
     feedback_ = 0;
     feedbackPickup_ = false;
     readPos_ = 0;
@@ -40,32 +40,33 @@ void Looper::ResetBuffer()
 
 void Looper::ToggleFreeze()
 {
-    freeze_ = !freeze_;
-    if (freeze_)
+    if (IsFrozen())
     {
-        feedbackPickup_ = false;
+        // Not frozen anymore.
+        state_ = State::RECORDING;
+        loopStart_ = 0;
+    }
+    else
+    {
         // Frozen.
+        state_ = State::FROZEN;
+        feedbackPickup_ = false;
         if (readPos_ < loopStart_)
         {
             //readPos_ = loopStart_;
         }
     }
-    else
-    {
-        // Not frozen anymore.
-        loopStart_ = 0;
-    }
 }
 
 void Looper::StopBuffering()
 {
-    bufferSeconds_ = bufferSamples_ / 48000.f;
+    bufferSeconds_ = bufferSamples_ / (float)sampleRate_;
     loopLength_ = bufferSamples_;
     loopStart_ = 0;
     loopEnd_ = loopLength_ - 1;
     SetReadPos(forward_ ? loopStart_ : loopEnd_);
     writePos_ = 0;
-    stage_++;
+    state_ = State::RECORDING;
 }
 
 float Looper::Process(const float input, const int currentSample)
@@ -73,17 +74,18 @@ float Looper::Process(const float input, const int currentSample)
     float output = 0.f;
 
     // Wait a few samples to avoid potential clicking on startup.
-    if (-1 == stage_)
+    if (IsStartingUp())
     {
         fadeIndex_ += 1;
-        if (fadeIndex_ > 48000)
+        if (fadeIndex_ > sampleRate_)
         {
-            stage_++;
+            fadeIndex_ = 0;
+            state_ = State::BUFFERING;
         }
     }
 
     // Fill up the buffer the first time.
-    if (0 == stage_)
+    if (IsBuffering())
     {
         Write(writePos_, input);
         writePos_ += 1;
@@ -96,18 +98,18 @@ float Looper::Process(const float input, const int currentSample)
         }
     }
 
-    if (1 == stage_)
+    if (IsRecording() || IsFrozen())
     {
         output = Read(readPos_);
 
         if (Mode::MIMEO == mode_)
         {
-            if (freeze_)
+            if (IsFrozen())
             {
                 // When frozen, the feedback knob sets the starting point. No writing is done.
                 size_t start = std::floor(feedback_ * bufferSamples_);
                 // Pick up where the loop start point is.
-                if (std::abs((int)start - (int)loopStart_) < MIN_LENGTH && !feedbackPickup_)
+                if (std::abs(static_cast<int>(start - loopStart_)) < static_cast<int>(bufferSamples_ * 0.1f) && !feedbackPickup_)
                 {
                     feedbackPickup_ = true;
                 }
@@ -140,7 +142,7 @@ float Looper::Process(const float input, const int currentSample)
         {
             float output2 = Read(writePos_);
             // In this mode there always is writing, but when frozen writes the looped signal.
-            float writeSig = freeze_ ? output : input + (output2 * feedback_);
+            float writeSig = IsFrozen() ? output : input + (output2 * feedback_);
             Write(writePos_, SoftLimit(writeSig));
             // Always write forward at single speed.
             writePos_ += 1;

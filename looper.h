@@ -2,11 +2,7 @@
 
 #include <stdint.h>
 
-#define MIN_LENGTH 12 // Minimum loop length in samples
-#define MIN_SPEED -2.f // Minimum speed
-#define MAX_SPEED 2.f // Maximum speed
-
-namespace wreath 
+namespace wreath
 {
     class Looper
     {
@@ -14,6 +10,14 @@ namespace wreath
     public:
         Looper() {}
         ~Looper() {}
+
+        enum class State
+        {
+            INIT,
+            BUFFERING,
+            RECORDING,
+            FROZEN,
+        };
 
         enum class Mode
         {
@@ -34,10 +38,11 @@ namespace wreath
         /**
          * @brief Initializes the looper.
          * 
+         * @param sampleRate 
          * @param mem 
-         * @param size 
+         * @param maxBufferSeconds 
          */
-        void Init(float *mem, size_t size);
+        void Init(size_t sampleRate, float *mem, int maxBufferSeconds);
         /**
          * @brief Resets the buffer.
          */
@@ -67,15 +72,16 @@ namespace wreath
         inline float GetPositionSeconds() { return readPosSeconds_; }
         inline float GetPosition() { return readPos_; }
         inline float GetSpeed() { return speed_; }
-        inline bool IsStartingUp() { return -1 == stage_; }
-        inline bool IsBuffering() { return 0 == stage_; }
-        inline bool IsFrozen() { return freeze_; }
+        inline bool IsStartingUp() { return State::INIT == state_; }
+        inline bool IsBuffering() { return State::BUFFERING == state_; }
+        inline bool IsRecording() { return State::RECORDING == state_; }
+        inline bool IsFrozen() { return State::FROZEN == state_; }
         inline bool IsMimeoMode() { return Mode::MIMEO == mode_; }
         inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
-        inline void IncrementLoopLength(float step)
+        inline void IncrementLoopLength(size_t step)
         {
-            float length = 0.f;
+            size_t length = 0;
             if (loopLength_ < bufferSamples_)
             {
                 length = loopLength_ + step;
@@ -86,21 +92,21 @@ namespace wreath
             }
             SetLoopLength(length);
         };
-        inline void DecrementLoopLength(float step)
+        inline void DecrementLoopLength(size_t step)
         {
-            float length = 0.f;
-            if (loopLength_ > MIN_LENGTH)
+            size_t length = 0;
+            if (loopLength_ > 0)
             {
                 length = loopLength_ - step;
-                if (length < MIN_LENGTH)
+                if (length < 0)
                 {
-                    length = MIN_LENGTH;
+                    length = 0;
                 }
             }
             SetLoopLength(length);
         };
-        inline void SetLoopLength(float length) 
-        {   
+        inline void SetLoopLength(size_t length)
+        {
             loopLength_ = length;
             loopEnd_ = loopLength_ - 1;
         };
@@ -112,28 +118,29 @@ namespace wreath
         inline void SetReadPos(float pos)
         {
             readPos_ = pos;
-            readPosSeconds_ = readPos_ / 48000.f;
+            readPosSeconds_ = readPos_ / sampleRate_;
         }
 
         float *buffer_;
-        size_t initBufferSamples_;
-        size_t bufferSamples_;
         float bufferSeconds_;
         float readPos_;
         float readPosSeconds_;
+        float feedback_;
+        float dryWet_;
+        float speed_;
+        size_t initBufferSamples_;
+        size_t bufferSamples_;
         size_t writePos_;
         size_t loopStart_;
         size_t loopEnd_;
         size_t loopLength_;
         size_t fadeIndex_;
-        bool freeze_;
-        float feedback_;
+        size_t sampleRate_;
         bool feedbackPickup_;
-        float dryWet_;
-        float speed_;
-        int stage_;
+        bool freeze_;
+        bool forward_;
+        State state_;
         Mode mode_;
         Direction direction_;
-        bool forward_;
     };
-}  // namespace wreath
+} // namespace wreath

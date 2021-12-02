@@ -11,7 +11,7 @@ namespace wreath
         Looper() {}
         ~Looper() {}
 
-        enum class State
+        enum State
         {
             INIT,
             BUFFERING,
@@ -19,20 +19,22 @@ namespace wreath
             FROZEN,
         };
 
-        enum class Mode
+        enum Mode
         {
             MIMEO,
             MODE2,
             MODE3,
+            LAST_MODE,
         };
 
-        enum class Direction
+        enum Direction
         {
             FORWARD,
             BACKWARDS,
             PENDULUM,
             DRUNK,
             RANDOM,
+            LAST_DIRECTION,
         };
 
         /**
@@ -63,6 +65,9 @@ namespace wreath
 
         void SetSpeed(float speed);
         void ToggleFreeze();
+        void IncrementLoopLength(size_t step);
+        void DecrementLoopLength(size_t step);
+        void SetLoopLength(size_t length);
 
         inline size_t GetBufferSamples() { return bufferSamples_; }
         inline size_t GetLoopStart() { return loopStart_; }
@@ -72,6 +77,8 @@ namespace wreath
         inline float GetPositionSeconds() { return readPosSeconds_; }
         inline float GetPosition() { return readPos_; }
         inline float GetSpeed() { return speed_; }
+        inline Direction GetDirection() { return direction_; }
+        inline Mode GetMode() { return mode_; }
         inline bool IsStartingUp() { return State::INIT == state_; }
         inline bool IsBuffering() { return State::BUFFERING == state_; }
         inline bool IsRecording() { return State::RECORDING == state_; }
@@ -79,35 +86,17 @@ namespace wreath
         inline bool IsMimeoMode() { return Mode::MIMEO == mode_; }
         inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
-        inline void IncrementLoopLength(size_t step)
-        {
-            if (loopLength_ < bufferSamples_)
-            {
-                size_t length{loopLength_ + step};
-                if (length > bufferSamples_)
-                {
-                    length = bufferSamples_;
-                }
-                SetLoopLength(length);
+        inline void SetDirection(Direction direction) { 
+            direction_ = direction; 
+            if (Direction::FORWARD == direction && !forward_) {
+                forward_ = true;
             }
-        };
-        inline void DecrementLoopLength(size_t step)
-        {
-            if (loopLength_ > 0)
+            else if (Direction::BACKWARDS == direction && forward_)
             {
-                size_t length{loopLength_ - step};
-                if (length < 0)
-                {
-                    length = 0;
-                }
-                SetLoopLength(length);
+                forward_ = false;
             }
-        };
-        inline void SetLoopLength(size_t length)
-        {
-            loopLength_ = length;
-            loopEnd_ = loopLength_ - 1;
-        };
+        }
+        inline void SetMode(Mode mode) { mode_ = mode; }
 
     private:
         float Read(float pos);

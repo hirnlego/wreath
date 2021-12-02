@@ -1,11 +1,13 @@
-#include "kxmx_bluemchen.h"
-#include "../looper.h"
 #include <string>
 #include <string.h>
+#include "kxmx_bluemchen.h"
+#include "dsp.h"
+#include "../looper.h"
 
 using namespace kxmx;
 using namespace wreath;
 using namespace daisy;
+using namespace daisysp;
 
 Bluemchen bluemchen;
 
@@ -33,18 +35,19 @@ Parameter cv2;
 
 Looper loopers[2];
 
-bool buffering = true;
-float dryWet;
+bool buffering{true};
+float dryWet{};
+float feedback{};
 
-const char *pageNames[MAX_PAGES] = {
+const char *pageNames[] = {
     "Wreath",
     "Speed",
     "Length",
     "Direction",
     "Mode",
 };
-int currentPage = 0;
-bool pageSelected = false;
+int currentPage{0};
+bool pageSelected{false};
 
 enum class MenuClickOp
 {
@@ -54,20 +57,22 @@ enum class MenuClickOp
     RESET,
 };
 
-MenuClickOp clickOp = MenuClickOp::STOP;
-bool buttonPressed = false;
+MenuClickOp clickOp{MenuClickOp::STOP};
+bool buttonPressed{false};
 
-const char *directionNames[4] = {
+const char *directionNames[] = {
     "Forward",
     "Backwards",
     "Pendulum",
+    "Drunk",
     "Random",
 };
-const char *modeNames[1] = {
+
+const char *modeNames[] = {
     "Mimeo",
+    "Mode 2",
+    "Mode 3",
 };
-
-
 
 /** The DSY_QSPI_BSS attribute places your array in QSPI memory */
 
@@ -75,7 +80,6 @@ float DSY_QSPI_BSS qspi_buffer[5];
 
 struct CONFIGURATION
 {
-
 };
 
 CONFIGURATION curent_config;
@@ -103,9 +107,6 @@ void LoadConfig(uint32_t slot)
     memcpy(&curent_config, reinterpret_cast<void *>(0x90000000 + (slot * 4096)), sizeof(CONFIGURATION));
 }
 
-
-
-
 void UpdateControls()
 {
     bluemchen.ProcessAllControls();
@@ -113,17 +114,20 @@ void UpdateControls()
     knob1.Process();
     knob2.Process();
 
-    dryWet = knob1.Value();
-
     // Update loopers values.
-    loopers[0].SetDryWet(dryWet);
-    loopers[1].SetDryWet(dryWet);
-    /*
-    – use a higher-order filter (2 or 4 poles), but with a reasonable cutoff frequency.
-    – use a dead zone, a hysteresis effect on a small range. For example if the current delay is set to T, any target delay value in the [T-d, T+d] range won’t change the current time.
-    */
-    loopers[0].SetFeedback(knob2.Value());
-    loopers[1].SetFeedback(knob2.Value());
+    if (std::abs(dryWet - knob1.Value()) > 0.01f)
+    {
+        dryWet = knob1.Value();
+        loopers[0].SetDryWet(dryWet);
+        loopers[1].SetDryWet(dryWet);
+    }
+
+    if (std::abs(feedback - knob2.Value()) > 0.01f)
+    {
+        feedback = knob2.Value();
+        loopers[0].SetFeedback(feedback);
+        loopers[1].SetFeedback(feedback);
+    }
 
     bluemchen.seed.dac.WriteValue(daisy::DacHandle::Channel::ONE, static_cast<uint16_t>(knob1_dac.Process()));
     bluemchen.seed.dac.WriteValue(daisy::DacHandle::Channel::TWO, static_cast<uint16_t>(knob2_dac.Process()));
@@ -211,7 +215,7 @@ void UpdateOled()
         }
         else if (currentPage == 1)
         {
-            // Speed.
+            // Page 1: Speed.
             int x = std::floor(loopers[0].GetSpeed() * (width / 2.f));
             if (!loopers[0].IsMimeoMode())
             {
@@ -225,6 +229,7 @@ void UpdateOled()
         }
         else if (currentPage == 2)
         {
+            // Page 2: Length.
             // Draw the loop length bar.
             int x = std::floor(loopers[0].GetLoopLength() * step);
             bluemchen.display.DrawRect(0, 11, x, 12, true, true);
@@ -236,6 +241,13 @@ void UpdateOled()
         }
         else if (currentPage == 3)
         {
+            // Page 3: Direction.
+            str = directionNames[static_cast<int>(loopers[0].GetDirection())];
+        }
+        else if (currentPage == 4)
+        {
+            // Page 4: Mode.
+            str = modeNames[static_cast<int>(loopers[0].GetMode())];
         }
 
         bluemchen.display.SetCursor(0, 16);
@@ -279,10 +291,11 @@ void UpdateMenu()
             else if (currentPage == 2)
             {
                 // Page 2: Length.
+                int step{};
                 for (int i = 0; i < 2; i++)
                 {
                     // TODO: micro-steps for v/oct. Also, step should always be integer!
-                    int step{loopers[i].GetLoopLength() > 880 ? std::floor(loopers[i].GetLoopLength() * 0.1) : 12};
+                    step = loopers[i].GetLoopLength() > 880 ? std::floor(loopers[i].GetLoopLength() * 0.1) : 12;
                     if (bluemchen.encoder.Increment() > 0)
                     {
                         loopers[i].IncrementLoopLength(step);
@@ -291,6 +304,26 @@ void UpdateMenu()
                     {
                         loopers[i].DecrementLoopLength(step);
                     }
+                }
+            }
+            else if (currentPage == 3)
+            {
+                // Page 3: Direction.
+                for (int i = 0; i < 2; i++)
+                {
+                    int currentDirection{loopers[i].GetDirection()};
+                    currentDirection += bluemchen.encoder.Increment();
+                    loopers[i].SetDirection(static_cast<Looper::Direction>(fclamp(currentDirection, 0, Looper::Direction::LAST_DIRECTION - 1)));
+                }
+            }
+            else if (currentPage == 4)
+            {
+                // Page 4: Mode.
+                for (int i = 0; i < 2; i++)
+                {
+                    int currentMode{loopers[i].GetMode()};
+                    currentMode += bluemchen.encoder.Increment();
+                    loopers[i].SetMode(static_cast<Looper::Mode>(fclamp(currentMode, 0, Looper::Mode::LAST_MODE - 1)));
                 }
             }
         }

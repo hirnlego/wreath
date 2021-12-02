@@ -17,9 +17,9 @@ void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
     forward_ = Direction::FORWARD == direction_;
 }
 
-void Looper::SetSpeed(float speed) 
-{ 
-    speed_ = speed; 
+void Looper::SetSpeed(float speed)
+{
+    speed_ = fclamp(speed, 0.f, 2.f);
 }
 
 void Looper::ResetBuffer()
@@ -57,6 +57,38 @@ void Looper::ToggleFreeze()
         }
     }
 }
+
+void Looper::IncrementLoopLength(size_t step)
+{
+    if (loopLength_ < bufferSamples_)
+    {
+        size_t length{loopLength_ + step};
+        if (length > bufferSamples_)
+        {
+            length = bufferSamples_;
+        }
+        SetLoopLength(length);
+    }
+};
+
+void Looper::DecrementLoopLength(size_t step)
+{
+    if (loopLength_ > 0)
+    {
+        size_t length{loopLength_ - step};
+        if (length < 0)
+        {
+            length = 0;
+        }
+        SetLoopLength(length);
+    }
+};
+
+void Looper::SetLoopLength(size_t length)
+{
+    loopLength_ = length;
+    loopEnd_ = loopLength_ - 1;
+};
 
 void Looper::StopBuffering()
 {

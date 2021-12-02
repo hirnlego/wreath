@@ -162,13 +162,6 @@ float Looper::Process(const float input, const int currentSample)
             {
                 Write(writePos_, SoftLimit(input + (output * feedback_)));
             }
-
-            // Always write forward at original speed.
-            writePos_ += 1;
-            if (writePos_ > loopEnd_)
-            {
-                writePos_ = loopStart_;
-            }
         }
         else
         {
@@ -176,16 +169,24 @@ float Looper::Process(const float input, const int currentSample)
             // In this mode there always is writing, but when frozen writes the looped signal.
             float writeSig{IsFrozen() ? output : input + (output2 * feedback_)};
             Write(writePos_, SoftLimit(writeSig));
-            // Always write forward at single speed.
-            writePos_ += 1;
-            if (writePos_ > bufferSamples_ - 1)
-            {
-                writePos_ = 0;
-            }
+        }
+        
+        // Always write forward at original speed.
+        writePos_ += 1;
+        if (writePos_ > loopEnd_)
+        {
+            writePos_ = loopStart_;
         }
 
-        // Move the reading position.
-        SetReadPos(forward_ ? readPos_ + speed_ : readPos_ - speed_);
+        if (Direction::RANDOM == direction_)
+        {
+            // In this case we just choose randomly a new starting point.
+            SetReadPos(loopStart_ + std::rnd() % loopLength_);
+        } 
+        else {
+            // Otherwise, move the reading position normally.
+            SetReadPos(forward_ ? readPos_ + speed_ : readPos_ - speed_);
+        }
 
         // Handle normal loop boundaries.
         if (loopEnd_ > loopStart_)
@@ -251,6 +252,14 @@ float Looper::Process(const float input, const int currentSample)
                         forward_ = !forward_;
                     }
                 }
+            }
+        }
+
+        if (Direction::DRUNK == direction_)
+        {
+            // When drunk there's a 30% probability of changing direction.
+            if ((rnd() % 100) < 30) {
+                forward_ = !forward_;
             }
         }
     }

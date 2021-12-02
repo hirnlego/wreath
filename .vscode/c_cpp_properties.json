@@ -4,8 +4,10 @@
             "name": "Mac",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}",
                 "../DaisyExamples/libdaisy/**",
-                "../DaisyExamples/DaisySp/**"
+                "../DaisyExamples/DaisySp/**",
+                "../kxmx_bluemchen/src/**"
             ],
             "defines": [
                 "_DEBUG",

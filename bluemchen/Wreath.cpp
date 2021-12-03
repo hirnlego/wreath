@@ -107,6 +107,10 @@ void LoadConfig(uint32_t slot)
     memcpy(&curent_config, reinterpret_cast<void *>(0x90000000 + (slot * 4096)), sizeof(CONFIGURATION));
 }
 
+float cv1Value{};
+bool trigger{};
+bool raising{};
+
 void UpdateControls()
 {
     bluemchen.ProcessAllControls();
@@ -131,6 +135,17 @@ void UpdateControls()
 
     bluemchen.seed.dac.WriteValue(daisy::DacHandle::Channel::ONE, static_cast<uint16_t>(knob1_dac.Process()));
     bluemchen.seed.dac.WriteValue(daisy::DacHandle::Channel::TWO, static_cast<uint16_t>(knob2_dac.Process()));
+
+    raising = cv1.Value() < cv1Value;
+    if (!trigger && raising && cv1.Value() > 0.5f) {
+        loopers[0].Restart();
+        loopers[1].Restart();
+        trigger = true;
+    }
+    else if (!raising && cv1.Value() < 0.5f) {
+        trigger = false;
+    }
+    cv1Value = cv1.Value();
 
     cv1.Process();
     cv2.Process();

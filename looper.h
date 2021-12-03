@@ -97,6 +97,7 @@ namespace wreath
             }
         }
         inline void SetMode(Mode mode) { mode_ = mode; }
+        inline void Restart() { readPos_ = loopStart_; }
 
     private:
         float Read(float pos);

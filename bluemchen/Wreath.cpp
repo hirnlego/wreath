@@ -43,7 +43,7 @@ const char *pageNames[] = {
     "Wreath",
     "Speed",
     "Length",
-    "Direction",
+    "Movement",
     "Mode",
 };
 int currentPage{0};
@@ -60,7 +60,7 @@ enum class MenuClickOp
 MenuClickOp clickOp{MenuClickOp::STOP};
 bool buttonPressed{false};
 
-const char *directionNames[] = {
+const char *movementNames[] = {
     "Forward",
     "Backwards",
     "Pendulum",
@@ -241,8 +241,8 @@ void UpdateOled()
         }
         else if (currentPage == 3)
         {
-            // Page 3: Direction.
-            str = directionNames[static_cast<int>(loopers[0].GetDirection())];
+            // Page 3: Movement.
+            str = movementNames[static_cast<int>(loopers[0].GetMovement())];
         }
         else if (currentPage == 4)
         {
@@ -308,12 +308,12 @@ void UpdateMenu()
             }
             else if (currentPage == 3)
             {
-                // Page 3: Direction.
+                // Page 3: Movement.
                 for (int i = 0; i < 2; i++)
                 {
-                    int currentDirection{loopers[i].GetDirection()};
-                    currentDirection += bluemchen.encoder.Increment();
-                    loopers[i].SetDirection(static_cast<Looper::Direction>(fclamp(currentDirection, 0, Looper::Direction::LAST_DIRECTION - 1)));
+                    int currentMovement{loopers[i].GetMovement()};
+                    currentMovement += bluemchen.encoder.Increment();
+                    loopers[i].SetMovement(static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
                 }
             }
             else if (currentPage == 4)

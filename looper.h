@@ -27,14 +27,14 @@ namespace wreath
             LAST_MODE,
         };
 
-        enum Direction
+        enum Movement
         {
             FORWARD,
             BACKWARDS,
             PENDULUM,
             DRUNK,
             RANDOM,
-            LAST_DIRECTION,
+            LAST_MOVEMENT,
         };
 
         /**
@@ -77,7 +77,7 @@ namespace wreath
         inline float GetPositionSeconds() { return readPosSeconds_; }
         inline float GetPosition() { return readPos_; }
         inline float GetSpeed() { return speed_; }
-        inline Direction GetDirection() { return direction_; }
+        inline Movement GetMovement() { return movement_; }
         inline Mode GetMode() { return mode_; }
         inline bool IsStartingUp() { return State::INIT == state_; }
         inline bool IsBuffering() { return State::BUFFERING == state_; }
@@ -86,12 +86,12 @@ namespace wreath
         inline bool IsMimeoMode() { return Mode::MIMEO == mode_; }
         inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
-        inline void SetDirection(Direction direction) { 
-            direction_ = direction; 
-            if (Direction::FORWARD == direction && !forward_) {
+        inline void SetMovement(Movement movement) { 
+            movement_ = movement; 
+            if (Movement::FORWARD == movement && !forward_) {
                 forward_ = true;
             }
-            else if (Direction::BACKWARDS == direction && forward_)
+            else if (Movement::BACKWARDS == movement && forward_)
             {
                 forward_ = false;
             }
@@ -108,26 +108,27 @@ namespace wreath
             readPosSeconds_ = readPos_ / sampleRate_;
         }
 
-        float *buffer_;
-        float bufferSeconds_;
-        float readPos_;
-        float readPosSeconds_;
-        float feedback_;
-        float dryWet_;
-        float speed_;
-        size_t initBufferSamples_;
-        size_t bufferSamples_;
-        size_t writePos_;
-        size_t loopStart_;
-        size_t loopEnd_;
-        size_t loopLength_;
-        size_t fadeIndex_;
-        size_t sampleRate_;
-        bool feedbackPickup_;
-        bool freeze_;
-        bool forward_;
-        State state_;
-        Mode mode_;
-        Direction direction_;
+        float *buffer_{};
+        float bufferSeconds_{};
+        float nextPos_{};
+        float readPos_{};
+        float readPosSeconds_{};
+        float feedback_{};
+        float dryWet_{};
+        float speed_{};
+        size_t initBufferSamples_{};
+        size_t bufferSamples_{};
+        size_t writePos_{};
+        size_t loopStart_{};
+        size_t loopEnd_{};
+        size_t loopLength_{};
+        size_t fadeIndex_{};
+        size_t sampleRate_{};
+        bool feedbackPickup_{};
+        bool freeze_{};
+        bool forward_{};
+        State state_{};
+        Mode mode_{};
+        Movement movement_{};
     };
 } // namespace wreath

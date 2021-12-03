@@ -13,8 +13,8 @@ void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
 
     state_ = State::INIT;
     mode_ = Mode::MIMEO;
-    direction_ = Direction::FORWARD;
-    forward_ = Direction::FORWARD == direction_;
+    movement_ = Movement::FORWARD;
+    forward_ = Movement::FORWARD == movement_;
 }
 
 void Looper::SetSpeed(float speed)
@@ -178,15 +178,43 @@ float Looper::Process(const float input, const int currentSample)
             writePos_ = loopStart_;
         }
 
-        if (Direction::RANDOM == direction_)
+        float pos{readPos_};
+        float coeff{speed_};
+        if (Movement::RANDOM == movement_)
         {
-            // In this case we just choose randomly a new starting point.
-            SetReadPos(loopStart_ + std::rnd() % loopLength_);
-        } 
-        else {
-            // Otherwise, move the reading position normally.
-            SetReadPos(forward_ ? readPos_ + speed_ : readPos_ - speed_);
+            // In this case we just choose randomly the next position.
+            if (std::abs(pos - nextPos_) < loopLength_ * 0.01f)
+            {
+                nextPos_ = loopStart_ + rand() % loopLength_;
+                forward_ = nextPos_ > pos;
+            }
+            if (forward_ && nextPos_ > loopEnd_) {
+                nextPos_ = loopEnd_;
+            }
+            else if (!forward_ && nextPos_ < loopStart_)
+            {
+                nextPos_ = loopStart_;
+            }
+            coeff = 1.0f / ((2.f - speed_) * sampleRate_);
         }
+        else
+        {
+            // Otherwise, move the reading position normally.
+            nextPos_ = forward_ ? readPos_ + speed_ : readPos_ - speed_;
+        }
+
+        if (Movement::DRUNK == movement_)
+        {
+            // When drunk there's a small probability of changing direction.
+            if ((rand() % sampleRate_) == 1)
+            {
+                forward_ = !forward_;
+            }
+        }
+
+        // Move smoothly to the next position;
+        fonepole(pos, nextPos_, coeff);
+        SetReadPos(pos);
 
         // Handle normal loop boundaries.
         if (loopEnd_ > loopStart_)
@@ -196,7 +224,7 @@ float Looper::Process(const float input, const int currentSample)
             {
                 SetReadPos(loopStart_);
                 // Invert direction when in pendulum.
-                if (Direction::PENDULUM == direction_)
+                if (Movement::PENDULUM == movement_)
                 {
                     SetReadPos(loopEnd_);
                     forward_ = !forward_;
@@ -207,7 +235,7 @@ float Looper::Process(const float input, const int currentSample)
             {
                 SetReadPos(loopEnd_);
                 // Invert direction when in pendulum.
-                if (Direction::PENDULUM == direction_)
+                if (Movement::PENDULUM == movement_)
                 {
                     SetReadPos(loopStart_);
                     forward_ = !forward_;
@@ -228,7 +256,7 @@ float Looper::Process(const float input, const int currentSample)
                 {
                     SetReadPos(loopStart_);
                     // Invert direction when in pendulum.
-                    if (Direction::PENDULUM == direction_)
+                    if (Movement::PENDULUM == movement_)
                     {
                         SetReadPos(loopEnd_);
                         forward_ = !forward_;
@@ -246,20 +274,12 @@ float Looper::Process(const float input, const int currentSample)
                 {
                     SetReadPos(loopEnd_);
                     // Invert direction when in pendulum.
-                    if (Direction::PENDULUM == direction_)
+                    if (Movement::PENDULUM == movement_)
                     {
                         SetReadPos(loopStart_);
                         forward_ = !forward_;
                     }
                 }
-            }
-        }
-
-        if (Direction::DRUNK == direction_)
-        {
-            // When drunk there's a 30% probability of changing direction.
-            if ((rnd() % 100) < 30) {
-                forward_ = !forward_;
             }
         }
     }

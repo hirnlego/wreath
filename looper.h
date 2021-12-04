@@ -1,9 +1,15 @@
 #pragma once
 
 #include <stdint.h>
+#include "Dynamics/crossfade.h"
 
 namespace wreath
 {
+    using namespace daisysp;
+
+    constexpr int kMinSamples{48};
+    constexpr int kFadeSamples{480}; // Note: 480 samples is 10ms @ 48KHz.
+
     class Looper
     {
 
@@ -39,10 +45,10 @@ namespace wreath
 
         /**
          * @brief Initializes the looper.
-         * 
-         * @param sampleRate 
-         * @param mem 
-         * @param maxBufferSeconds 
+         *
+         * @param sampleRate
+         * @param mem
+         * @param maxBufferSeconds
          */
         void Init(size_t sampleRate, float *mem, int maxBufferSeconds);
         /**
@@ -51,15 +57,15 @@ namespace wreath
         void ResetBuffer();
         /**
          * @brief Stops initial buffering and create the working buffer.
-         * 
+         *
          */
         void StopBuffering();
         /**
          * @brief Processes a sample.
-         * 
-         * @param input 
-         * @param currentSample 
-         * @return float 
+         *
+         * @param input
+         * @param currentSample
+         * @return float
          */
         float Process(const float input, const int currentSample);
 
@@ -73,6 +79,7 @@ namespace wreath
         inline size_t GetLoopStart() { return loopStart_; }
         inline size_t GetLoopEnd() { return loopEnd_; }
         inline size_t GetLoopLength() { return loopLength_; }
+        inline float GetLoopLengthSeconds() { return loopLengthSeconds_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }
         inline float GetPositionSeconds() { return readPosSeconds_; }
         inline float GetPosition() { return readPos_; }
@@ -86,9 +93,11 @@ namespace wreath
         inline bool IsMimeoMode() { return Mode::MIMEO == mode_; }
         inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
-        inline void SetMovement(Movement movement) { 
-            movement_ = movement; 
-            if (Movement::FORWARD == movement && !forward_) {
+        inline void SetMovement(Movement movement)
+        {
+            movement_ = movement;
+            if (Movement::FORWARD == movement && !forward_)
+            {
                 forward_ = true;
             }
             else if (Movement::BACKWARDS == movement && forward_)
@@ -97,23 +106,33 @@ namespace wreath
             }
         }
         inline void SetMode(Mode mode) { mode_ = mode; }
-        inline void Restart() { readPos_ = loopStart_; }
+        inline void Restart()
+        {
+            mustReset_ = true;
+            /*
+            SetReadPos(loopStart_);
+            fadePos_ = readPos_;
+            fadeIndex_ = 0;
+            mustFade_ = true;
+            */
+        }
 
     private:
         float Read(float pos);
+        size_t GetRandomPosition();
+        void SetReadPos(float pos);
+        void SetReadPosAtStart();
+        void SetReadPosAtEnd();
 
         inline void Write(size_t pos, float value) { buffer_[pos] = value; }
-        inline void SetReadPos(float pos)
-        {
-            readPos_ = pos;
-            readPosSeconds_ = readPos_ / sampleRate_;
-        }
 
         float *buffer_{};
         float bufferSeconds_{};
-        float nextPos_{};
         float readPos_{};
+        float nextReadPos_{};
+        float fadePos_{};
         float readPosSeconds_{};
+        float loopLengthSeconds_{};
         float feedback_{};
         float dryWet_{};
         float speed_{};
@@ -128,8 +147,11 @@ namespace wreath
         bool feedbackPickup_{};
         bool freeze_{};
         bool forward_{};
+        bool mustFade_{};
+        bool mustReset_{};
         State state_{};
         Mode mode_{};
         Movement movement_{};
+        CrossFade cf;
     };
 } // namespace wreath

@@ -9,7 +9,7 @@ using namespace wreath;
 using namespace daisy;
 using namespace daisysp;
 
-Bluemchen bluemchen;
+Bluemchen hw;
 
 #define MAX_PAGES 5
 
@@ -35,7 +35,6 @@ Parameter cv2;
 
 Looper loopers[2];
 
-bool buffering{true};
 float dryWet{};
 float feedback{};
 
@@ -98,8 +97,8 @@ void SaveConfig(uint32_t slot)
 
     uint32_t base = 0x90000000;
     base += slot * 4096; // works only because sizeof(CONFIGURATION) < 4096
-    bluemchen.seed.qspi.Erase(base, base + sizeof(CONFIGURATION));
-    bluemchen.seed.qspi.Write(base, sizeof(CONFIGURATION), (uint8_t *)&curent_config);
+    hw.seed.qspi.Erase(base, base + sizeof(CONFIGURATION));
+    hw.seed.qspi.Write(base, sizeof(CONFIGURATION), (uint8_t *)&curent_config);
 }
 
 void LoadConfig(uint32_t slot)
@@ -113,79 +112,85 @@ bool raising{};
 
 void UpdateControls()
 {
-    bluemchen.ProcessAllControls();
-
-    knob1.Process();
-    knob2.Process();
-
-    // Update loopers values.
-    if (std::abs(dryWet - knob1.Value()) > 0.01f)
+    if (!loopers[0].IsStartingUp())
     {
-        dryWet = knob1.Value();
-        loopers[0].SetDryWet(dryWet);
-        loopers[1].SetDryWet(dryWet);
-    }
+        hw.ProcessAllControls();
 
-    if (std::abs(feedback - knob2.Value()) > 0.01f)
-    {
-        feedback = knob2.Value();
-        loopers[0].SetFeedback(feedback);
-        loopers[1].SetFeedback(feedback);
-    }
+        knob1.Process();
+        knob2.Process();
 
-    bluemchen.seed.dac.WriteValue(daisy::DacHandle::Channel::ONE, static_cast<uint16_t>(knob1_dac.Process()));
-    bluemchen.seed.dac.WriteValue(daisy::DacHandle::Channel::TWO, static_cast<uint16_t>(knob2_dac.Process()));
+        hw.seed.dac.WriteValue(daisy::DacHandle::Channel::ONE, static_cast<uint16_t>(knob1_dac.Process()));
+        hw.seed.dac.WriteValue(daisy::DacHandle::Channel::TWO, static_cast<uint16_t>(knob2_dac.Process()));
 
-    raising = cv1.Value() < cv1Value;
-    if (!trigger && raising && cv1.Value() > 0.5f) {
-        loopers[0].Restart();
-        loopers[1].Restart();
-        trigger = true;
-    }
-    else if (!raising && cv1.Value() < 0.5f) {
-        trigger = false;
-    }
-    cv1Value = cv1.Value();
+        cv1.Process();
+        cv2.Process();
 
-    cv1.Process();
-    cv2.Process();
+        // Handle dry/wet knob.
+        if (std::abs(dryWet - knob1.Value()) > 0.01f)
+        {
+            dryWet = knob1.Value();
+            loopers[0].SetDryWet(dryWet);
+            loopers[1].SetDryWet(dryWet);
+        }
+        // Handle feedback/start knob.
+        if (std::abs(feedback - knob2.Value()) > 0.01f)
+        {
+            feedback = knob2.Value();
+            loopers[0].SetFeedback(feedback);
+            loopers[1].SetFeedback(feedback);
+        }
+
+        // Handle trigger (restart) input.
+        raising = cv1.Value() < cv1Value;
+        if (!trigger && raising && cv1.Value() > 0.5f)
+        {
+            loopers[0].Restart();
+            loopers[1].Restart();
+            trigger = true;
+        }
+        else if (!raising && cv1.Value() < 0.5f)
+        {
+            trigger = false;
+        }
+        cv1Value = cv1.Value();
+    }
 }
 
 void UpdateOled()
 {
-    int width = bluemchen.display.Width();
+    int width = hw.display.Width();
 
-    bluemchen.display.Fill(false);
+    hw.display.Fill(false);
 
     std::string str = pageNames[currentPage];
     char *cstr = &str[0];
-    bluemchen.display.SetCursor(0, 0);
-    bluemchen.display.WriteString(cstr, Font_6x8, !pageSelected);
+    hw.display.SetCursor(0, 0);
+    hw.display.WriteString(cstr, Font_6x8, !pageSelected);
 
     float step = width;
 
     if (loopers[0].IsStartingUp())
     {
         str = "Wait...";
-        bluemchen.display.SetCursor(0, 24);
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        hw.display.SetCursor(0, 24);
+        hw.display.WriteString(cstr, Font_6x8, true);
     }
     else if (loopers[0].IsBuffering())
     {
         // Buffering...
         str = "Enc stops";
-        bluemchen.display.SetCursor(0, 8);
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        hw.display.SetCursor(0, 8);
+        hw.display.WriteString(cstr, Font_6x8, true);
         str = "buffering";
-        bluemchen.display.SetCursor(0, 16);
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        hw.display.SetCursor(0, 16);
+        hw.display.WriteString(cstr, Font_6x8, true);
         // Write seconds buffered.
         float seconds = loopers[0].GetBufferSeconds();
         float frac = seconds - (int)seconds;
         float inte = seconds - frac;
-        str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + " / " + std::to_string(kBufferSeconds);
-        bluemchen.display.SetCursor(0, 24);
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "/" + std::to_string(kBufferSeconds) + "s";
+        hw.display.SetCursor(0, 24);
+        hw.display.WriteString(cstr, Font_6x8, true);
     }
     else
     {
@@ -193,29 +198,68 @@ void UpdateOled()
 
         if (!pageSelected)
         {
-            // Write position in seconds.
-            float seconds = loopers[0].GetPositionSeconds();
-            float frac = seconds - (int)seconds;
-            float inte = seconds - frac;
-            str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
-            bluemchen.display.SetCursor(0, 16);
-            bluemchen.display.WriteString(cstr, Font_6x8, true);
+            float loopLength = loopers[0].GetLoopLengthSeconds();
+            float position = loopers[0].GetPositionSeconds();
+
+            float frac = position - (int)position;
+            float inte = position - frac;
+            // Write read position in seconds.
+            if (loopLength > 1.f)
+            {
+                str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
+            }
+            else
+            {
+                position *= 1000;
+                str = std::to_string(static_cast<int>(position));
+            }
+
+            // Write the loop length in seconds.
+            frac = loopLength - (int)loopLength;
+            inte = loopLength - frac;
+            if (loopLength > 1.f)
+            {
+                str += "/" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "s";
+            }
+            else
+            {
+                loopLength *= 1000;
+                str += "/" + std::to_string(static_cast<int>(loopLength)) + "ms";
+            }
+
+            hw.display.SetCursor(0, 16);
+            hw.display.WriteString(cstr, Font_6x8, true);
         }
         // Draw the loop bar.
         int start = std::floor(loopers[0].GetLoopStart() * step);
         int end = std::floor(loopers[0].GetLoopEnd() * step);
-        if (loopers[0].GetLoopStart() < loopers[0].GetLoopEnd())
+        if (loopers[0].GetLoopStart() > loopers[0].GetLoopEnd())
         {
-            bluemchen.display.DrawRect(start, 27, end, 28, true, true);
+            // Normal loop (start position before end position).
+            hw.display.DrawRect(start, 27, end, 28, true, true);
         }
         else
         {
-            bluemchen.display.DrawRect(0, 27, end, 28, true, true);
-            bluemchen.display.DrawRect(start, 27, width, 28, true, true);
+            // Inverse loop (end position before start position).
+            hw.display.DrawRect(0, 27, end, 28, true, true);
+            hw.display.DrawRect(start, 27, width, 28, true, true);
+        }
+        // Draw the start position depending on the looper movement.
+        int cursor{};
+        if (Looper::Movement::BACKWARDS != loopers[0].GetMovement())
+        {
+            cursor = start;
+            hw.display.DrawRect(cursor, 25, cursor, 27, true, true);
+        }
+        // Draw the end position depending on the looper movement.
+        if (Looper::Movement::BACKWARDS == loopers[0].GetMovement() || Looper::Movement::PENDULUM == loopers[0].GetMovement())
+        {
+            cursor = end;
+            hw.display.DrawRect(cursor, 25, cursor, 27, true, true);
         }
         // Draw the read position.
-        int cursor = std::floor(loopers[0].GetPosition() * step);
-        bluemchen.display.DrawRect(cursor, 25, cursor, 30, true, true);
+        cursor = std::floor(loopers[0].GetPosition() * step);
+        hw.display.DrawRect(cursor, 28, cursor, 30, true, true);
     }
 
     if (pageSelected)
@@ -223,8 +267,8 @@ void UpdateOled()
         if (currentPage == 0)
         {
             str = "github.com/hirnlego";
-            bluemchen.display.SetCursor(0, 8);
-            bluemchen.display.WriteString(cstr, Font_6x8, true);
+            hw.display.SetCursor(0, 8);
+            hw.display.WriteString(cstr, Font_6x8, true);
 
             str = "v1.0";
         }
@@ -236,7 +280,7 @@ void UpdateOled()
             {
                 x = std::floor(width / 2.f + (loopers[0].GetSpeed() * (width / 4.f)));
             }
-            bluemchen.display.DrawRect(0, 11, x, 12, true, true);
+            hw.display.DrawRect(0, 11, x, 12, true, true);
 
             float frac = loopers[0].GetSpeed() - (int)loopers[0].GetSpeed();
             float inte = loopers[0].GetSpeed() - frac;
@@ -247,12 +291,21 @@ void UpdateOled()
             // Page 2: Length.
             // Draw the loop length bar.
             int x = std::floor(loopers[0].GetLoopLength() * step);
-            bluemchen.display.DrawRect(0, 11, x, 12, true, true);
+            hw.display.DrawRect(0, 11, x, 12, true, true);
             // Write the loop length in seconds.
-            float loopLength = loopers[0].GetLoopLength() / (float)kSampleRate;
-            float frac = loopLength - (int)loopLength;
-            float inte = loopLength - frac;
-            str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
+            float loopLength = loopers[0].GetLoopLengthSeconds();
+            if (loopLength > 1.f)
+            {
+                float frac = loopLength - (int)loopLength;
+                float inte = loopLength - frac;
+                str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "s";
+            }
+            else
+            {
+                loopLength *= 1000;
+                str = std::to_string(static_cast<int>(loopLength)) + "ms";
+            }
+            //str += "/" + std::to_string(loopers[0].GetLoopLength());
         }
         else if (currentPage == 3)
         {
@@ -265,23 +318,23 @@ void UpdateOled()
             str = modeNames[static_cast<int>(loopers[0].GetMode())];
         }
 
-        bluemchen.display.SetCursor(0, 16);
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        hw.display.SetCursor(0, 16);
+        hw.display.WriteString(cstr, Font_6x8, true);
     }
 
     if (loopers[0].IsFrozen())
     {
         str = "*";
-        bluemchen.display.SetCursor(width - 6, 0);
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        hw.display.SetCursor(width - 6, 0);
+        hw.display.WriteString(cstr, Font_6x8, true);
     }
 
-    bluemchen.display.Update();
+    hw.display.Update();
 }
 
 void UpdateMenu()
 {
-    if (!buffering)
+    if (!loopers[0].IsBuffering())
     {
         if (pageSelected)
         {
@@ -290,13 +343,13 @@ void UpdateMenu()
                 // Page 1: Speed.
                 for (int i = 0; i < 2; i++)
                 {
-                    if (loopers[0].IsMimeoMode())
+                    if (loopers[i].IsMimeoMode())
                     {
-                        if (bluemchen.encoder.Increment() > 0)
+                        if (hw.encoder.Increment() > 0)
                         {
                             loopers[i].SetSpeed(loopers[i].GetSpeed() + 0.05f);
                         }
-                        else if (bluemchen.encoder.Increment() < 0)
+                        else if (hw.encoder.Increment() < 0)
                         {
                             loopers[i].SetSpeed(loopers[i].GetSpeed() - 0.05f);
                         }
@@ -306,18 +359,18 @@ void UpdateMenu()
             else if (currentPage == 2)
             {
                 // Page 2: Length.
-                int step{};
+                int samples{};
                 for (int i = 0; i < 2; i++)
                 {
-                    // TODO: micro-steps for v/oct. Also, step should always be integer!
-                    step = loopers[i].GetLoopLength() > 880 ? std::floor(loopers[i].GetLoopLength() * 0.1) : 12;
-                    if (bluemchen.encoder.Increment() > 0)
+                    // TODO: micro-steps for v/oct.
+                    samples = (loopers[i].GetLoopLength() > 480) ? std::floor(loopers[i].GetLoopLength() * 0.1) : kMinSamples;
+                    if (hw.encoder.Increment() > 0)
                     {
-                        loopers[i].IncrementLoopLength(step);
+                        loopers[i].IncrementLoopLength(samples);
                     }
-                    else if (bluemchen.encoder.Increment() < 0)
+                    else if (hw.encoder.Increment() < 0)
                     {
-                        loopers[i].DecrementLoopLength(step);
+                        loopers[i].DecrementLoopLength(samples);
                     }
                 }
             }
@@ -327,7 +380,7 @@ void UpdateMenu()
                 for (int i = 0; i < 2; i++)
                 {
                     int currentMovement{loopers[i].GetMovement()};
-                    currentMovement += bluemchen.encoder.Increment();
+                    currentMovement += hw.encoder.Increment();
                     loopers[i].SetMovement(static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
                 }
             }
@@ -337,14 +390,14 @@ void UpdateMenu()
                 for (int i = 0; i < 2; i++)
                 {
                     int currentMode{loopers[i].GetMode()};
-                    currentMode += bluemchen.encoder.Increment();
+                    currentMode += hw.encoder.Increment();
                     loopers[i].SetMode(static_cast<Looper::Mode>(fclamp(currentMode, 0, Looper::Mode::LAST_MODE - 1)));
                 }
             }
         }
         else if (!buttonPressed)
         {
-            currentPage += bluemchen.encoder.Increment();
+            currentPage += hw.encoder.Increment();
             if (currentPage < 0)
             {
                 currentPage = 0;
@@ -355,28 +408,27 @@ void UpdateMenu()
             }
         }
 
-        if (bluemchen.encoder.TimeHeldMs() >= 500.f)
+        if (hw.encoder.TimeHeldMs() >= 500.f)
         {
             clickOp = MenuClickOp::FREEZE;
         }
-        if (bluemchen.encoder.TimeHeldMs() >= 2000.f)
+        if (hw.encoder.TimeHeldMs() >= 2000.f)
         {
             clickOp = MenuClickOp::RESET;
         }
     }
 
-    if (bluemchen.encoder.RisingEdge())
+    if (hw.encoder.RisingEdge())
     {
         buttonPressed = true;
     }
-    if (bluemchen.encoder.FallingEdge())
+    if (hw.encoder.FallingEdge())
     {
         if (clickOp == MenuClickOp::STOP)
         {
             // Stop buffering.
             loopers[0].StopBuffering();
             loopers[1].StopBuffering();
-            buffering = false;
             clickOp = MenuClickOp::MENU;
         }
         else if (clickOp == MenuClickOp::FREEZE)
@@ -391,7 +443,6 @@ void UpdateMenu()
             // ResetBuffer buffers.
             loopers[0].ResetBuffer();
             loopers[1].ResetBuffer();
-            buffering = true;
             clickOp = MenuClickOp::STOP;
         }
         else
@@ -420,23 +471,23 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 int main(void)
 {
-    bluemchen.Init();
-    bluemchen.SetAudioSampleRate(static_cast<daisy::SaiHandle::Config::SampleRate>(kSampleRate));
-    bluemchen.StartAdc();
+    hw.Init();
+    hw.SetAudioSampleRate(static_cast<daisy::SaiHandle::Config::SampleRate>(kSampleRate));
+    hw.StartAdc();
 
-    knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
-    knob2.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
+    knob1.Init(hw.controls[hw.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
+    knob2.Init(hw.controls[hw.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
 
-    knob1_dac.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
-    knob2_dac.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
+    knob1_dac.Init(hw.controls[hw.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
+    knob2_dac.Init(hw.controls[hw.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
 
-    cv1.Init(bluemchen.controls[bluemchen.CTRL_3], 0.0f, 1.0f, Parameter::LINEAR);
-    cv2.Init(bluemchen.controls[bluemchen.CTRL_4], 0.0f, 1.0f, Parameter::LINEAR);
+    cv1.Init(hw.controls[hw.CTRL_3], 0.0f, 1.0f, Parameter::LINEAR);
+    cv2.Init(hw.controls[hw.CTRL_4], 0.0f, 1.0f, Parameter::LINEAR);
 
     loopers[0].Init(kSampleRate, buffer_l, kBufferSeconds);
     loopers[1].Init(kSampleRate, buffer_r, kBufferSeconds);
 
-    bluemchen.StartAudio(AudioCallback);
+    hw.StartAudio(AudioCallback);
 
     while (1)
     {

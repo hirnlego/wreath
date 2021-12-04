@@ -7,7 +7,8 @@
                 "${workspaceFolder}",
                 "../DaisyExamples/libdaisy/**",
                 "../DaisyExamples/DaisySp/**",
-                "../kxmx_bluemchen/src/**"
+                "../kxmx_bluemchen/src/**",
+                "/Users/roberto/Daisy/kxmx_bluemchen/src"
             ],
             "defines": [
                 "_DEBUG",

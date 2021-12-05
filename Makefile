@@ -7,7 +7,7 @@ OPT = -O0
 
 # Sources
 CPP_SOURCES = ../kxmx_bluemchen/src/kxmx_bluemchen.cpp ./bluemchen/wreath.cpp looper.cpp
-C_INCLUDES = -I../kxmx_bluemchen/src -I../DaisyExamples/DaisySP/Source/Utility
+C_INCLUDES = -I../kxmx_bluemchen/src -I../DaisyExamples/DaisySP/Source -I./bluemchen -I.
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -gdwarf-2

@@ -1,5 +1,5 @@
 #include "looper.h"
-#include "dsp.h"
+#include "Utility/dsp.h"
 
 using namespace wreath;
 using namespace daisysp;
@@ -23,7 +23,7 @@ void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
     movement_ = Movement::FORWARD;
     forward_ = Movement::FORWARD == movement_;
 
-    cf.Init(CROSSFADE_CPOW);
+    cf_.Init(CROSSFADE_CPOW);
 }
 
 /**
@@ -37,22 +37,56 @@ void Looper::SetSpeed(float speed)
 }
 
 /**
+ * @brief Sets the movement type.
+ *
+ * @param movement
+ */
+void Looper::SetMovement(Movement movement)
+{
+    if (Movement::FORWARD == movement && !forward_)
+    {
+        forward_ = true;
+    }
+    else if (Movement::BACKWARDS == movement && forward_)
+    {
+        forward_ = false;
+    }
+
+    movement_ = movement;
+}
+
+/**
  * @brief Resets the buffer and the looper state.
  */
 void Looper::ResetBuffer()
 {
-    std::fill(&buffer_[0], &buffer_[initBufferSamples_ - 1], 0);
+    std::fill(&buffer_[0], &buffer_[initBufferSamples_ - 1], 0.f);
     bufferSamples_ = 0;
-    bufferSeconds_ = 0;
+    bufferSeconds_ = 0.f;
     state_ = State::BUFFERING;
-    feedback_ = 0;
+    feedback_ = 0.f;
     feedbackPickup_ = false;
-    readPos_ = 0;
-    readPosSeconds_ = 0;
+    readPos_ = 0.f;
+    nextReadPos_ = 0.f;
+    readPosSeconds_ = 0.f;
     writePos_ = 0;
     loopStart_ = 0;
     loopEnd_ = 0;
+    loopLength_ = 0;
     speed_ = 1.f;
+    fadeIndex_ = 0;
+}
+
+/**
+ * @brief Stops the buffering.
+ */
+void Looper::StopBuffering()
+{
+    state_ = State::RECORDING;
+    loopStart_ = 0;
+    writePos_ = 0;
+    ResetLoopLength();
+    SetReadPos(forward_ ? loopStart_ : loopEnd_);
 }
 
 /**
@@ -71,10 +105,6 @@ void Looper::ToggleFreeze()
         // Frozen.
         state_ = State::FROZEN;
         feedbackPickup_ = false;
-        if (readPos_ < loopStart_)
-        {
-            //readPos_ = loopStart_;
-        }
     }
 }
 
@@ -86,7 +116,7 @@ void Looper::ToggleFreeze()
 void Looper::IncrementLoopLength(size_t samples)
 {
     SetLoopLength((loopLength_ + samples < bufferSamples_) ? loopLength_ + samples : bufferSamples_);
-};
+}
 
 /**
  * @brief Decrements the loop length by the given samples.
@@ -96,7 +126,7 @@ void Looper::IncrementLoopLength(size_t samples)
 void Looper::DecrementLoopLength(size_t samples)
 {
     SetLoopLength((loopLength_ > samples) ? loopLength_ - samples : kMinSamples);
-};
+}
 
 /**
  * @brief Sets the loop length.
@@ -108,18 +138,14 @@ void Looper::SetLoopLength(size_t length)
     loopLength_ = length;
     loopEnd_ = loopLength_ - 1;
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
-};
+}
 
 /**
- * @brief Stops the buffering.
+ * @brief Sets the loop length to that of the written buffer.
  */
-void Looper::StopBuffering()
+void Looper::ResetLoopLength()
 {
-    state_ = State::RECORDING;
-    loopStart_ = 0;
-    writePos_ = 0;
     SetLoopLength(bufferSamples_);
-    SetReadPos(forward_ ? loopStart_ : loopEnd_);
 }
 
 /**
@@ -161,8 +187,9 @@ float Looper::Process(const float input, const int currentSample)
 
     if (IsRecording() || IsFrozen())
     {
-        // Received a signal to reset the read position to the loop start point.
-        if (mustReset_)
+        // Received the command to reset the read position to the loop start
+        // point.
+        if (mustRestart_)
         {
             if (Movement::RANDOM == movement_)
             {
@@ -180,20 +207,32 @@ float Looper::Process(const float input, const int currentSample)
                     SetReadPosAtEnd();
                 }
             }
-            //fadePos_ = readPos_;
-            //fadeIndex_ = 0;
-            //mustFade_ = true;
-            //mustReset_ = false;
         }
 
         output = Read(readPos_);
 
-        if (Mode::MIMEO == mode_)
+        float speed{speed_};
+
+        float writePos{static_cast<float>(writePos_)};
+        if (IsMode2Mode())
+        {
+            // In this mode the speed depends on the loop length.
+            speed = loopLength_ * (1.f / bufferSamples_);
+
+            float output2{Read(writePos_)};
+            // In this mode there always is writing, but when frozen writes the
+            // looped signal.
+            float writeSig{IsFrozen() ? output : input + (output2 * feedback_)};
+            Write(writePos_, SoftLimit(writeSig));
+            writePos = forward_ ? writePos + speed : writePos - speed;
+            HandlePosBoundaries(writePos, false);
+            SetWritePos(writePos);
+        }
+        else
         {
             if (IsFrozen())
             {
-                // When frozen, the feedback knob sets the starting point. No
-                // writing is done.
+                // When frozen, the feedback value sets the starting point.
                 size_t start = std::floor(feedback_ * bufferSamples_);
                 // Pick up where the loop start point is.
                 if (std::abs(static_cast<int>(start - loopStart_)) < static_cast<int>(bufferSamples_ * 0.1f) && !feedbackPickup_)
@@ -212,101 +251,48 @@ float Looper::Process(const float input, const int currentSample)
                 {
                     loopEnd_ = loopStart_ + loopLength_ - 1;
                 }
+                // Note that in this mode no writing is done while frozen.
             }
             else
             {
                 Write(writePos_, SoftLimit(input + (output * feedback_)));
             }
-        }
-        else
-        {
-            float output2{Read(writePos_)};
-            // In this mode there always is writing, but when frozen writes the
-            // looped signal.
-            float writeSig{IsFrozen() ? output : input + (output2 * feedback_)};
-            Write(writePos_, SoftLimit(writeSig));
+
+            // Always write forward at original speed.
+            writePos += 1;
+            SetWritePos(writePos);
         }
 
-        // Always write forward at original speed.
-        writePos_ += 1;
-        if (writePos_ > loopEnd_)
-        {
-            writePos_ = loopStart_;
-        }
-
-        float pos{readPos_};
-        float coeff{speed_};
+        float readPos{readPos_};
+        float coeff{speed};
         if (Movement::RANDOM == movement_)
         {
             // In this case we just choose randomly the next position.
-            if (std::abs(pos - nextReadPos_) < loopLength_ * 0.01f)
+            if (std::abs(readPos - nextReadPos_) < loopLength_ * 0.01f)
             {
                 nextReadPos_ = GetRandomPosition();
-                forward_ = nextReadPos_ > pos;
+                forward_ = nextReadPos_ > readPos;
             }
-            coeff = 1.0f / ((2.f - speed_) * sampleRate_);
+            coeff = 1.0f / ((2.f - speed) * sampleRate_);
         }
         else
         {
+            if (Movement::DRUNK == movement_)
+            {
+                // When drunk there's a small probability of changing direction.
+                if ((rand() % sampleRate_) == 1)
+                {
+                    forward_ = !forward_;
+                }
+            }
             // Otherwise, move the reading position normally.
-            nextReadPos_ = forward_ ? readPos_ + speed_ : readPos_ - speed_;
+            nextReadPos_ = forward_ ? readPos_ + speed : readPos_ - speed;
         }
 
-        if (Movement::DRUNK == movement_)
-        {
-            // When drunk there's a small probability of changing direction.
-            if ((rand() % sampleRate_) == 1)
-            {
-                forward_ = !forward_;
-            }
-        }
-
-        // Move smoothly to the next position;
-        fonepole(pos, nextReadPos_, coeff);
-        SetReadPos(pos);
-
-        // Handle normal loop boundaries.
-        if (loopEnd_ > loopStart_)
-        {
-            // Forward direction.
-            if (forward_ && readPos_ > loopEnd_)
-            {
-                SetReadPosAtStart();
-            }
-            // Backwards direction.
-            else if (!forward_ && readPos_ < loopStart_)
-            {
-                SetReadPosAtEnd();
-            }
-        }
-        // Handle inverted loop boundaries (end point comes before start point).
-        else
-        {
-            if (forward_)
-            {
-                if (readPos_ > bufferSamples_)
-                {
-                    // Wrap-around.
-                    SetReadPos(0);
-                }
-                else if (readPos_ > loopEnd_ && readPos_ < loopStart_)
-                {
-                    SetReadPosAtStart();
-                }
-            }
-            else
-            {
-                if (readPos_ < 0)
-                {
-                    // Wrap-around.
-                    SetReadPos(bufferSamples_ - 1);
-                }
-                else if (readPos_ > loopEnd_ && readPos_ < loopStart_)
-                {
-                    SetReadPosAtEnd();
-                }
-            }
-        }
+        // Move smoothly to the next position.
+        fonepole(readPos, nextReadPos_, coeff);
+        HandlePosBoundaries(readPos, true);
+        SetReadPos(readPos);
     }
 
     return output;
@@ -341,105 +327,183 @@ float Looper::Read(float pos)
     }
 
     // 2) fade the value if needed.
-    if (mustFade_)
+    if (mustFadeIn_ || mustFadeOut_)
     {
         // The number of samples we need to fade.
-        float samples{(loopLength_ > kFadeSamples * 2) ? kFadeSamples : loopLength_ / 2.f};
-        cf.SetPos(fadeIndex_ * (1.f / samples));
-        float from{};
-        float to{1.f};
-        val *= cf.Process(from, to);
+        float samples{GetFadeSamples()};
+        float from{mustFadeIn_ ? 0.f : 1.f};
+        float to{mustFadeIn_ ? 1.f : 0.f};
+        cf_.SetPos(fadeIndex_ * (1.f / samples));
+        val *= cf_.Process(from, to);
         fadeIndex_++;
         if (fadeIndex_ > samples)
         {
-            mustFade_ = false;
+            mustFadeIn_ = mustFadeOut_ = false;
         }
     }
-
-    /*
-    // The number of samples we need to fade.
-    float samples{loopLength_ > 1200 ? 1200 : loopLength_ / 2.f};
-    samples = 10000;
-    float kWindowFactor{1.f / samples};
-
-    if (mustFade_)
-    {
-        float multiplier = 0.5 * (1 - std::cos(2 * PI_F * (fadePos_ + fadeIndex_) / samples));
-        //val = std::sin(HALFPI_F * (fadePos_ + fadeIndex_) * kWindowFactor) * val;
-        val *= multiplier;
-        fadeIndex_++;
-        if (fadeIndex_ > samples)
-        {
-            mustFade_ = false;
-        }
-    }
-    */
-    /*
-    if (forward_)
-    {
-        // When going forward we consider read and write position aligned.
-        if (pos < samples)
-        {
-            // Fade in.
-            val = std::sin(HALFPI_F * pos * kWindowFactor) * val;
-        }
-        else if (pos >= loopLength_ - samples)
-        {
-            // Fade out.
-            val = std::sin(HALFPI_F * (loopLength_ - pos) * kWindowFactor) * val;
-        }
-    }
-    else
-    {
-        // When going backwards read and write position cross in the middle and
-        // at beginning/end.
-        float diff{pos - writePos_};
-        if (diff > 0 && diff < samples)
-        {
-            // Fade in.
-            val = std::sin(HALFPI_F * diff * kWindowFactor) * val;
-        }
-    }
-
-    */
 
     return val;
 }
 
+/**
+ * @brief
+ *
+ * @param pos
+ */
+void Looper::SetWritePos(float pos)
+{
+    writePos_ = (pos > loopEnd_) ? loopStart_ : pos;
+}
+
+/**
+ * @brief Updates the given position depending on the loop boundaries and the
+ *        current movement type.
+ *
+ * @param pos
+ * @param isReadPos
+ */
+void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
+{
+    // Handle normal loop boundaries.
+    if (loopEnd_ > loopStart_)
+    {
+        // Forward direction.
+        if (forward_ && pos > loopEnd_)
+        {
+            pos = loopStart_;
+            // Invert direction when in pendulum.
+            if (Movement::PENDULUM == movement_)
+            {
+                // Switch direction only if we're handling the read position.
+                if (isReadPos) {
+                    forward_ = !forward_;
+                }
+                pos = loopEnd_;
+            }
+        }
+        // Backwards direction.
+        else if (!forward_ && pos < loopStart_)
+        {
+            pos = loopEnd_;
+            // Invert direction when in pendulum.
+            if (Movement::PENDULUM == movement_)
+            {
+                // Switch direction only if we're handling the read position.
+                if (isReadPos) {
+                    forward_ = !forward_;
+                }
+                pos = loopStart_;
+            }
+        }
+    }
+    // Handle inverted loop boundaries (end point comes before start point).
+    else
+    {
+        if (forward_)
+        {
+            if (pos > bufferSamples_)
+            {
+                // Wrap-around.
+                pos = 0;
+            }
+            else if (pos > loopEnd_ && pos < loopStart_)
+            {
+                pos = loopStart_;
+                // Invert direction when in pendulum.
+                if (Movement::PENDULUM == movement_)
+                {
+                    // Switch direction only if we're handling the read position.
+                    if (isReadPos) {
+                        forward_ = !forward_;
+                    }
+                    pos = loopEnd_;
+                }
+            }
+        }
+        else
+        {
+            if (pos < 0)
+            {
+                // Wrap-around.
+                pos = bufferSamples_ - 1;
+            }
+            else if (pos > loopEnd_ && pos < loopStart_)
+            {
+                pos = loopEnd_;
+                // Invert direction when in pendulum.
+                if (Movement::PENDULUM == movement_)
+                {
+                    // Switch direction only if we're handling the read position.
+                    if (isReadPos) {
+                        forward_ = !forward_;
+                    }
+                    pos = loopStart_;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief Sets the read position. Also, sets a fade in/out if needed.
+ *
+ * @param pos
+ */
 void Looper::SetReadPos(float pos)
 {
+    uint32_t i_idx{static_cast<uint32_t>(pos)};
+    float samples{GetFadeSamples()};
+
+    // Set up a fade in if:
+    // - we're going forward and are at the beginning of the loop;
+    // - we're going backwards and are at the end of the loop;
+    // - we've been instructed to reset the starting position.
+    if ((forward_ && i_idx == loopStart_) || (!forward_ && i_idx == loopEnd_) || mustRestart_)
+    {
+        fadePos_ = pos;
+        fadeIndex_ = 0;
+        mustFadeIn_ = true;
+        mustRestart_ = false;
+    }
+
+    // Set up a fade out if:
+    // - we're going forward and are at the end of the loop;
+    // - we're going backwards and are at the beginning of the loop;
+    // - we're about to cross the write position when going backwards.
+    if ((forward_ && i_idx + samples == loopEnd_) || (!forward_ && i_idx - samples == loopStart_) || (!forward_ && i_idx - samples == writePos_))
+    {
+        fadePos_ = pos;
+        fadeIndex_ = 0;
+        mustFadeOut_ = true;
+    }
+
     readPos_ = pos;
     readPosSeconds_ = readPos_ / sampleRate_;
-
-    uint32_t i_idx = static_cast<uint32_t>(readPos_);
-
-    // If we're going forward and are at the beginning of the loop, or we're
-    // going backwards and are at the end of the loop or we've been instructed
-    // to reset the starting position, set up the fade in.
-    if ((forward_ && i_idx == loopStart_) || (!forward_ && i_idx == loopEnd_) || mustReset_)
-    {
-        fadePos_ = readPos_;
-        fadeIndex_ = 0;
-        mustFade_ = true;
-        mustReset_ = false;
-    }
 }
 
+/**
+ * @brief Returns a random position within the loop.
+ *
+ * @return size_t
+ */
 size_t Looper::GetRandomPosition()
 {
-    size_t nextPos{loopStart_ + rand() % (loopLength_ - 1)};
-    if (forward_ && nextPos > loopEnd_)
+    size_t pos{loopStart_ + rand() % (loopLength_ - 1)};
+    if (forward_ && pos > loopEnd_)
     {
-        nextPos = loopEnd_;
+        pos = loopEnd_;
     }
-    else if (!forward_ && nextPos < loopStart_)
+    else if (!forward_ && pos < loopStart_)
     {
-        nextPos = loopStart_;
+        pos = loopStart_;
     }
 
-    return nextPos;
+    return pos;
 }
 
+/**
+ * @brief Sets the read position at the beginning of the loop.
+ */
 void Looper::SetReadPosAtStart()
 {
     SetReadPos(loopStart_);
@@ -451,6 +515,9 @@ void Looper::SetReadPosAtStart()
     }
 }
 
+/**
+ * @brief Sets the read position at the end of the loop.
+ */
 void Looper::SetReadPosAtEnd()
 {
     SetReadPos(loopEnd_);

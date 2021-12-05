@@ -37,12 +37,28 @@ void LoadConfig(uint32_t slot)
     memcpy(&curent_config, reinterpret_cast<void *>(0x90000000 + (slot * 4096)), sizeof(CONFIGURATION));
 }
 
+
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
+    hw.ProcessAllControls();
+    GenerateUiEvents();
+
     for (size_t i = 0; i < size; i++)
     {
         float dry_l{IN_L[i]};
         float dry_r{IN_R[i]};
+
+        if (mustResetBuffer) {
+            loopers[0].ResetBuffer();
+            loopers[1].ResetBuffer();
+            mustResetBuffer = false;
+        }
+
+        if (mustStopBuffering) {
+            loopers[0].StopBuffering();
+            loopers[1].StopBuffering();
+            mustStopBuffering = false;
+        }
 
         float wet_l{loopers[0].Process(dry_l, i)};
         float wet_r{loopers[1].Process(dry_r, i)};
@@ -63,8 +79,9 @@ int main(void)
 
     while (1)
     {
+        ProcessUi();
         UpdateControls();
         UpdateOled();
-        UpdateMenu();
+        //UpdateMenu();
     }
 }

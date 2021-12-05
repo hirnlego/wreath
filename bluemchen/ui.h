@@ -7,6 +7,7 @@
 
 namespace wreath
 {
+    using namespace daisy;
     using namespace daisysp;
 
     constexpr int kMaxPages{5};
@@ -51,13 +52,15 @@ namespace wreath
     bool trigger{};
     bool raising{};
 
-    int currentLooper{};
+    int currentLooper{0};
+
+    UiEventQueue eventQueue;
 
     void UpdateControls()
     {
-        if (!loopers[0].IsStartingUp())
+        if (!loopers[currentLooper].IsStartingUp())
         {
-            hw.ProcessAllControls();
+            //hw.ProcessAllControls();
 
             knob1.Process();
             knob2.Process();
@@ -112,13 +115,13 @@ namespace wreath
 
         float step = width;
 
-        if (loopers[0].IsStartingUp())
+        if (loopers[currentLooper].IsStartingUp())
         {
             str = "Wait...";
             hw.display.SetCursor(0, 24);
             hw.display.WriteString(cstr, Font_6x8, true);
         }
-        else if (loopers[0].IsBuffering())
+        else if (loopers[currentLooper].IsBuffering())
         {
             // Buffering...
             str = "Enc stops";
@@ -174,6 +177,7 @@ namespace wreath
                 hw.display.WriteString(cstr, Font_6x8, true);
             }
 
+            /*
             // Draw the loop bars.
             for (int i = 0; i < 2; i++)
             {
@@ -215,7 +219,14 @@ namespace wreath
                 }
                 hw.display.DrawRect(cursor, 23 + y, cursor, 24 + y, true, true);
             }
+            */
 
+            str = std::to_string(loopers[0].GetBufferSamples());
+            hw.display.SetCursor(0, 16);
+            hw.display.WriteString(cstr, Font_6x8, true);
+            str = std::to_string(loopers[1].GetBufferSamples());
+            hw.display.SetCursor(0, 24);
+            hw.display.WriteString(cstr, Font_6x8, true);
         }
 
         if (pageSelected)
@@ -387,8 +398,9 @@ namespace wreath
             if (clickOp == MenuClickOp::STOP)
             {
                 // Stop buffering.
-                loopers[0].StopBuffering();
-                loopers[1].StopBuffering();
+                //loopers[0].StopBuffering();
+                //loopers[1].StopBuffering();
+                mustStopBuffering = true;
                 clickOp = MenuClickOp::MENU;
             }
             else if (clickOp == MenuClickOp::FREEZE)
@@ -401,8 +413,9 @@ namespace wreath
             else if (clickOp == MenuClickOp::RESET)
             {
                 // ResetBuffer buffers.
-                loopers[0].ResetBuffer();
-                loopers[1].ResetBuffer();
+                //loopers[0].ResetBuffer();
+                //loopers[1].ResetBuffer();
+                mustResetBuffer = true;
                 currentPage = 0;
                 pageSelected = false;
                 clickOp = MenuClickOp::STOP;
@@ -432,6 +445,105 @@ namespace wreath
             }
 
             buttonPressed = false;
+        }
+    }
+
+    void ProcessEvent(const UiEventQueue::Event& e)
+    {
+        switch(e.type)
+        {
+            case UiEventQueue::Event::EventType::buttonPressed:
+                buttonPressed = false;
+                break;
+            case UiEventQueue::Event::EventType::buttonReleased:
+                if (clickOp == MenuClickOp::STOP)
+                {
+                    // Stop buffering.
+                    //loopers[0].StopBuffering();
+                    //loopers[1].StopBuffering();
+                    mustStopBuffering = true;
+                    clickOp = MenuClickOp::MENU;
+                }
+                else if (clickOp == MenuClickOp::FREEZE)
+                {
+                    // Toggle freeze.
+                    loopers[0].ToggleFreeze();
+                    loopers[1].ToggleFreeze();
+                    clickOp = MenuClickOp::MENU;
+                }
+                else if (clickOp == MenuClickOp::RESET)
+                {
+                    // ResetBuffer buffers.
+                    loopers[0].ResetBuffer();
+                    loopers[1].ResetBuffer();
+                    currentPage = 0;
+                    pageSelected = false;
+                    clickOp = MenuClickOp::STOP;
+                }
+                else if (clickOp == MenuClickOp::DUAL)
+                {
+                    currentLooper = 1; // Select the second looper
+                    clickOp = MenuClickOp::MENU;
+                }
+                else if (currentPage != 0)
+                {
+                    // When not in the main page, toggle the page selection.
+                    if (!pageSelected)
+                    {
+                        pageSelected = true;
+                        if (loopers[0].IsDualMode())
+                        {
+                            // In dual mode the controls for the two loopers are
+                            // independent.
+                            currentLooper = 0; // Select the first looper
+                            clickOp = MenuClickOp::DUAL;
+                        }
+                    }
+                    else {
+                        pageSelected = false;
+                    }
+                }
+                break;
+            case UiEventQueue::Event::EventType::encoderTurned:
+
+                break;
+        }
+    }
+
+    void ProcessUi()
+    {
+        while (!eventQueue.IsQueueEmpty())
+        {
+            UiEventQueue::Event e = eventQueue.GetAndRemoveNextEvent();
+            if (e.type != UiEventQueue::Event::EventType::invalid)
+            {
+                ProcessEvent(e);
+            }
+        }
+    }
+
+    void GenerateUiEvents()
+    {
+        if (hw.encoder.RisingEdge()) {
+            eventQueue.AddButtonPressed(0, 1);
+        }
+
+        if (hw.encoder.FallingEdge()) {
+            eventQueue.AddButtonReleased(0);
+        }
+
+        if (hw.encoder.TimeHeldMs() >= 500.f)
+        {
+            clickOp = MenuClickOp::FREEZE;
+        }
+        if (hw.encoder.TimeHeldMs() >= 2000.f)
+        {
+            clickOp = MenuClickOp::RESET;
+        }
+
+        const auto increments = hw.encoder.Increment();
+        if (increments != 0) {
+            eventQueue.AddEncoderTurned(0, increments, 12);
         }
     }
 }

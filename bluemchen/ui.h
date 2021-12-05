@@ -134,7 +134,7 @@ namespace wreath
             float seconds = loopers[currentLooper].GetBufferSeconds();
             float frac = seconds - (int)seconds;
             float inte = seconds - frac;
-            str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "/" + std::to_string(kBufferSeconds) + "s";
+            str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100)) + "/" + std::to_string(kBufferSeconds) + "s";
             hw.display.SetCursor(0, 24);
             hw.display.WriteString(cstr, Font_6x8, true);
         }
@@ -152,7 +152,7 @@ namespace wreath
                 // Write read position in seconds.
                 if (loopLength > 1.f)
                 {
-                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
+                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100));
                 }
                 else
                 {
@@ -165,7 +165,7 @@ namespace wreath
                 inte = loopLength - frac;
                 if (loopLength > 1.f)
                 {
-                    str += "/" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "s";
+                    str += "/" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100)) + "s";
                 }
                 else
                 {
@@ -246,7 +246,7 @@ namespace wreath
                 {
                     float frac = loopLength - (int)loopLength;
                     float inte = loopLength - frac;
-                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "s";
+                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100)) + "s";
                 }
                 else
                 {

@@ -6,7 +6,7 @@ OPT = -O0
 #OPT = -O3
 
 # Sources
-CPP_SOURCES = ../kxmx_bluemchen/src/kxmx_bluemchen.cpp ./bluemchen/wreath.cpp looper.cpp
+CPP_SOURCES = ../kxmx_bluemchen/src/kxmx_bluemchen.cpp ./bluemchen/Wreath.cpp looper.cpp
 C_INCLUDES = -I../kxmx_bluemchen/src -I../DaisyExamples/DaisySP/Source/Utility
 
 ifeq ($(DEBUG), 1)

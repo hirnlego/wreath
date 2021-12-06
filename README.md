@@ -2,6 +2,19 @@
 
 A multifaceted looper for the Daisy platform.
 
+- sample  rate reduction
+- input gain (record level)
+- 4x speed?
+- mix left & right (left reads right and vice-versa)
+- mimeo: when clocked, speed is a divisor/multiplier
+- clocked, envelope
+- extend initial buffer
+- link loopers (eg. play in series)
+- stutter (stops and goes, repeats), drag, jitter
+- more play heads
+
+
+
 
 
 - all variables and objects should preferably be declared inside the function in which they are used

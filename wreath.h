@@ -18,7 +18,6 @@ namespace wreath
     Looper loopers[2];
 
     bool mustStopBuffering{};
-    bool mustResetBuffer{};
 
     void InitLoopers()
     {

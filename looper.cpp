@@ -80,8 +80,9 @@ void Looper::ResetBuffer()
 /**
  * @brief Stops the buffering.
  */
-void Looper::StopBuffering()
+void Looper::StopBuffering(size_t bufferSamples)
 {
+    bufferSamples_ = bufferSamples;
     state_ = State::RECORDING;
     loopStart_ = 0;
     writePos_ = 0;
@@ -181,7 +182,7 @@ float Looper::Process(const float input, const int currentSample)
         // Handle end of buffer.
         if (writePos_ > initBufferSamples_ - 1)
         {
-            StopBuffering();
+            StopBuffering(bufferSamples_);
         }
     }
 

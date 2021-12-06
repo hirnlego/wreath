@@ -59,7 +59,7 @@ namespace wreath
          * @brief Stops initial buffering and create the working buffer.
          *
          */
-        void StopBuffering();
+        void StopBuffering(size_t bufferSamples);
         /**
          * @brief Processes a sample.
          *

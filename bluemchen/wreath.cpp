@@ -48,15 +48,14 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         float dry_l{IN_L[i]};
         float dry_r{IN_R[i]};
 
-        if (mustResetBuffer) {
-            loopers[0].ResetBuffer();
-            loopers[1].ResetBuffer();
-            mustResetBuffer = false;
-        }
-
         if (mustStopBuffering) {
-            loopers[0].StopBuffering();
-            loopers[1].StopBuffering();
+            // When manually stopping buffering the two buffers end up with a
+            // different number of samples, I guess because they're not stopped
+            // at the same exact point in time. To resolve this problem, we get
+            // the shortest buffer and "truncate" the other to the same length.
+            const size_t min = fmin(loopers[0].GetBufferSamples(), loopers[1].GetBufferSamples());
+            loopers[0].StopBuffering(min);
+            loopers[1].StopBuffering(min);
             mustStopBuffering = false;
         }
 

@@ -413,9 +413,8 @@ namespace wreath
             else if (clickOp == MenuClickOp::RESET)
             {
                 // ResetBuffer buffers.
-                //loopers[0].ResetBuffer();
-                //loopers[1].ResetBuffer();
-                mustResetBuffer = true;
+                loopers[0].ResetBuffer();
+                loopers[1].ResetBuffer();
                 currentPage = 0;
                 pageSelected = false;
                 clickOp = MenuClickOp::STOP;

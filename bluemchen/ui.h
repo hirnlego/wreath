@@ -1,9 +1,9 @@
 #pragma once
 
-#include <string>
-#include "Utility/dsp.h"
 #include "hw.h"
 #include "wreath.h"
+#include "Utility/dsp.h"
+#include <string>
 
 namespace wreath
 {
@@ -48,19 +48,19 @@ namespace wreath
         "Dual",
     };
 
+    float knob1Value{};
+    float knob2Value{};
     float cv1Value{};
     bool trigger{};
     bool raising{};
 
     int currentLooper{0};
 
-    UiEventQueue eventQueue;
-
     void UpdateControls()
     {
-        if (!loopers[currentLooper].IsStartingUp())
+        if (!looper.IsStartingUp())
         {
-            //hw.ProcessAllControls();
+            hw.ProcessAllControls();
 
             knob1.Process();
             knob2.Process();
@@ -72,26 +72,23 @@ namespace wreath
             cv2.Process();
 
             // Handle dry/wet knob.
-            if (std::abs(dryWet - knob1.Value()) > 0.01f)
+            if (std::abs(knob1Value - knob1.Value()) > 0.01f)
             {
-                dryWet = knob1.Value();
-                loopers[0].SetDryWet(dryWet);
-                loopers[1].SetDryWet(dryWet);
+                knob1Value = knob1.Value();
+                looper.SetDryWet(knob1Value);
             }
-            // Handle feedback/start knob.
-            if (std::abs(feedback - knob2.Value()) > 0.01f)
+            // Handle knob2Value/start knob.
+            if (std::abs(knob2Value - knob2.Value()) > 0.01f)
             {
-                feedback = knob2.Value();
-                loopers[0].SetFeedback(feedback);
-                loopers[1].SetFeedback(feedback);
+                knob2Value = knob2.Value();
+                looper.SetFeedback(knob2Value);
             }
 
             // Handle trigger (restart) input.
             raising = cv1.Value() < cv1Value;
             if (!trigger && raising && cv1.Value() > 0.5f)
             {
-                loopers[0].Restart();
-                loopers[1].Restart();
+                looper.Restart();
                 trigger = true;
             }
             else if (!raising && cv1.Value() < 0.5f)
@@ -115,13 +112,13 @@ namespace wreath
 
         float step = width;
 
-        if (loopers[currentLooper].IsStartingUp())
+        if (looper.IsStartingUp())
         {
             str = "Wait...";
             hw.display.SetCursor(0, 24);
             hw.display.WriteString(cstr, Font_6x8, true);
         }
-        else if (loopers[currentLooper].IsBuffering())
+        else if (looper.IsBuffering())
         {
             // Buffering...
             str = "Enc stops";
@@ -131,28 +128,28 @@ namespace wreath
             hw.display.SetCursor(0, 16);
             hw.display.WriteString(cstr, Font_6x8, true);
             // Write seconds buffered.
-            float seconds = loopers[currentLooper].GetBufferSeconds();
+            float seconds = looper.GetBufferSeconds(currentLooper);
             float frac = seconds - (int)seconds;
             float inte = seconds - frac;
-            str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100)) + "/" + std::to_string(kBufferSeconds) + "s";
+            str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "/" + std::to_string(kBufferSeconds) + "s";
             hw.display.SetCursor(0, 24);
             hw.display.WriteString(cstr, Font_6x8, true);
         }
         else
         {
-            step = width / (float)loopers[currentLooper].GetBufferSamples();
+            step = width / (float)looper.GetBufferSamples(currentLooper);
 
             if (!pageSelected)
             {
-                float loopLength = loopers[currentLooper].GetLoopLengthSeconds();
-                float position = loopers[currentLooper].GetPositionSeconds();
+                float loopLength = looper.GetLoopLengthSeconds(currentLooper);
+                float position = looper.GetPositionSeconds(currentLooper);
 
                 float frac = position - (int)position;
                 float inte = position - frac;
                 // Write read position in seconds.
                 if (loopLength > 1.f)
                 {
-                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100));
+                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
                 }
                 else
                 {
@@ -165,7 +162,7 @@ namespace wreath
                 inte = loopLength - frac;
                 if (loopLength > 1.f)
                 {
-                    str += "/" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100)) + "s";
+                    str += "/" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "s";
                 }
                 else
                 {
@@ -177,14 +174,13 @@ namespace wreath
                 hw.display.WriteString(cstr, Font_6x8, true);
             }
 
-            /*
             // Draw the loop bars.
             for (int i = 0; i < 2; i++)
             {
                 int y{6 * i};
-                int start = std::floor(loopers[i].GetLoopStart() * step);
-                int end = std::floor(loopers[i].GetLoopEnd() * step);
-                if (loopers[i].GetLoopStart() < loopers[i].GetLoopEnd())
+                int start = std::floor(looper.GetLoopStart(i) * step);
+                int end = std::floor(looper.GetLoopEnd(i) * step);
+                if (looper.GetLoopStart(i) < looper.GetLoopEnd(i))
                 {
                     // Normal loop (start position before end position).
                     hw.display.DrawRect(start, 22 + y, end, 22 + y, true, true);
@@ -198,35 +194,36 @@ namespace wreath
 
                 int cursor{};
                 // Draw the read position.
-                cursor = std::floor(loopers[i].GetPosition() * step);
+                cursor = std::floor(looper.GetReadPos(i) * step);
                 hw.display.DrawRect(cursor, 20 + y, cursor, 21 + y, true, true);
                 // Draw the start position depending on the looper movement.
-                if (Looper::Movement::FORWARD == loopers[i].GetMovement())
+                if (Looper::Movement::FORWARD == looper.GetMovement(i))
                 {
                     cursor = start;
                 }
-                else if (Looper::Movement::BACKWARDS == loopers[i].GetMovement())
+                else if (Looper::Movement::BACKWARDS == looper.GetMovement(i))
                 {
                     cursor = end;
                 }
-                else if (Looper::Movement::PENDULUM == loopers[i].GetMovement())
+                else if (Looper::Movement::PENDULUM == looper.GetMovement(i))
                 {
-                    cursor = loopers[i].IsGoingForward() ? end : start;
+                    cursor = looper.IsGoingForward(i) ? end : start;
                 }
                 else
                 {
-                    cursor = std::floor(loopers[i].GetNextPosition() * step);
+                    cursor = std::floor(looper.GetNextReadPos(i) * step);
                 }
                 hw.display.DrawRect(cursor, 23 + y, cursor, 24 + y, true, true);
             }
-            */
 
-            str = std::to_string(loopers[0].GetBufferSamples());
+            /*
+            str = std::to_string(looper.GetBufferSamples(0));
             hw.display.SetCursor(0, 16);
             hw.display.WriteString(cstr, Font_6x8, true);
-            str = std::to_string(loopers[1].GetBufferSamples());
+            str = std::to_string(looper.GetBufferSamples(1));
             hw.display.SetCursor(0, 24);
             hw.display.WriteString(cstr, Font_6x8, true);
+            */
         }
 
         if (pageSelected)
@@ -234,19 +231,19 @@ namespace wreath
             if (currentPage == 1)
             {
                 // Page 1: Speed.
-                float frac = loopers[currentLooper].GetSpeed() - (int)loopers[currentLooper].GetSpeed();
-                float inte = loopers[currentLooper].GetSpeed() - frac;
-                str = "x" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100));
+                float frac = looper.GetSpeed(currentLooper) - (int)looper.GetSpeed(currentLooper);
+                float inte = looper.GetSpeed(currentLooper) - frac;
+                str = "x" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
             }
             else if (currentPage == 2)
             {
                 // Page 2: Length.
-                float loopLength = loopers[currentLooper].GetLoopLengthSeconds();
+                float loopLength = looper.GetLoopLengthSeconds(currentLooper);
                 if (loopLength > 1.f)
                 {
                     float frac = loopLength - (int)loopLength;
                     float inte = loopLength - frac;
-                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 100)) + "s";
+                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "s";
                 }
                 else
                 {
@@ -258,19 +255,19 @@ namespace wreath
             else if (currentPage == 3)
             {
                 // Page 3: Movement.
-                str = movementNames[static_cast<int>(loopers[currentLooper].GetMovement())];
+                str = movementNames[static_cast<int>(looper.GetMovement(currentLooper))];
             }
             else if (currentPage == 4)
             {
                 // Page 4: Mode.
-                str = modeNames[static_cast<int>(loopers[currentLooper].GetMode())];
+                str = modeNames[static_cast<int>(looper.GetMode())];
             }
 
             hw.display.SetCursor(0, 11);
             hw.display.WriteString(cstr, Font_6x8, true);
         }
 
-        if (loopers[0].IsFrozen())
+        if (looper.IsFrozen())
         {
             str = "*";
             hw.display.SetCursor(width - 6, 0);
@@ -280,172 +277,7 @@ namespace wreath
         hw.display.Update();
     }
 
-    void UpdateMenu()
-    {
-        if (!loopers[0].IsBuffering())
-        {
-            if (pageSelected)
-            {
-                if (currentPage == 1)
-                {
-                    // Page 1: Speed.
-                    if (hw.encoder.Increment() > 0)
-                    {
-                        loopers[currentLooper].SetSpeed(loopers[currentLooper].GetSpeed() + 0.05f);
-                        if (!loopers[currentLooper].IsDualMode())
-                        {
-                            loopers[1].SetSpeed(loopers[currentLooper].GetSpeed());
-                        }
-                    }
-                    else if (hw.encoder.Increment() < 0)
-                    {
-                        loopers[currentLooper].SetSpeed(loopers[currentLooper].GetSpeed() - 0.05f);
-                        if (!loopers[currentLooper].IsDualMode())
-                        {
-                            loopers[1].SetSpeed(loopers[currentLooper].GetSpeed());
-                        }
-                    }
-                }
-                else if (currentPage == 2)
-                {
-                    // Page 2: Length.
-                    // TODO: micro-steps for v/oct.
-                    int samples{};
-                    samples = (loopers[currentLooper].GetLoopLength() > 480) ? std::floor(loopers[currentLooper].GetLoopLength() * 0.1) : kMinSamples;
-                    if (hw.encoder.Increment() > 0)
-                    {
-                        loopers[currentLooper].IncrementLoopLength(samples);
-                        if (!loopers[currentLooper].IsDualMode())
-                        {
-                            loopers[1].IncrementLoopLength(samples);
-                        }
-                    }
-                    else if (hw.encoder.Increment() < 0)
-                    {
-                        loopers[currentLooper].DecrementLoopLength(samples);
-                        if (!loopers[currentLooper].IsDualMode())
-                        {
-                            loopers[1].DecrementLoopLength(samples);
-                        }
-                    }
-                }
-                else if (currentPage == 3)
-                {
-                    // Page 3: Movement.
-                    int currentMovement{loopers[currentLooper].GetMovement()};
-                    currentMovement += hw.encoder.Increment();
-                    loopers[currentLooper].SetMovement(static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
-                    if (!loopers[currentLooper].IsDualMode())
-                    {
-                        loopers[1].SetMovement(static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
-                    }
-                }
-                else if (currentPage == 4)
-                {
-                    // Page 4: Mode.
-                    bool isDualMode{loopers[0].IsDualMode()};
-                    for (int i = 0; i < 2; i++)
-                    {
-                        int currentMode{loopers[i].GetMode()};
-                        currentMode += hw.encoder.Increment();
-                        loopers[i].SetMode(static_cast<Looper::Mode>(fclamp(currentMode, 0, Looper::Mode::LAST_MODE - 1)));
-                    }
-                    // When switching from dual mode to a coupled mode,
-                    // reset the loopers.
-                    if (isDualMode && !loopers[0].IsDualMode())
-                    {
-                        loopers[0].SetMovement(Looper::Movement::FORWARD);
-                        loopers[1].SetMovement(Looper::Movement::FORWARD);
-                        loopers[0].SetSpeed(1.0f);
-                        loopers[1].SetSpeed(1.0f);
-                        loopers[0].ResetLoopLength();
-                        loopers[1].ResetLoopLength();
-                        loopers[0].Restart();
-                        loopers[1].Restart();
-                        currentLooper = 0;
-                    }
-                }
-            }
-            else if (!buttonPressed)
-            {
-                currentPage += hw.encoder.Increment();
-                if (currentPage < 0)
-                {
-                    currentPage = 0;
-                }
-                else if (currentPage > kMaxPages - 1)
-                {
-                    currentPage = kMaxPages - 1;
-                }
-            }
-
-            if (hw.encoder.TimeHeldMs() >= 500.f)
-            {
-                clickOp = MenuClickOp::FREEZE;
-            }
-            if (hw.encoder.TimeHeldMs() >= 2000.f)
-            {
-                clickOp = MenuClickOp::RESET;
-            }
-        }
-
-        if (hw.encoder.RisingEdge())
-        {
-            buttonPressed = true;
-        }
-        if (hw.encoder.FallingEdge())
-        {
-            if (clickOp == MenuClickOp::STOP)
-            {
-                // Stop buffering.
-                //loopers[0].StopBuffering();
-                //loopers[1].StopBuffering();
-                mustStopBuffering = true;
-                clickOp = MenuClickOp::MENU;
-            }
-            else if (clickOp == MenuClickOp::FREEZE)
-            {
-                // Toggle freeze.
-                loopers[0].ToggleFreeze();
-                loopers[1].ToggleFreeze();
-                clickOp = MenuClickOp::MENU;
-            }
-            else if (clickOp == MenuClickOp::RESET)
-            {
-                // ResetBuffer buffers.
-                loopers[0].ResetBuffer();
-                loopers[1].ResetBuffer();
-                currentPage = 0;
-                pageSelected = false;
-                clickOp = MenuClickOp::STOP;
-            }
-            else if (clickOp == MenuClickOp::DUAL)
-            {
-                currentLooper = 1; // Select the second looper
-                clickOp = MenuClickOp::MENU;
-            }
-            else if (currentPage != 0)
-            {
-                // When not in the main page, toggle the page selection.
-                if (!pageSelected)
-                {
-                    pageSelected = true;
-                    if (loopers[0].IsDualMode())
-                    {
-                        // In dual mode the controls for the two loopers are
-                        // independent.
-                        currentLooper = 0; // Select the first looper
-                        clickOp = MenuClickOp::DUAL;
-                    }
-                }
-                else {
-                    pageSelected = false;
-                }
-            }
-
-            buttonPressed = false;
-        }
-    }
+    UiEventQueue eventQueue;
 
     void ProcessEvent(const UiEventQueue::Event& e)
     {
@@ -454,27 +286,24 @@ namespace wreath
             case UiEventQueue::Event::EventType::buttonPressed:
                 buttonPressed = false;
                 break;
+
             case UiEventQueue::Event::EventType::buttonReleased:
                 if (clickOp == MenuClickOp::STOP)
                 {
                     // Stop buffering.
-                    //loopers[0].StopBuffering();
-                    //loopers[1].StopBuffering();
-                    mustStopBuffering = true;
+                    looper.StopBuffering();
                     clickOp = MenuClickOp::MENU;
                 }
                 else if (clickOp == MenuClickOp::FREEZE)
                 {
                     // Toggle freeze.
-                    loopers[0].ToggleFreeze();
-                    loopers[1].ToggleFreeze();
+                    looper.ToggleFreeze();
                     clickOp = MenuClickOp::MENU;
                 }
                 else if (clickOp == MenuClickOp::RESET)
                 {
                     // ResetBuffer buffers.
-                    loopers[0].ResetBuffer();
-                    loopers[1].ResetBuffer();
+                    looper.ResetBuffer();
                     currentPage = 0;
                     pageSelected = false;
                     clickOp = MenuClickOp::STOP;
@@ -490,7 +319,7 @@ namespace wreath
                     if (!pageSelected)
                     {
                         pageSelected = true;
-                        if (loopers[0].IsDualMode())
+                        if (looper.IsDualMode())
                         {
                             // In dual mode the controls for the two loopers are
                             // independent.
@@ -503,8 +332,70 @@ namespace wreath
                     }
                 }
                 break;
-            case UiEventQueue::Event::EventType::encoderTurned:
 
+            case UiEventQueue::Event::EventType::encoderTurned:
+                if (pageSelected)
+                {
+                    if (currentPage == 1)
+                    {
+                        // Page 1: Speed.
+                        float steps{ e.asEncoderTurned.increments * 0.05f};
+                        if (steps != 0.f) {
+                            looper.IncrementSpeed(currentLooper, steps);
+                            if (!looper.IsDualMode())
+                            {
+                                looper.IncrementSpeed(1, steps);
+                            }
+                        }
+                    }
+                    else if (currentPage == 2)
+                    {
+                        // Page 2: Length.
+                        // TODO: micro-steps for v/oct.
+                        int samples{};
+                        samples = (looper.GetLoopLength(currentLooper) > 480) ? std::floor(looper.GetLoopLength(currentLooper) * 0.1) : kMinSamples;
+                        samples *=  e.asEncoderTurned.increments;
+                        if (samples != 0)
+                        {
+                            looper.IncrementLoopLength(currentLooper, samples);
+                            if (!looper.IsDualMode())
+                            {
+                                looper.IncrementLoopLength(1, samples);
+                            }
+                        }
+                    }
+                    else if (currentPage == 3)
+                    {
+                        // Page 3: Movement.
+                        int currentMovement{looper.GetMovement(currentLooper)};
+                        currentMovement +=  e.asEncoderTurned.increments;
+                        looper.SetMovement(currentLooper, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
+                        if (!looper.IsDualMode())
+                        {
+                            looper.SetMovement(1, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
+                        }
+                    }
+                    else if (currentPage == 4)
+                    {
+                        // Page 4: Mode.
+                        bool isDualMode{looper.IsDualMode()};
+                        int currentMode{looper.GetMode()};
+                        currentMode +=  e.asEncoderTurned.increments;
+                        looper.SetMode(static_cast<StereoLooper::Mode>(fclamp(currentMode, 0, StereoLooper::Mode::LAST_MODE - 1)));
+                        if (isDualMode && !looper.IsDualMode())
+                        {
+                            currentLooper = 0;
+                        }
+                    }
+                }
+                else if (!buttonPressed)
+                {
+                    currentPage +=  e.asEncoderTurned.increments;
+                    currentPage = fclamp(currentPage, 0, kMaxPages - 1);
+                }
+                break;
+
+            default:
                 break;
         }
     }

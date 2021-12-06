@@ -1,9 +1,8 @@
-#include <cstring>
+#include "wreath.h"
 #include "ui.h"
+#include <cstring>
 
 using namespace wreath;
-
-CrossFade cf;
 
 /** The DSY_QSPI_BSS attribute places your array in QSPI memory */
 float DSY_QSPI_BSS qspi_buffer[5];
@@ -40,39 +39,29 @@ void LoadConfig(uint32_t slot)
 
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
-    hw.ProcessAllControls();
+    //hw.ProcessAllControls();
+    UpdateControls();
     GenerateUiEvents();
 
     for (size_t i = 0; i < size; i++)
     {
-        float dry_l{IN_L[i]};
-        float dry_r{IN_R[i]};
+        float leftIn{IN_L[i]};
+        float rightIn{IN_R[i]};
 
-        if (mustStopBuffering) {
-            // When manually stopping buffering the two buffers end up with a
-            // different number of samples, I guess because they're not stopped
-            // at the same exact point in time. To resolve this problem, we get
-            // the shortest buffer and "truncate" the other to the same length.
-            const size_t min = fmin(loopers[0].GetBufferSamples(), loopers[1].GetBufferSamples());
-            loopers[0].StopBuffering(min);
-            loopers[1].StopBuffering(min);
-            mustStopBuffering = false;
-        }
+        float leftOut{};
+        float rightOut{};
+        looper.Process(leftIn, rightIn, leftOut, rightOut);
 
-        float wet_l{loopers[0].Process(dry_l, i)};
-        float wet_r{loopers[1].Process(dry_r, i)};
-
-        cf.SetPos(dryWet);
-        OUT_L[i] = cf.Process(dry_l, wet_l);
-        OUT_R[i] = cf.Process(dry_r, wet_r);
+        OUT_L[i] = leftOut;
+        OUT_R[i] = rightOut;
     }
 }
 
 int main(void)
 {
     InitHw();
-    InitLoopers();
-    cf.Init(CROSSFADE_CPOW);
+
+    looper.Init();
 
     hw.StartAudio(AudioCallback);
 

@@ -18,8 +18,6 @@ void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
     initBufferSamples_ = sampleRate * maxBufferSeconds;
     ResetBuffer();
 
-    state_ = State::INIT;
-    mode_ = Mode::MIMEO;
     movement_ = Movement::FORWARD;
     forward_ = Movement::FORWARD == movement_;
 
@@ -63,12 +61,11 @@ void Looper::ResetBuffer()
     std::fill(&buffer_[0], &buffer_[initBufferSamples_ - 1], 0.f);
     bufferSamples_ = 0;
     bufferSeconds_ = 0.f;
-    state_ = State::BUFFERING;
-    feedback_ = 0.f;
-    feedbackPickup_ = false;
     readPos_ = 0.f;
-    nextReadPos_ = 0.f;
     readPosSeconds_ = 0.f;
+    nextReadPos_ = 0.f;
+    fadePos_ = 0;
+    loopLengthSeconds_ = 0.f;
     writePos_ = 0;
     loopStart_ = 0;
     loopEnd_ = 0;
@@ -77,36 +74,56 @@ void Looper::ResetBuffer()
     fadeIndex_ = 0;
 }
 
+bool Looper::Buffer(float value)
+{
+    // Handle end of buffer.
+    if (writePos_ > initBufferSamples_ - 1)
+    {
+        return true;
+    }
+
+    Write(value);
+    writePos_++;
+    bufferSamples_ = writePos_;
+    bufferSeconds_ = bufferSamples_ / static_cast<float>(sampleRate_);
+
+    return false;
+}
+
+void Looper::MustRestart()
+{
+    mustRestart_ = true;
+}
+
+void Looper::Restart()
+{
+    if (Movement::RANDOM == movement_)
+    {
+        nextReadPos_ = GetRandomPosition();
+        forward_ = nextReadPos_ > readPos_;
+    }
+    else
+    {
+        if (forward_)
+        {
+            SetReadPosAtStart();
+        }
+        else
+        {
+            SetReadPosAtEnd();
+        }
+    }
+}
+
 /**
  * @brief Stops the buffering.
  */
-void Looper::StopBuffering(size_t bufferSamples)
+void Looper::StopBuffering()
 {
-    bufferSamples_ = bufferSamples;
-    state_ = State::RECORDING;
     loopStart_ = 0;
     writePos_ = 0;
     ResetLoopLength();
     SetReadPos(forward_ ? loopStart_ : loopEnd_);
-}
-
-/**
- * @brief Toggles freeze state.
- */
-void Looper::ToggleFreeze()
-{
-    if (IsFrozen())
-    {
-        // Not frozen anymore.
-        state_ = State::RECORDING;
-        loopStart_ = 0;
-    }
-    else
-    {
-        // Frozen.
-        state_ = State::FROZEN;
-        feedbackPickup_ = false;
-    }
 }
 
 /**
@@ -147,156 +164,6 @@ void Looper::SetLoopLength(size_t length)
 void Looper::ResetLoopLength()
 {
     SetLoopLength(bufferSamples_);
-}
-
-/**
- * @brief Processes a sample.
- *
- * @param input
- * @param currentSample
- * @return float
- */
-float Looper::Process(const float input, const int currentSample)
-{
-    float output{0.f};
-
-    // Wait a few samples to avoid potential clicking on module's startup.
-    if (IsStartingUp())
-    {
-        fadeIndex_ += 1;
-        if (fadeIndex_ > sampleRate_)
-        {
-            fadeIndex_ = 0;
-            state_ = State::BUFFERING;
-        }
-    }
-
-    // Fill up the buffer the first time.
-    if (IsBuffering())
-    {
-        Write(writePos_, input);
-        writePos_ += 1;
-        bufferSamples_ = writePos_;
-        bufferSeconds_ = bufferSamples_ / static_cast<float>(sampleRate_);
-
-        // Handle end of buffer.
-        if (writePos_ > initBufferSamples_ - 1)
-        {
-            StopBuffering(bufferSamples_);
-        }
-    }
-
-    if (IsRecording() || IsFrozen())
-    {
-        // Received the command to reset the read position to the loop start
-        // point.
-        if (mustRestart_)
-        {
-            if (Movement::RANDOM == movement_)
-            {
-                nextReadPos_ = GetRandomPosition();
-                forward_ = nextReadPos_ > readPos_;
-            }
-            else
-            {
-                if (forward_)
-                {
-                    SetReadPosAtStart();
-                }
-                else
-                {
-                    SetReadPosAtEnd();
-                }
-            }
-        }
-
-        output = Read(readPos_);
-
-        float speed{speed_};
-
-        float writePos{static_cast<float>(writePos_)};
-        if (IsMode2Mode())
-        {
-            // In this mode the speed depends on the loop length.
-            speed = loopLength_ * (1.f / bufferSamples_);
-
-            float output2{Read(writePos_)};
-            // In this mode there always is writing, but when frozen writes the
-            // looped signal.
-            float writeSig{IsFrozen() ? output : input + (output2 * feedback_)};
-            Write(writePos_, SoftLimit(writeSig));
-            writePos = forward_ ? writePos + speed : writePos - speed;
-            HandlePosBoundaries(writePos, false);
-            SetWritePos(writePos);
-        }
-        else
-        {
-            if (IsFrozen())
-            {
-                // When frozen, the feedback value sets the starting point.
-                size_t start = std::floor(feedback_ * bufferSamples_);
-                // Pick up where the loop start point is.
-                if (std::abs(static_cast<int>(start - loopStart_)) < static_cast<int>(bufferSamples_ * 0.1f) && !feedbackPickup_)
-                {
-                    feedbackPickup_ = true;
-                }
-                if (feedbackPickup_)
-                {
-                    loopStart_ = start;
-                }
-                if (loopStart_ + loopLength_ > bufferSamples_)
-                {
-                    loopEnd_ = loopStart_ + loopLength_ - bufferSamples_;
-                }
-                else
-                {
-                    loopEnd_ = loopStart_ + loopLength_ - 1;
-                }
-                // Note that in this mode no writing is done while frozen.
-            }
-            else
-            {
-                Write(writePos_, SoftLimit(input + (output * feedback_)));
-            }
-
-            // Always write forward at original speed.
-            writePos += 1;
-            SetWritePos(writePos);
-        }
-
-        float readPos{readPos_};
-        float coeff{speed};
-        if (Movement::RANDOM == movement_)
-        {
-            // In this case we just choose randomly the next position.
-            if (std::abs(readPos - nextReadPos_) < loopLength_ * 0.01f)
-            {
-                nextReadPos_ = GetRandomPosition();
-                forward_ = nextReadPos_ > readPos;
-            }
-            coeff = 1.0f / ((2.f - speed) * sampleRate_);
-        }
-        else
-        {
-            if (Movement::DRUNK == movement_)
-            {
-                // When drunk there's a small probability of changing direction.
-                if ((rand() % sampleRate_) == 1)
-                {
-                    forward_ = !forward_;
-                }
-            }
-            // Otherwise, move the reading position normally.
-            nextReadPos_ = forward_ ? readPos_ + speed : readPos_ - speed;
-        }
-
-        // Move smoothly to the next position.
-        fonepole(readPos, nextReadPos_, coeff);
-        HandlePosBoundaries(readPos, true);
-        SetReadPos(readPos);
-    }
-
-    return output;
 }
 
 /**

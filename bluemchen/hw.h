@@ -7,8 +7,6 @@ namespace wreath
     using namespace kxmx;
     using namespace daisy;
 
-    constexpr size_t kSampleRate{48000};
-
     Bluemchen hw;
 
     Parameter knob1;

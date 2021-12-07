@@ -40,29 +40,19 @@ namespace wreath
         enum Mode
         {
             MIMEO,
-            MODE2,
+            CROSS,
+            //MODE2,
             DUAL,
             LAST_MODE,
         };
 
-        void Init()
+        void Init(size_t sampleRate)
         {
-            loopers_[LEFT].Init(kSampleRate, leftBuffer_, kBufferSeconds);
-            loopers_[RIGHT].Init(kSampleRate, rightBuffer_, kBufferSeconds);
-
+            sampleRate_ = sampleRate;
+            loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSeconds);
+            loopers_[RIGHT].Init(sampleRate_, rightBuffer_, kBufferSeconds);
             state_ = State::INIT;
-
             cf_.Init(CROSSFADE_CPOW);
-        }
-
-        void ResetBuffer()
-        {
-            mustResetBuffer_ = true;
-        }
-
-        void StopBuffering()
-        {
-            mustStopBuffering_ = true;
         }
 
         void ToggleFreeze()
@@ -87,9 +77,9 @@ namespace wreath
             leftOut = 0.f;
             rightOut = 0.f;
 
-            if (mustResetBuffer_)
+            if (mustResetBuffer)
             {
-                mustResetBuffer_ = false;
+                mustResetBuffer = false;
                 feedback_ = 0.f;
                 feedbackPickup_ = false;
                 loopers_[LEFT].ResetBuffer();
@@ -97,9 +87,9 @@ namespace wreath
                 state_ = State::BUFFERING;
             }
 
-            if (mustStopBuffering_)
+            if (mustStopBuffering)
             {
-                mustStopBuffering_ = false;
+                mustStopBuffering = false;
                 loopers_[LEFT].StopBuffering();
                 loopers_[RIGHT].StopBuffering();
                 state_ = State::RECORDING;
@@ -109,7 +99,7 @@ namespace wreath
             if (IsStartingUp())
             {
                 static size_t fadeIndex{0};
-                if (fadeIndex > kSampleRate)
+                if (fadeIndex > sampleRate_)
                 {
                     fadeIndex = 0;
                     state_ = State::BUFFERING;
@@ -117,14 +107,20 @@ namespace wreath
                 fadeIndex++;
             }
 
-            // Fill up the buffer the first time.
+            // Gain stage.
+            float left{leftIn * gain_};
+            float right{rightIn * gain_};
+            left = (left > 0) ? 1 - expf(-left) : -1 + expf(left);
+            right = (right > 0) ? 1 - expf(-right) : -1 + expf(right);
+
+            // Fill up the buffer for the first time.
             if (IsBuffering())
             {
-                bool doneLeft{loopers_[LEFT].Buffer(leftIn)};
-                bool doneRight{loopers_[RIGHT].Buffer(rightIn)};
+                bool doneLeft{loopers_[LEFT].Buffer(left)};
+                bool doneRight{loopers_[RIGHT].Buffer(right)};
                 if (doneLeft && doneRight)
                 {
-                    StopBuffering();
+                    mustStopBuffering = true;
                 }
             }
 
@@ -132,14 +128,23 @@ namespace wreath
             {
                 // Received the command to reset the read position to the loop start
                 // point.
-                if (mustRestart_)
+                if (mustRestart)
                 {
-                    loopers_[LEFT].MustRestart();
-                    loopers_[RIGHT].MustRestart();
+                    loopers_[LEFT].Restart();
+                    loopers_[RIGHT].Restart();
                 }
 
                 leftOut = loopers_[LEFT].Read(loopers_[LEFT].GetReadPos());
                 rightOut = loopers_[RIGHT].Read(loopers_[RIGHT].GetReadPos());
+
+                // In cross mode swap the two channels, so what's read in the
+                // left buffer is written in the right one and vice-versa.
+                if (IsCrossMode())
+                {
+                    float temp = leftOut;
+                    leftOut = rightOut;
+                    rightOut = temp;
+                }
 
                 float leftSpeed{loopers_[LEFT].GetSpeed()};
                 float rightSpeed{loopers_[RIGHT].GetSpeed()};
@@ -147,18 +152,18 @@ namespace wreath
                 float leftWritePos{static_cast<float>(loopers_[LEFT].GetWritePos())};
                 float rightWritePos{static_cast<float>(loopers_[RIGHT].GetWritePos())};
 
-                if (IsMode2Mode())
+                if (false /*IsMode2Mode()*/)
                 {
                     // In this mode the speed depends on the loop length.
-                    leftSpeed = loopers_[LEFT].GetLoopLength() * (1.f / loopers_[LEFT].GetBufferSamples());
-                    rightSpeed = loopers_[RIGHT].GetLoopLength() * (1.f / loopers_[RIGHT].GetBufferSamples());
+                    leftSpeed = fmap(1.f - (loopers_[LEFT].GetLoopLength() / (float)loopers_[LEFT].GetBufferSamples()), 1.f, kMaxSpeed);
+                    rightSpeed = fmap(1.f - (loopers_[RIGHT].GetLoopLength() / (float)loopers_[RIGHT].GetBufferSamples()), 1.f, kMaxSpeed);
 
                     float leftOut2{loopers_[LEFT].Read(loopers_[LEFT].GetWritePos())};
                     float rightOut2{loopers_[RIGHT].Read(loopers_[RIGHT].GetWritePos())};
                     // In this mode there always is writing, but when frozen writes the
                     // looped signal.
-                    float leftWriteSig{IsFrozen() ? leftOut : leftIn + SoftLimit(leftOut2 * feedback_)};
-                    float rightWriteSig{IsFrozen() ? rightOut : rightIn + SoftLimit(rightOut2 * feedback_)};
+                    float leftWriteSig{IsFrozen() ? leftOut : SoftLimit(left + leftOut2 * feedback_)};
+                    float rightWriteSig{IsFrozen() ? rightOut : SoftLimit(right + rightOut2 * feedback_)};
                     loopers_[LEFT].Write(leftWriteSig);
                     loopers_[RIGHT].Write(rightWriteSig);
                     leftWritePos = loopers_[LEFT].IsGoingForward() ? leftWritePos + leftSpeed : leftWritePos - leftSpeed;
@@ -201,13 +206,13 @@ namespace wreath
                     }
                     else
                     {
-                        loopers_[LEFT].Write(leftIn + SoftLimit(leftOut * feedback_));
-                        loopers_[RIGHT].Write(rightIn + SoftLimit(rightOut * feedback_));
+                        loopers_[LEFT].Write(SoftLimit(left + leftOut * feedback_));
+                        loopers_[RIGHT].Write(SoftLimit(right + rightOut * feedback_));
                     }
 
                     // Always write forward at original speed.
-                    leftWritePos++;
-                    rightWritePos++;
+                    leftWritePos += 1;
+                    rightWritePos += 1;
                     loopers_[LEFT].SetWritePos(leftWritePos);
                     loopers_[RIGHT].SetWritePos(rightWritePos);
                 }
@@ -224,14 +229,14 @@ namespace wreath
                         loopers_[LEFT].SetNextReadPos(loopers_[LEFT].GetRandomPosition());
                         loopers_[LEFT].SetForward(loopers_[LEFT].GetNextReadPos() > leftReadPos);
                     }
-                    leftCoeff = 1.0f / ((2.f - leftSpeed) * kSampleRate);
+                    leftCoeff = 1.0f / ((2.f - leftSpeed) * sampleRate_);
                 }
                 else
                 {
                     if (loopers_[LEFT].IsDrunkMovement())
                     {
                         // When drunk there's a small probability of changing direction.
-                        if ((rand() % kSampleRate) == 1)
+                        if ((rand() % sampleRate_) == 1)
                         {
                             loopers_[LEFT].ToggleDirection();
                         }
@@ -248,14 +253,14 @@ namespace wreath
                         loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].GetRandomPosition());
                         loopers_[RIGHT].SetForward(loopers_[RIGHT].GetNextReadPos() > rightReadPos);
                     }
-                    rightCoeff = 1.0f / ((2.f - rightSpeed) * kSampleRate);
+                    rightCoeff = 1.0f / ((2.f - rightSpeed) * sampleRate_);
                 }
                 else
                 {
                     if (loopers_[RIGHT].IsDrunkMovement())
                     {
                         // When drunk there's a small probability of changing direction.
-                        if ((rand() % kSampleRate) == 1)
+                        if ((rand() % sampleRate_) == 1)
                         {
                             loopers_[RIGHT].ToggleDirection();
                         }
@@ -272,12 +277,29 @@ namespace wreath
                 loopers_[LEFT].SetReadPos(leftReadPos);
                 loopers_[RIGHT].SetReadPos(rightReadPos);
 
-                float left{leftIn};
-                float right{rightIn};
                 cf_.SetPos(dryWet_);
                 leftOut = cf_.Process(left, leftOut);
                 rightOut = cf_.Process(right, rightOut);
             }
+        }
+
+        void SetMode(Mode mode)
+        {
+            // When switching from dual mode to a coupled mode, reset the
+            // loopers.
+            if (IsDualMode() && Mode::DUAL != mode)
+            {
+                loopers_[LEFT].SetMovement(Looper::Movement::FORWARD);
+                loopers_[RIGHT].SetMovement(Looper::Movement::FORWARD);
+                loopers_[LEFT].SetSpeed(1.0f);
+                loopers_[RIGHT].SetSpeed(1.0f);
+                loopers_[LEFT].ResetLoopLength();
+                loopers_[RIGHT].ResetLoopLength();
+                loopers_[LEFT].Restart();
+                loopers_[RIGHT].Restart();
+            }
+
+            mode_ = mode;
         }
 
         inline size_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
@@ -299,55 +321,37 @@ namespace wreath
         inline bool IsRecording() { return State::RECORDING == state_; }
         inline bool IsFrozen() { return State::FROZEN == state_; }
         inline bool IsMimeoMode() { return Mode::MIMEO == mode_; }
-        inline bool IsMode2Mode() { return Mode::MODE2 == mode_; }
+        inline bool IsCrossMode() { return Mode::CROSS == mode_; }
+        //inline bool IsMode2Mode() { return Mode::MODE2 == mode_; }
         inline bool IsDualMode() { return Mode::DUAL == mode_; }
         inline Mode GetMode() { return mode_; }
-        void SetMode(Mode mode)
-        {
-            // When switching from dual mode to a coupled mode, reset the
-            // loopers.
-            if (IsDualMode() && Mode::DUAL != mode)
-            {
-                loopers_[LEFT].SetMovement(Looper::Movement::FORWARD);
-                loopers_[RIGHT].SetMovement(Looper::Movement::FORWARD);
-                loopers_[LEFT].SetSpeed(1.0f);
-                loopers_[RIGHT].SetSpeed(1.0f);
-                loopers_[LEFT].ResetLoopLength();
-                loopers_[RIGHT].ResetLoopLength();
-                loopers_[LEFT].Restart();
-                loopers_[RIGHT].Restart();
-            }
-
-            mode_ = mode;
-        }
+        inline float GetGain() { return gain_; }
+        inline void SetGain(float gain) { gain_ = gain; }
         inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
         inline void SetMovement(int channel, Looper::Movement movement) { loopers_[channel].SetMovement(movement); }
-        inline void IncrementSpeed(int channel, float value) { loopers_[channel].SetSpeed(loopers_[channel].GetSpeed() + value); }
-        inline void IncrementLoopLength(int channel, size_t samples)
+        inline void SetLoopStart(size_t value)
         {
-            if (samples > 0)
-            {
-                loopers_[channel].IncrementLoopLength(samples);
-            }
-            else if (samples < 0)
-            {
-                loopers_[channel].DecrementLoopLength(samples);
-            }
+            loopers_[LEFT].SetNextReadPos(value);
+            loopers_[RIGHT].SetNextReadPos(value);
         }
-        inline void Restart() {  mustRestart_ = true; }
+        inline void IncrementSpeed(int channel, float value) { loopers_[channel].SetSpeed(loopers_[channel].GetSpeed() + value); }
+        inline void IncrementLoopLength(int channel, size_t samples) { loopers_[channel].SetLoopLength(loopers_[channel].GetLoopLength() + samples); }
+
+        bool mustResetBuffer{};
+        bool mustStopBuffering{};
+        bool mustRestart{};
 
     private:
         Looper loopers_[2];
+        float gain_{1.f};
         float dryWet_{};
         float feedback_{};
         State state_{}; // The current state of the looper
         Mode mode_{}; // The current mode of the looper
         CrossFade cf_;
+        size_t sampleRate_{};
         bool feedbackPickup_{};
-        bool mustRestart_{};
-        bool mustResetBuffer_{};
-        bool mustStopBuffering_{};
     };
 
 

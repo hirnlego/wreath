@@ -36,10 +36,8 @@ void LoadConfig(uint32_t slot)
     memcpy(&curent_config, reinterpret_cast<void *>(0x90000000 + (slot * 4096)), sizeof(CONFIGURATION));
 }
 
-
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
-    //hw.ProcessAllControls();
     UpdateControls();
     GenerateUiEvents();
 
@@ -59,17 +57,16 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
 
 int main(void)
 {
-    InitHw();
+    InitHw(0.05f, 0.f);
 
-    looper.Init();
+    looper.Init(hw.AudioSampleRate());
+
+    //hw.SetAudioBlockSize(24);
 
     hw.StartAudio(AudioCallback);
 
     while (1)
     {
         ProcessUi();
-        UpdateControls();
-        UpdateOled();
-        //UpdateMenu();
     }
 }

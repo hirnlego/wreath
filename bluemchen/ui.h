@@ -44,15 +44,10 @@ namespace wreath
 
     const char *modeNames[] = {
         "Mimeo",
-        "Mode 2",
+        "Cross",
+        //"Mode 2",
         "Dual",
     };
-
-    float knob1Value{};
-    float knob2Value{};
-    float cv1Value{};
-    bool trigger{};
-    bool raising{};
 
     int currentLooper{0};
 
@@ -60,42 +55,20 @@ namespace wreath
     {
         if (!looper.IsStartingUp())
         {
-            hw.ProcessAllControls();
+            ProcessControls();
 
-            knob1.Process();
-            knob2.Process();
+            looper.SetDryWet(knob1Value);
+            looper.SetFeedback(knob2Value);
 
-            hw.seed.dac.WriteValue(daisy::DacHandle::Channel::ONE, static_cast<uint16_t>(knob1_dac.Process()));
-            hw.seed.dac.WriteValue(daisy::DacHandle::Channel::TWO, static_cast<uint16_t>(knob2_dac.Process()));
+            // Handle CV1 as trigger input for resetting the read position to
+            // the loop start point.
+            looper.mustRestart = cv1Trigger;
 
-            cv1.Process();
-            cv2.Process();
-
-            // Handle dry/wet knob.
-            if (std::abs(knob1Value - knob1.Value()) > 0.01f)
+            // Handle CV2 as loop start point when frozen.
+            if (looper.IsFrozen() && isCv2Connected)
             {
-                knob1Value = knob1.Value();
-                looper.SetDryWet(knob1Value);
+                looper.SetLoopStart(fmap(cv2.Value(), 0, looper.GetBufferSamples(0)));
             }
-            // Handle knob2Value/start knob.
-            if (std::abs(knob2Value - knob2.Value()) > 0.01f)
-            {
-                knob2Value = knob2.Value();
-                looper.SetFeedback(knob2Value);
-            }
-
-            // Handle trigger (restart) input.
-            raising = cv1.Value() < cv1Value;
-            if (!trigger && raising && cv1.Value() > 0.5f)
-            {
-                looper.Restart();
-                trigger = true;
-            }
-            else if (!raising && cv1.Value() < 0.5f)
-            {
-                trigger = false;
-            }
-            cv1Value = cv1.Value();
         }
     }
 
@@ -108,7 +81,7 @@ namespace wreath
         std::string str = pageNames[currentPage];
         char *cstr = &str[0];
         hw.display.SetCursor(0, 0);
-        hw.display.WriteString(cstr, Font_6x8, !pageSelected);
+        //hw.display.WriteString(cstr, Font_6x8, !pageSelected);
 
         float step = width;
 
@@ -228,6 +201,11 @@ namespace wreath
 
         if (pageSelected)
         {
+            if (currentPage == 0)
+            {
+                // Page 0: Gain.
+                str = "x" + std::to_string(static_cast<int>(looper.GetGain()));
+            }
             if (currentPage == 1)
             {
                 // Page 1: Speed.
@@ -274,6 +252,10 @@ namespace wreath
             hw.display.WriteString(cstr, Font_6x8, true);
         }
 
+        str = std::to_string(static_cast<int>(cv1Clock));
+        hw.display.SetCursor(0, 0);
+        hw.display.WriteString(cstr, Font_6x8, true);
+
         hw.display.Update();
     }
 
@@ -291,7 +273,7 @@ namespace wreath
                 if (clickOp == MenuClickOp::STOP)
                 {
                     // Stop buffering.
-                    looper.StopBuffering();
+                    looper.mustStopBuffering = true;
                     clickOp = MenuClickOp::MENU;
                 }
                 else if (clickOp == MenuClickOp::FREEZE)
@@ -303,7 +285,7 @@ namespace wreath
                 else if (clickOp == MenuClickOp::RESET)
                 {
                     // ResetBuffer buffers.
-                    looper.ResetBuffer();
+                    looper.mustResetBuffer = true;
                     currentPage = 0;
                     pageSelected = false;
                     clickOp = MenuClickOp::STOP;
@@ -313,7 +295,7 @@ namespace wreath
                     currentLooper = 1; // Select the second looper
                     clickOp = MenuClickOp::MENU;
                 }
-                else if (currentPage != 0)
+                else
                 {
                     // When not in the main page, toggle the page selection.
                     if (!pageSelected)
@@ -334,18 +316,23 @@ namespace wreath
                 break;
 
             case UiEventQueue::Event::EventType::encoderTurned:
-                if (pageSelected)
+                if (pageSelected && 0 != e.asEncoderTurned.increments)
                 {
+                    if (currentPage == 0)
+                    {
+                        // Page 0: Gain.
+                        float gain = looper.GetGain();
+                        gain += e.asEncoderTurned.increments;
+                        looper.SetGain(fclamp(gain, 0, 10));
+                    }
                     if (currentPage == 1)
                     {
                         // Page 1: Speed.
                         float steps{ e.asEncoderTurned.increments * 0.05f};
-                        if (steps != 0.f) {
-                            looper.IncrementSpeed(currentLooper, steps);
-                            if (!looper.IsDualMode())
-                            {
-                                looper.IncrementSpeed(1, steps);
-                            }
+                        looper.IncrementSpeed(currentLooper, steps);
+                        if (!looper.IsDualMode())
+                        {
+                            looper.IncrementSpeed(1, steps);
                         }
                     }
                     else if (currentPage == 2)
@@ -353,22 +340,18 @@ namespace wreath
                         // Page 2: Length.
                         // TODO: micro-steps for v/oct.
                         int samples{};
-                        samples = (looper.GetLoopLength(currentLooper) > 480) ? std::floor(looper.GetLoopLength(currentLooper) * 0.1) : kMinSamples;
+                        samples = (looper.GetLoopLength(currentLooper) > 480) ? std::floor(looper.GetLoopLength(currentLooper) * 0.1f) : kMinSamples;
                         samples *=  e.asEncoderTurned.increments;
-                        if (samples != 0)
+                        looper.IncrementLoopLength(currentLooper, samples);
+                        if (!looper.IsDualMode())
                         {
-                            looper.IncrementLoopLength(currentLooper, samples);
-                            if (!looper.IsDualMode())
-                            {
-                                looper.IncrementLoopLength(1, samples);
-                            }
+                            looper.IncrementLoopLength(1, samples);
                         }
                     }
                     else if (currentPage == 3)
                     {
                         // Page 3: Movement.
-                        int currentMovement{looper.GetMovement(currentLooper)};
-                        currentMovement +=  e.asEncoderTurned.increments;
+                        int currentMovement{looper.GetMovement(currentLooper) + e.asEncoderTurned.increments};
                         looper.SetMovement(currentLooper, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
                         if (!looper.IsDualMode())
                         {
@@ -379,8 +362,7 @@ namespace wreath
                     {
                         // Page 4: Mode.
                         bool isDualMode{looper.IsDualMode()};
-                        int currentMode{looper.GetMode()};
-                        currentMode +=  e.asEncoderTurned.increments;
+                        int currentMode{looper.GetMode() + e.asEncoderTurned.increments};
                         looper.SetMode(static_cast<StereoLooper::Mode>(fclamp(currentMode, 0, StereoLooper::Mode::LAST_MODE - 1)));
                         if (isDualMode && !looper.IsDualMode())
                         {
@@ -402,6 +384,8 @@ namespace wreath
 
     void ProcessUi()
     {
+        UpdateControls();
+
         while (!eventQueue.IsQueueEmpty())
         {
             UiEventQueue::Event e = eventQueue.GetAndRemoveNextEvent();
@@ -410,6 +394,8 @@ namespace wreath
                 ProcessEvent(e);
             }
         }
+
+        UpdateOled();
     }
 
     void GenerateUiEvents()

@@ -31,7 +31,7 @@ void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
  */
 void Looper::SetSpeed(float speed)
 {
-    speed_ = fclamp(speed, 0.f, 2.f);
+    speed_ = fclamp(speed, 0.f, kMaxSpeed);
 }
 
 /**
@@ -90,11 +90,6 @@ bool Looper::Buffer(float value)
     return false;
 }
 
-void Looper::MustRestart()
-{
-    mustRestart_ = true;
-}
-
 void Looper::Restart()
 {
     if (Movement::RANDOM == movement_)
@@ -127,33 +122,13 @@ void Looper::StopBuffering()
 }
 
 /**
- * @brief Increments the loop length by the given samples.
- *
- * @param samples
- */
-void Looper::IncrementLoopLength(size_t samples)
-{
-    SetLoopLength((loopLength_ + samples < bufferSamples_) ? loopLength_ + samples : bufferSamples_);
-}
-
-/**
- * @brief Decrements the loop length by the given samples.
- *
- * @param samples
- */
-void Looper::DecrementLoopLength(size_t samples)
-{
-    SetLoopLength((loopLength_ > samples) ? loopLength_ - samples : kMinSamples);
-}
-
-/**
  * @brief Sets the loop length.
  *
  * @param length
  */
 void Looper::SetLoopLength(size_t length)
 {
-    loopLength_ = length;
+    loopLength_ = fclamp(length, kMinSamples, bufferSamples_);
     loopEnd_ = loopLength_ - 1;
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
 }
@@ -198,7 +173,7 @@ float Looper::Read(float pos)
     if (mustFadeIn_ || mustFadeOut_)
     {
         // The number of samples we need to fade.
-        float samples{GetFadeSamples()};
+        int samples{GetFadeSamples()};
         float from{mustFadeIn_ ? 0.f : 1.f};
         float to{mustFadeIn_ ? 1.f : 0.f};
         cf_.SetPos(fadeIndex_ * (1.f / samples));
@@ -319,30 +294,31 @@ void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
  */
 void Looper::SetReadPos(float pos)
 {
-    uint32_t i_idx{static_cast<uint32_t>(pos)};
-    float samples{GetFadeSamples()};
+    // Handle fade, if needed.
+    int samples{GetFadeSamples()};
+    if (samples > 0) {
+        uint32_t i_idx{static_cast<uint32_t>(pos)};
 
-    // Set up a fade in if:
-    // - we're going forward and are at the beginning of the loop;
-    // - we're going backwards and are at the end of the loop;
-    // - we've been instructed to reset the starting position.
-    if ((forward_ && i_idx == loopStart_) || (!forward_ && i_idx == loopEnd_) || mustRestart_)
-    {
-        fadePos_ = pos;
-        fadeIndex_ = 0;
-        mustFadeIn_ = true;
-        mustRestart_ = false;
-    }
+        // Set up a fade in if:
+        // - we're going forward and are at the beginning of the loop;
+        // - we're going backwards and are at the end of the loop.
+        if ((forward_ && i_idx == loopStart_) || (!forward_ && i_idx == loopEnd_))
+        {
+            fadePos_ = pos;
+            fadeIndex_ = 0;
+            mustFadeIn_ = true;
+        }
 
-    // Set up a fade out if:
-    // - we're going forward and are at the end of the loop;
-    // - we're going backwards and are at the beginning of the loop;
-    // - we're about to cross the write position when going backwards.
-    if ((forward_ && i_idx + samples == loopEnd_) || (!forward_ && i_idx - samples == loopStart_) || (!forward_ && i_idx - samples == writePos_))
-    {
-        fadePos_ = pos;
-        fadeIndex_ = 0;
-        mustFadeOut_ = true;
+        // Set up a fade out if:
+        // - we're going forward and are at the end of the loop;
+        // - we're going backwards and are at the beginning of the loop;
+        // - we're about to cross the write position when going backwards.
+        if ((forward_ && i_idx + samples == loopEnd_) || (!forward_ && i_idx - samples == loopStart_) || (!forward_ && i_idx - samples == writePos_))
+        {
+            fadePos_ = pos;
+            fadeIndex_ = 0;
+            mustFadeOut_ = true;
+        }
     }
 
     readPos_ = pos;

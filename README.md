@@ -3,22 +3,20 @@
 A multifaceted looper for the Daisy platform.
 
 - sample  rate reduction
-- input gain (record level)
-- 4x speed?
-- mix left & right (left reads right and vice-versa)
-- mimeo: when clocked, speed is a divisor/multiplier
+- mimeo: when clocked, there should be a way to clock the looper, speed is a divisor/multiplier
 - clocked, envelope
 - extend initial buffer
 - link loopers (eg. play in series)
 - stutter (stops and goes, repeats), drag, jitter
 - more play heads
+- high pass filter on writing
 
 
 
 
 
 - all variables and objects should preferably be declared inside the function in which they are used
-- Do not make variables global if you can avoid it. It may be useful to make a variable global if it is accessed by several different functions and you want to avoid the overhead of transferring the variable as function parameter. But it may be a better solution to make the functions that access the saved variable members of the same class and store the shared variable inside the class. 
+- Do not make variables global if you can avoid it. It may be useful to make a variable global if it is accessed by several different functions and you want to avoid the overhead of transferring the variable as function parameter. But it may be a better solution to make the functions that access the saved variable members of the same class and store the shared variable inside the class.
 - It is preferable to declare a lookup table static and constant.
 - Multiplication and division take longer time.
 - It may be advantageous to put the operand that is most often true last in an && expression,

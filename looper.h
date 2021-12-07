@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Dynamics/crossfade.h"
-#include <stdint.h>
+#include <stddef.h>
 
 namespace wreath
 {
@@ -9,6 +9,8 @@ namespace wreath
 
     constexpr int kMinSamples{48};
     constexpr int kFadeSamples{480}; // Note: 480 samples is 10ms @ 48KHz.
+    constexpr float kMinSpeed{-4.f};
+    constexpr float kMaxSpeed{4.f};
 
     class Looper
     {
@@ -31,13 +33,10 @@ namespace wreath
         void ResetBuffer();
         void StopBuffering();
         void SetSpeed(float speed);
-        void IncrementLoopLength(size_t step);
-        void DecrementLoopLength(size_t step);
         void SetLoopLength(size_t length);
         void ResetLoopLength();
         void SetMovement(Movement movement);
         bool Buffer(float value);
-        void MustRestart();
         float Read(float pos);
         void SetWritePos(float pos);
         void HandlePosBoundaries(float &pos, bool isReadPos);
@@ -73,7 +72,7 @@ namespace wreath
         void SetReadPosAtStart();
         void SetReadPosAtEnd();
 
-        inline float GetFadeSamples() { return (loopLength_ > kFadeSamples * 2) ? kFadeSamples : loopLength_ / 2.f; }
+        inline int GetFadeSamples() { return (loopLength_ > kFadeSamples * 2) ? kFadeSamples : 0; }
 
         float *buffer_{}; // The buffer
         float bufferSeconds_{}; // Written buffer length in seconds
@@ -94,7 +93,6 @@ namespace wreath
         bool forward_{}; // True if the direction is forward
         bool mustFadeIn_{}; // True if the read value must be fade in
         bool mustFadeOut_{}; // True if the read value must be fade out
-        bool mustRestart_{};
 
         Movement movement_{}; // The current movement type of the looper
         CrossFade cf_; // Crossfade used for fading in/out of the read value

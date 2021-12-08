@@ -62,7 +62,10 @@ namespace wreath
 
             // Handle CV1 as trigger input for resetting the read position to
             // the loop start point.
-            looper.mustRestart = cv1Trigger;
+            if (isCv1Connected)
+            {
+                looper.mustRestart = cv1Trigger;
+            }
 
             // Handle CV2 as loop start point when frozen.
             if (looper.IsFrozen() && isCv2Connected)
@@ -81,7 +84,7 @@ namespace wreath
         std::string str = pageNames[currentPage];
         char *cstr = &str[0];
         hw.display.SetCursor(0, 0);
-        //hw.display.WriteString(cstr, Font_6x8, !pageSelected);
+        hw.display.WriteString(cstr, Font_6x8, !pageSelected);
 
         float step = width;
 
@@ -186,6 +189,9 @@ namespace wreath
                 {
                     cursor = std::floor(looper.GetNextReadPos(i) * step);
                 }
+                hw.display.DrawRect(cursor, 21 + y, cursor, 21 + y, true, true);
+                // Draw the write position.
+                cursor = std::floor(looper.GetWritePos(i) * step);
                 hw.display.DrawRect(cursor, 23 + y, cursor, 24 + y, true, true);
             }
 
@@ -251,10 +257,6 @@ namespace wreath
             hw.display.SetCursor(width - 6, 0);
             hw.display.WriteString(cstr, Font_6x8, true);
         }
-
-        str = std::to_string(static_cast<int>(cv1Clock));
-        hw.display.SetCursor(0, 0);
-        hw.display.WriteString(cstr, Font_6x8, true);
 
         hw.display.Update();
     }

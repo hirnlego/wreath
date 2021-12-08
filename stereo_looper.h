@@ -146,79 +146,61 @@ namespace wreath
                     rightOut = temp;
                 }
 
-                float leftSpeed{loopers_[LEFT].GetSpeed()};
-                float rightSpeed{loopers_[RIGHT].GetSpeed()};
+                if (!IsFrozen())
+                {
+                    loopers_[LEFT].Write(SoftLimit(left + leftOut * feedback_));
+                    loopers_[RIGHT].Write(SoftLimit(right + rightOut * feedback_));
+                }
+
+                cf_.SetPos(dryWet_);
+                leftOut = cf_.Process(left, leftOut);
+                rightOut = cf_.Process(right, rightOut);
+
+                if (IsFrozen())
+                {
+                    // When frozen, the feedback value sets the starting point.
+                    size_t leftStart{static_cast<size_t>(std::floor(feedback_ * loopers_[LEFT].GetBufferSamples()))};
+                    size_t rightStart{static_cast<size_t>(std::floor(feedback_ * loopers_[RIGHT].GetBufferSamples()))};
+
+                    // Pick up where the loop start point is.
+                    // TODO: handle both LEFT and RIGHT loopers.
+                    if (std::abs(static_cast<int>(leftStart - loopers_[LEFT].GetLoopStart())) < static_cast<int>(loopers_[LEFT].GetBufferSamples() * 0.1f) && !feedbackPickup_)
+                    {
+                        feedbackPickup_ = true;
+                    }
+                    if (feedbackPickup_)
+                    {
+                        loopers_[LEFT].SetLoopStart(leftStart);
+                        loopers_[RIGHT].SetLoopStart(rightStart);
+                    }
+                    if (loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() > loopers_[LEFT].GetBufferSamples())
+                    {
+                        loopers_[LEFT].SetLoopEnd(loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() - loopers_[LEFT].GetBufferSamples());
+                        loopers_[RIGHT].SetLoopEnd(loopers_[RIGHT].GetLoopStart() + loopers_[RIGHT].GetLoopLength() - loopers_[RIGHT].GetBufferSamples());
+                    }
+                    else
+                    {
+                        loopers_[LEFT].SetLoopEnd(loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() - 1);
+                        loopers_[RIGHT].SetLoopEnd(loopers_[RIGHT].GetLoopStart() + loopers_[RIGHT].GetLoopLength() - 1);
+                    }
+                    // Note that in this mode no writing is done while frozen.
+                }
 
                 float leftWritePos{static_cast<float>(loopers_[LEFT].GetWritePos())};
                 float rightWritePos{static_cast<float>(loopers_[RIGHT].GetWritePos())};
 
-                if (false /*IsMode2Mode()*/)
-                {
-                    // In this mode the speed depends on the loop length.
-                    leftSpeed = fmap(1.f - (loopers_[LEFT].GetLoopLength() / (float)loopers_[LEFT].GetBufferSamples()), 1.f, kMaxSpeed);
-                    rightSpeed = fmap(1.f - (loopers_[RIGHT].GetLoopLength() / (float)loopers_[RIGHT].GetBufferSamples()), 1.f, kMaxSpeed);
-
-                    float leftOut2{loopers_[LEFT].Read(loopers_[LEFT].GetWritePos())};
-                    float rightOut2{loopers_[RIGHT].Read(loopers_[RIGHT].GetWritePos())};
-                    // In this mode there always is writing, but when frozen writes the
-                    // looped signal.
-                    float leftWriteSig{IsFrozen() ? leftOut : SoftLimit(left + leftOut2 * feedback_)};
-                    float rightWriteSig{IsFrozen() ? rightOut : SoftLimit(right + rightOut2 * feedback_)};
-                    loopers_[LEFT].Write(leftWriteSig);
-                    loopers_[RIGHT].Write(rightWriteSig);
-                    leftWritePos = loopers_[LEFT].IsGoingForward() ? leftWritePos + leftSpeed : leftWritePos - leftSpeed;
-                    rightWritePos = loopers_[RIGHT].IsGoingForward() ? rightWritePos + rightSpeed : rightWritePos - rightSpeed;
-                    loopers_[LEFT].HandlePosBoundaries(leftWritePos, false);
-                    loopers_[RIGHT].HandlePosBoundaries(rightWritePos, false);
-                    loopers_[LEFT].SetWritePos(leftWritePos);
-                    loopers_[RIGHT].SetWritePos(rightWritePos);
-                }
-                else
-                {
-                    if (IsFrozen())
-                    {
-                        // When frozen, the feedback value sets the starting point.
-                        size_t leftStart{static_cast<size_t>(std::floor(feedback_ * loopers_[LEFT].GetBufferSamples()))};
-                        size_t rightStart{static_cast<size_t>(std::floor(feedback_ * loopers_[RIGHT].GetBufferSamples()))};
-
-                        // Pick up where the loop start point is.
-                        // TODO: handle both LEFT and RIGHT loopers.
-                        if (std::abs(static_cast<int>(leftStart - loopers_[LEFT].GetLoopStart())) < static_cast<int>(loopers_[LEFT].GetBufferSamples() * 0.1f) && !feedbackPickup_)
-                        {
-                            feedbackPickup_ = true;
-                        }
-                        if (feedbackPickup_)
-                        {
-                            loopers_[LEFT].SetLoopStart(leftStart);
-                            loopers_[RIGHT].SetLoopStart(rightStart);
-                        }
-                        if (loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() > loopers_[LEFT].GetBufferSamples())
-                        {
-                            loopers_[LEFT].SetLoopEnd(loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() - loopers_[LEFT].GetBufferSamples());
-                            loopers_[RIGHT].SetLoopEnd(loopers_[RIGHT].GetLoopStart() + loopers_[RIGHT].GetLoopLength() - loopers_[RIGHT].GetBufferSamples());
-                        }
-                        else
-                        {
-                            loopers_[LEFT].SetLoopEnd(loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() - 1);
-                            loopers_[RIGHT].SetLoopEnd(loopers_[RIGHT].GetLoopStart() + loopers_[RIGHT].GetLoopLength() - 1);
-                        }
-                        // Note that in this mode no writing is done while frozen.
-                    }
-                    else
-                    {
-                        loopers_[LEFT].Write(SoftLimit(left + leftOut * feedback_));
-                        loopers_[RIGHT].Write(SoftLimit(right + rightOut * feedback_));
-                    }
-
-                    // Always write forward at original speed.
-                    leftWritePos += 1;
-                    rightWritePos += 1;
-                    loopers_[LEFT].SetWritePos(leftWritePos);
-                    loopers_[RIGHT].SetWritePos(rightWritePos);
-                }
+                // Always write forward at original speed.
+                leftWritePos += 1;
+                rightWritePos += 1;
+                loopers_[LEFT].SetWritePos(leftWritePos);
+                loopers_[RIGHT].SetWritePos(rightWritePos);
 
                 float leftReadPos{loopers_[LEFT].GetReadPos()};
                 float rightReadPos{loopers_[RIGHT].GetReadPos()};
+
+                float leftSpeed{loopers_[LEFT].GetSpeed()};
+                float rightSpeed{loopers_[RIGHT].GetSpeed()};
+
                 float leftCoeff{leftSpeed};
                 float rightCoeff{rightSpeed};
                 if (loopers_[LEFT].IsRandomMovement())
@@ -276,10 +258,6 @@ namespace wreath
                 loopers_[RIGHT].HandlePosBoundaries(rightReadPos, true);
                 loopers_[LEFT].SetReadPos(leftReadPos);
                 loopers_[RIGHT].SetReadPos(rightReadPos);
-
-                cf_.SetPos(dryWet_);
-                leftOut = cf_.Process(left, leftOut);
-                rightOut = cf_.Process(right, rightOut);
             }
         }
 

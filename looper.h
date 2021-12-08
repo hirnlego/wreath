@@ -88,11 +88,12 @@ namespace wreath
         size_t loopStart_{}; // Loop start position
         size_t loopEnd_{}; // Loop end position
         size_t loopLength_{}; // Length of the loop in samples
-        size_t fadeIndex_{}; // Counter used for fades
+        float fadeIndex_{}; // Counter used for fades
         size_t sampleRate_{}; // The sample rate
         bool forward_{}; // True if the direction is forward
         bool mustFadeIn_{}; // True if the read value must be fade in
         bool mustFadeOut_{}; // True if the read value must be fade out
+        bool mustFade_{}; // True if the read value must be fade out
 
         Movement movement_{}; // The current movement type of the looper
         CrossFade cf_; // Crossfade used for fading in/out of the read value

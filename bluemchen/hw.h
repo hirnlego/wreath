@@ -1,12 +1,18 @@
 #pragma once
 
 #include "kxmx_bluemchen.h"
-#include <chrono>
 
 namespace wreath
 {
     using namespace kxmx;
     using namespace daisy;
+
+    // The minimum difference in parameter value to be registered.
+    constexpr float kMinValueDelta{0.01f};
+    // The trigger threshold value.
+    constexpr float kTriggerThres{0.5f};
+    // Maximum BPM supported.
+    constexpr int kMaxBpm{300};
 
     Bluemchen hw;
 
@@ -26,10 +32,11 @@ namespace wreath
     bool triggered{};
     bool isCv1Connected{};
     bool isCv2Connected{};
-    int64_t cv1Clock{};
 
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    size_t ms{};
+    size_t begin{};
+    size_t end{};
+    size_t cv1Bpm{};
 
     void InitHw(float knobSlewSeconds, float cvSlewSeconds)
     {
@@ -51,6 +58,26 @@ namespace wreath
         hw.controls[hw.CTRL_4].SetCoeff(1.0f / (cvSlewSeconds * hw.AudioSampleRate() * 0.5f));
     }
 
+    void UpdateClock()
+    {
+        if (ms > 10000)
+        {
+            ms = 0;
+        }
+        ms++;
+    }
+
+    int CalculateBpm()
+    {
+        end = ms;
+        // Handle the ms reset.
+        if (end < begin) {
+            end += 10000;
+        }
+
+        return std::round((1000.f / (end - begin)) * 60);
+    }
+
     void ProcessControls()
     {
         hw.ProcessAllControls();
@@ -67,27 +94,28 @@ namespace wreath
         knob1Value = knob1.Value();
         knob2Value = knob2.Value();
 
-        isCv1Connected = std::abs(cv1Value - cv1.Value()) > 0.01f;
+        isCv1Connected = std::abs(cv1Value - cv1.Value()) > kMinValueDelta;
         if (isCv1Connected) {
             cv1Trigger = false;
             raising = cv1.Value() < cv1Value;
-            if (!triggered && raising && cv1.Value() >= 0.3f)
+            if (!triggered && raising && cv1.Value() >= kTriggerThres)
             {
-                end = std::chrono::steady_clock::now();
-                double seconds = std::ceil(std::chrono::duration_cast<std::chrono::minutes>(end - begin).count() / 1000000.0) * 60.0;
-                cv1Clock = static_cast<int64_t>(seconds);
-                begin = std::chrono::steady_clock::now();
+                int bpm = CalculateBpm();
+                if (bpm < kMaxBpm) {
+                    cv1Bpm = bpm;
+                }
                 triggered = true;
                 cv1Trigger = true;
+                begin = ms;
             }
-            else if (!raising || cv1.Value() < 0.3f)
+            else if (!raising || cv1.Value() < kTriggerThres)
             {
                 triggered = false;
             }
         }
         cv1Value = cv1.Value();
 
-        isCv2Connected = std::abs(cv2Value - cv2.Value()) > 0.01f;
+        isCv2Connected = std::abs(cv2Value - cv2.Value()) > kMinValueDelta;
         cv2Value = cv2.Value();
     }
 }

@@ -38,6 +38,7 @@ void LoadConfig(uint32_t slot)
 
 void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, size_t size)
 {
+    UpdateClock();
     UpdateControls();
     GenerateUiEvents();
 

@@ -358,6 +358,9 @@ void Looper::SetReadPos(float pos)
         // - the write position is about to cross us when we're going forward slower;
         // - we're about to cross the write position when going backwards.
         // IDEA: maybe we must find the point when the read and write position will match and start the fade out samples/2 before?
+        // https://www.math-only-math.com/two-objects-move-in-same-direction.html
+        
+        
         else if ((forward_ && i_idx - (samples/2) == writePos_) || (!forward_ && i_idx + (samples/2) == writePos_))
         {
             fadePos_ = pos;

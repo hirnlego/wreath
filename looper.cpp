@@ -21,17 +21,19 @@ void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
     movement_ = Movement::FORWARD;
     forward_ = Movement::FORWARD == movement_;
 
-    cf_.Init(CROSSFADE_EXP);
+    cf_.Init(CROSSFADE_CPOW);
 }
 
 /**
- * @brief Sets the speed, clamping its value just in case.
+ * @brief Sets the speed multiplier, clamping its value just in case.
  *
- * @param speed
+ * @param multiplier
  */
-void Looper::SetSpeed(float speed)
+void Looper::SetSpeedMult(float multiplier)
 {
-    speed_ = fclamp(speed, 0.f, kMaxSpeed);
+    speedMult_ = fclamp(multiplier, 0.f, kMaxSpeedMult);
+    readSpeed_ = sampleRate_ * speedMult_; // samples/s.
+    writeSpeed_ = sampleRate_; // samples/s.
 }
 
 /**
@@ -70,7 +72,8 @@ void Looper::ResetBuffer()
     loopStart_ = 0;
     loopEnd_ = 0;
     loopLength_ = 0;
-    speed_ = 1.f;
+    speedMult_ = 1.f;
+    readSpeed_ = writeSpeed_ = sampleRate_;
     fadeIndex_ = 0;
 }
 
@@ -142,23 +145,34 @@ void Looper::ResetLoopLength()
     SetLoopLength(bufferSamples_);
 }
 
-/*
-float *GetNextVals(float pos)
+/**
+ * @brief Returns the number of samples to fade given the provided read
+ *        position in the buffer.
+ *
+ * @param pos
+ */
+void Looper::CalculateFadeSamples(size_t pos)
 {
-    float p{pos};
-    float *vals;
-    float sum{};
-    for (int i = 1; i < GetFadeSamples(); i++)
+    if (loopLength_ < kFadeSamples)
     {
-        p += i;
-        HandlePosBoundaries(p, true);
-        sum += buffer_[static_cast<uint32_t>(p)];
-        vals[i] = sum / GetFadeSamples();
+        fadeSamples_ = 0;
     }
 
-    return vals;
+    else if (forward_ && pos + kFadeSamples > loopEnd_)
+    {
+        fadeSamples_ = loopEnd_ - static_cast<int>(pos);
+    }
+
+    else if (forward_ && pos - kFadeSamples < loopStart_)
+    {
+        fadeSamples_ = static_cast<int>(pos);
+    }
+
+    else
+    {
+        fadeSamples_ = kFadeSamples;
+    }
 }
-*/
 
 /**
  * @brief Reads from a specified point in the delay line using linear
@@ -173,48 +187,35 @@ float Looper::Read(float pos)
     // 1) get the value at position.
 
     // Integer position.
-    uint32_t i_idx{static_cast<uint32_t>(pos)};
+    size_t intPos{static_cast<size_t>(std::round(pos))};
     // Value at the integer position.
-    float val{buffer_[i_idx]};
+    float val{buffer_[intPos]};
     // Position decimal part.
-    float frac{pos - i_idx};
+    float frac{pos - intPos};
     // If the position is not an integer number we need to interpolate the value.
     if (frac != 0.f)
     {
         // Value at the position after or before, depending on the direction
         // we're going.
-        float val2{buffer_[static_cast<uint32_t>(fclamp(i_idx + (forward_ ? 1 : -1), 0, bufferSamples_ - 1))]};
+        float val2{buffer_[static_cast<size_t>(fclamp(intPos + (forward_ ? 1 : -1), 0, bufferSamples_ - 1))]};
         // Interpolated value.
         val = val + (val2 - val) * frac;
     }
 
     // 2) fade the value if needed.
-    if (mustFadeIn_ || mustFadeOut_)
+    if (mustFade_ != -1)
     {
         // The number of samples we need to fade.
-        size_t samples{GetFadeSamples()};
-        float from{mustFadeIn_ ? 0.f : 1.f};
-        float to{mustFadeIn_ ? 1.f : 0.f};
-        cf_.SetPos(fadeIndex_ * (1.f / samples));
-        val *= cf_.Process(from, to);
+        cf_.SetPos(fadeIndex_ * (1.f / fadeSamples_));
+        float fadeValues[2][2]{{ 0.f, 1.f }, { 1.f, 0.f }};
+        val *= cf_.Process(fadeValues[mustFade_][0], fadeValues[mustFade_][1]);
         fadeIndex_ += 1;
-        if (fadeIndex_ > samples)
+        // End and reset the fade when done.
+        if (fadeIndex_ > fadeSamples_)
         {
-            mustFadeIn_ = mustFadeOut_ = false;
-        }
-    }
-
-    // 2) fade the value if needed.
-    if (mustFade_)
-    {
-        // The number of samples we need to fade.
-        size_t samples{GetFadeSamples()};
-        //val *= (1.f - sin(PI_F * fadeIndex_ * (1.f / samples)));
-        val *= (1 - cos(2 * PI_F * (fadeIndex_ / samples)));
-        fadeIndex_ += 1;
-        if (fadeIndex_ > samples)
-        {
-            mustFade_ = false;
+            fadeIndex_ = 0;
+            cf_.SetPos(0.f);
+            mustFade_ = Fade::NONE;
         }
     }
 
@@ -320,6 +321,105 @@ void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
     }
 }
 
+void Looper::CalculateHeadsDistance()
+{
+    // forward, rp > wp, ws > rs = rp - wp
+    // backwards, rp > wp, ws > rs = rp - wp
+    // backwards, rp > wp, rs > ws = rp - wp
+    if (readPos_ > writePos_ && ((forward_ && writeSpeed_ > readSpeed_) || (!forward_ && readPos_ > writePos_)))
+    {
+        headsDistance_ = readPos_ - writePos_;
+    }
+
+    // forward, rp > wp, rs > ws = b - rp + wp
+    else if (forward_ && readPos_ > writePos_)
+    {
+        headsDistance_ = bufferSamples_ - readPos_ + writePos_;
+    }
+
+    // forward, wp > rp, ws > rs = b - wp + rp
+    // backwards, wp > rp, ws > rs = b - wp + rp
+    // backwards, wp > rp, rs > ws = b - wp + rp
+    else if ((forward_ && writePos_ > readPos_ && writeSpeed_ > readSpeed_) || (!forward_ && writePos_ > readPos_))
+    {
+        headsDistance_ = bufferSamples_ - writePos_ + readPos_;
+    }
+
+    // forward, wp > rp, rs > ws = wp - rp
+    else if (forward_ && readSpeed_ > writeSpeed_)
+    {
+        headsDistance_ = writePos_ - readPos_;
+    }
+
+    else
+    {
+        headsDistance_ = 0.f;
+    }
+}
+
+// Handle read fade.
+void Looper::HandleFade()
+{
+    size_t intPos{static_cast<size_t>(std::round(readPos_))};
+    size_t crossPoint{intPos};
+
+    // When the two heads are going at different speeds, we must calculate
+    // the point in which the two will cross each other so we can set up fading.
+    if (readSpeed_ != writeSpeed_ && headsDistance_ <= fadeSamples_)
+    {
+        float deltaTime{};
+        float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
+        deltaTime = headsDistance_ / relSpeed;
+        crossPoint = writePos_ + (writeSpeed_ * deltaTime);
+        // Wrap the meeting point if it's outside of the buffer.
+        if (crossPoint >= bufferSamples_)
+        {
+            size_t r = crossPoint % loopLength_;
+            if (loopStart_ + r > bufferSamples_)
+            {
+                crossPoint = r - (bufferSamples_ - loopStart_);
+            }
+            else
+            {
+                crossPoint = loopStart_ + r;
+            }
+        }
+        temp = crossPoint;
+    }
+
+    // Set up a fade in if:
+    // - we're going forward and are right at the beginning of the loop;
+    // - we're going backwards and are right at the end of the loop;
+    // - we're going at a different speed and the two heads have just crossed the meeting point.
+    if ((forward_ && intPos == loopStart_) || (!forward_ && intPos == loopEnd_) || (readSpeed_ != writeSpeed_ && headsDistance_ < 1.f))
+    {
+        fadePos_ = crossPoint;
+        mustFade_ = Fade::IN;
+    }
+
+    // Set up a fade out if:
+    // - we're going forward and are almost at the end of the loop;
+    // - we're going backwards and are almost at the beginning of the loop;
+    // - we're going at a different speed and the two heads are about to cross the meeting point.
+    else if ((forward_ && intPos == loopEnd_ - fadeSamples_) || (!forward_ && intPos == loopStart_ + fadeSamples_) || (readSpeed_ != writeSpeed_ && headsDistance_ < 1.f))
+    {
+        fadePos_ = crossPoint;
+        mustFade_ = Fade::OUT;
+    }
+
+    // Set up a fade out+in if:
+    // - the write and read position are about to cross.
+    // IDEA: maybe we must find the point when the read and write position will match and start the fade out samples/2 before?
+    /*
+    relativeSpeed = writeSpeed - readSpeed (forward)
+    relativeSpeed = writeSpeed + readSpeed (backwards)
+    time = (readPos - writePos) / relativeSpeed (forward)
+    time = (writePos - readPos) / relativeSpeed (backwards)
+    distance = readSpeed * time
+    crossPoint = readPos + distance
+    */
+}
+
 /**
  * @brief Sets the read position. Also, sets a fade in/out if needed.
  *
@@ -327,51 +427,21 @@ void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
  */
 void Looper::SetReadPos(float pos)
 {
-    // Handle fade, if needed.
-    int samples{GetFadeSamples()};
-    if (samples > 0 && !mustFadeIn_ && !mustFadeOut_ && !mustFade_) {
-        uint32_t i_idx{static_cast<uint32_t>(std::round(pos))};
-
-        // Set up a fade if:
-        // - we're going forward and are at the beginning of the loop;
-        // - we're going backwards and are at the end of the loop;
-        if ((forward_ && i_idx == loopStart_) || (!forward_ && i_idx == loopEnd_))
-        {
-            fadePos_ = pos;
-            fadeIndex_ = 0;
-            cf_.SetPos(0);
-            mustFadeIn_ = true;
-        }
-
-        // Set up a fade out if:
-        // - we're going forward and are at the end of the loop;
-        // - we're going backwards and are at the beginning of the loop;
-        else if ((forward_ && i_idx + samples == loopEnd_) || (!forward_ && i_idx - samples == loopStart_))
-        {
-            fadePos_ = pos;
-            fadeIndex_ = 0;
-            cf_.SetPos(0);
-            mustFadeOut_ = true;
-        }
-
-        // Set up a fade out+in if:
-        // - the write position is about to cross us when we're going forward slower;
-        // - we're about to cross the write position when going backwards.
-        // IDEA: maybe we must find the point when the read and write position will match and start the fade out samples/2 before?
-        // https://www.math-only-math.com/two-objects-move-in-same-direction.html
-        
-        
-        else if ((forward_ && i_idx - (samples/2) == writePos_) || (!forward_ && i_idx + (samples/2) == writePos_))
-        {
-            fadePos_ = pos;
-            fadeIndex_ = 0;
-            cf_.SetPos(0);
-            mustFade_ = true;
-        }
-    }
-
     readPos_ = pos;
     readPosSeconds_ = readPos_ / sampleRate_;
+    if (readSpeed_ != writeSpeed_)
+    {
+        CalculateHeadsDistance();
+        temp = headsDistance_;
+    }
+    if (mustFade_ == Fade::NONE)
+    {
+        CalculateFadeSamples(static_cast<size_t>(std::round(pos)));
+        if (fadeSamples_ > 0)
+        {
+            HandleFade();
+        }
+    }
 }
 
 /**

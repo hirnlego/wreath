@@ -75,6 +75,14 @@ namespace wreath
         }
     }
 
+    std::string FormatFloat(float value)
+    {
+        float frac = value - (int)value;
+        float inte = value - frac;
+
+        return std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac) * 100);
+    }
+
     void UpdateOled()
     {
         int width = hw.display.Width();
@@ -82,6 +90,7 @@ namespace wreath
         hw.display.Fill(false);
 
         std::string str = pageNames[currentPage];
+        //std::string str = FormatFloat(looper.temp());
         char *cstr = &str[0];
         hw.display.SetCursor(0, 0);
         hw.display.WriteString(cstr, Font_6x8, !pageSelected);
@@ -192,7 +201,10 @@ namespace wreath
                 hw.display.DrawRect(cursor, 21 + y, cursor, 21 + y, true, true);
                 // Draw the write position.
                 cursor = std::floor(looper.GetWritePos(i) * step);
-                hw.display.DrawRect(cursor, 23 + y, cursor, 24 + y, true, true);
+                hw.display.DrawRect(cursor, 23 + y, cursor, 23 + y, true, true);
+
+                cursor = std::floor(looper.temp() * step);
+                hw.display.DrawRect(cursor, 24 + y, cursor, 24 + y, true, true);
             }
 
             /*
@@ -215,8 +227,8 @@ namespace wreath
             if (currentPage == 1)
             {
                 // Page 1: Speed.
-                float frac = looper.GetSpeed(currentLooper) - (int)looper.GetSpeed(currentLooper);
-                float inte = looper.GetSpeed(currentLooper) - frac;
+                float frac = looper.GetSpeedMult(currentLooper) - (int)looper.GetSpeedMult(currentLooper);
+                float inte = looper.GetSpeedMult(currentLooper) - frac;
                 str = "x" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
             }
             else if (currentPage == 2)
@@ -331,10 +343,10 @@ namespace wreath
                     {
                         // Page 1: Speed.
                         float steps{ e.asEncoderTurned.increments * 0.05f};
-                        looper.IncrementSpeed(currentLooper, steps);
+                        looper.IncrementSpeedMult(currentLooper, steps);
                         if (!looper.IsDualMode())
                         {
-                            looper.IncrementSpeed(1, steps);
+                            looper.IncrementSpeedMult(1, steps);
                         }
                     }
                     else if (currentPage == 2)

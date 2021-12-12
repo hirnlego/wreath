@@ -11,7 +11,8 @@ namespace wreath
     using namespace daisysp;
 
     constexpr size_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    //constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    constexpr int kBufferSeconds{2}; // 2:30 minutes max
     const size_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -198,11 +199,11 @@ namespace wreath
                 float leftReadPos{loopers_[LEFT].GetReadPos()};
                 float rightReadPos{loopers_[RIGHT].GetReadPos()};
 
-                float leftSpeed{loopers_[LEFT].GetSpeed()};
-                float rightSpeed{loopers_[RIGHT].GetSpeed()};
+                float leftSpeedMult{loopers_[LEFT].GetSpeedMult()};
+                float rightSpeedMult{loopers_[RIGHT].GetSpeedMult()};
 
-                float leftCoeff{leftSpeed};
-                float rightCoeff{rightSpeed};
+                float leftCoeff{leftSpeedMult};
+                float rightCoeff{rightSpeedMult};
                 if (loopers_[LEFT].IsRandomMovement())
                 {
                     // In this case we just choose randomly the next position.
@@ -211,7 +212,7 @@ namespace wreath
                         loopers_[LEFT].SetNextReadPos(loopers_[LEFT].GetRandomPosition());
                         loopers_[LEFT].SetForward(loopers_[LEFT].GetNextReadPos() > leftReadPos);
                     }
-                    leftCoeff = 1.0f / ((2.f - leftSpeed) * sampleRate_);
+                    leftCoeff = 1.0f / ((2.f - leftSpeedMult) * sampleRate_);
                 }
                 else
                 {
@@ -224,7 +225,7 @@ namespace wreath
                         }
                     }
                     // Otherwise, move the reading position normally.
-                    loopers_[LEFT].SetNextReadPos(loopers_[LEFT].IsGoingForward() ? loopers_[LEFT].GetReadPos() + leftSpeed : loopers_[LEFT].GetReadPos() - leftSpeed);
+                    loopers_[LEFT].SetNextReadPos(loopers_[LEFT].IsGoingForward() ? loopers_[LEFT].GetReadPos() + leftSpeedMult : loopers_[LEFT].GetReadPos() - leftSpeedMult);
                 }
 
                 if (loopers_[RIGHT].IsRandomMovement())
@@ -235,7 +236,7 @@ namespace wreath
                         loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].GetRandomPosition());
                         loopers_[RIGHT].SetForward(loopers_[RIGHT].GetNextReadPos() > rightReadPos);
                     }
-                    rightCoeff = 1.0f / ((2.f - rightSpeed) * sampleRate_);
+                    rightCoeff = 1.0f / ((2.f - rightSpeedMult) * sampleRate_);
                 }
                 else
                 {
@@ -248,7 +249,7 @@ namespace wreath
                         }
                     }
                     // Otherwise, move the reading position normally.
-                    loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].IsGoingForward() ? loopers_[RIGHT].GetReadPos() + rightSpeed : loopers_[RIGHT].GetReadPos() - rightSpeed);
+                    loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].IsGoingForward() ? loopers_[RIGHT].GetReadPos() + rightSpeedMult : loopers_[RIGHT].GetReadPos() - rightSpeedMult);
                 }
 
                 // Move smoothly to the next position.
@@ -269,8 +270,8 @@ namespace wreath
             {
                 loopers_[LEFT].SetMovement(Looper::Movement::FORWARD);
                 loopers_[RIGHT].SetMovement(Looper::Movement::FORWARD);
-                loopers_[LEFT].SetSpeed(1.0f);
-                loopers_[RIGHT].SetSpeed(1.0f);
+                loopers_[LEFT].SetSpeedMult(1.0f);
+                loopers_[RIGHT].SetSpeedMult(1.0f);
                 loopers_[LEFT].ResetLoopLength();
                 loopers_[RIGHT].ResetLoopLength();
                 loopers_[LEFT].Restart();
@@ -290,7 +291,7 @@ namespace wreath
         inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
         inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
         inline float GetNextReadPos(int channel) { return loopers_[channel].GetNextReadPos(); }
-        inline float GetSpeed(int channel) { return loopers_[channel].GetSpeed(); }
+        inline float GetSpeedMult(int channel) { return loopers_[channel].GetSpeedMult(); }
         inline Looper::Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
         inline bool IsGoingForward(int channel) { return loopers_[channel].IsGoingForward(); }
 
@@ -313,12 +314,14 @@ namespace wreath
             loopers_[LEFT].SetNextReadPos(value);
             loopers_[RIGHT].SetNextReadPos(value);
         }
-        inline void IncrementSpeed(int channel, float value) { loopers_[channel].SetSpeed(loopers_[channel].GetSpeed() + value); }
+        inline void IncrementSpeedMult(int channel, float value) { loopers_[channel].SetSpeedMult(loopers_[channel].GetSpeedMult() + value); }
         inline void IncrementLoopLength(int channel, size_t samples) { loopers_[channel].SetLoopLength(loopers_[channel].GetLoopLength() + samples); }
 
         bool mustResetBuffer{};
         bool mustStopBuffering{};
         bool mustRestart{};
+
+        inline float temp() { return loopers_[LEFT].temp; }
 
     private:
         Looper loopers_[2];

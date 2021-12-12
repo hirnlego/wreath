@@ -8,9 +8,9 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int kMinSamples{48};
-    constexpr int kFadeSamples{480}; // Note: 480 samples is 10ms @ 48KHz.
+    constexpr int kFadeSamples{240}; // Note: 240 samples is 5ms @ 48KHz.
     constexpr float kMinSpeed{-4.f};
-    constexpr float kMaxSpeed{4.f};
+    constexpr float kMaxSpeedMult{4.f};
 
     class Looper
     {
@@ -29,10 +29,18 @@ namespace wreath
             LAST_MOVEMENT,
         };
 
+        enum Fade
+        {
+            NONE = -1,
+            IN,
+            OUT,
+        };
+
         void Init(size_t sampleRate, float *mem, int maxBufferSeconds);
         void ResetBuffer();
         void StopBuffering();
-        void SetSpeed(float speed);
+        void SetSpeedMult(float speed);
+        // looplength_ = loopEnd_ + (bufferSamples_ - loopStart_) + 1
         void SetLoopLength(size_t length);
         void ResetLoopLength();
         void SetMovement(Movement movement);
@@ -54,7 +62,7 @@ namespace wreath
         inline float GetReadPos() { return readPos_; }
         inline float GetWritePos() { return writePos_; }
         inline float GetNextReadPos() { return nextReadPos_; }
-        inline float GetSpeed() { return speed_; }
+        inline float GetSpeedMult() { return speedMult_; }
         inline Movement GetMovement() { return movement_; }
         inline bool IsForwardMovement() { return Movement::FORWARD == movement_; }
         inline bool IsBackwardsMovement() { return Movement::BACKWARDS == movement_; }
@@ -68,11 +76,17 @@ namespace wreath
         inline void SetLoopEnd(size_t pos) { loopEnd_ = pos; };
         inline void SetForward(bool forward) { forward_ = forward; };
         inline void ToggleDirection() { forward_ = !forward_; };
+
+        float temp{};
+
     private:
         void SetReadPosAtStart();
         void SetReadPosAtEnd();
-
-        inline int GetFadeSamples() { return (loopLength_ > kFadeSamples * 2) ? kFadeSamples : 0; }
+        void CalculateDeltaTime();
+        void WrapPos(size_t &pos);
+        void CalculateHeadsDistance();
+        void HandleFade();
+        void CalculateFadeSamples(size_t pos);
 
         float *buffer_{}; // The buffer
         float bufferSeconds_{}; // Written buffer length in seconds
@@ -81,19 +95,21 @@ namespace wreath
         float nextReadPos_{}; // Next read position
         float fadePos_{}; // Fade position
         float loopLengthSeconds_{}; // Length of the loop in seconds
-        float speed_{}; // Speed multiplier
+        float speedMult_{}; // Speed multiplier
+        float readSpeed_{}; // Actual read speed
+        float writeSpeed_{}; // Actual write speed
+        float headsDistance_{};
         size_t initBufferSamples_{}; // The whole buffer length in samples
         size_t bufferSamples_{}; // The written buffer length in samples
         size_t writePos_{}; // The write position
         size_t loopStart_{}; // Loop start position
         size_t loopEnd_{}; // Loop end position
         size_t loopLength_{}; // Length of the loop in samples
-        float fadeIndex_{}; // Counter used for fades
+        int fadeIndex_{}; // Counter used for fades
+        int fadeSamples_{};
         size_t sampleRate_{}; // The sample rate
         bool forward_{}; // True if the direction is forward
-        bool mustFadeIn_{}; // True if the read value must be fade in
-        bool mustFadeOut_{}; // True if the read value must be fade out
-        bool mustFade_{}; // True if the read value must be fade out
+        Fade mustFade_{Fade::NONE};
 
         Movement movement_{}; // The current movement type of the looper
         CrossFade cf_; // Crossfade used for fading in/out of the read value

@@ -11,7 +11,6 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int kMaxPages{5};
-
     const char *pageNames[] = {
         "Wreath",
         "Speed",
@@ -19,21 +18,6 @@ namespace wreath
         "Movement",
         "Mode",
     };
-    int currentPage{0};
-    bool pageSelected{false};
-
-    enum class MenuClickOp
-    {
-        STOP,
-        MENU,
-        FREEZE,
-        RESET,
-        DUAL,
-    };
-
-    MenuClickOp clickOp{MenuClickOp::STOP};
-    bool buttonPressed{false};
-
     const char *movementNames[] = {
         "Forward",
         "Backwards",
@@ -41,7 +25,6 @@ namespace wreath
         "Drunk",
         "Random",
     };
-
     const char *modeNames[] = {
         "Mimeo",
         "Cross",
@@ -49,48 +32,45 @@ namespace wreath
         "Dual",
     };
 
-    int currentLooper{0};
-
-    void UpdateControls()
+    enum class MenuClickOp
     {
-        if (!looper.IsStartingUp())
+        MENU,
+        FREEZE,
+        RESET,
+        DUAL,
+    };
+
+    int currentPage{0};
+    bool pageSelected{false};
+    MenuClickOp clickOp{MenuClickOp::MENU};
+    bool buttonPressed{false};
+    int currentLooper{0};
+    UiEventQueue eventQueue;
+
+    static std::string FloatToString(float value, int precision)
+    {
+        float frac{value - (int)value};
+        float inte{value - frac};
+        std::string fracStr{std::to_string(static_cast<int>(frac * pow10f(precision)))};
+        if (fracStr.size() < precision)
         {
-            ProcessControls();
-
-            looper.SetDryWet(knob1Value);
-            looper.SetFeedback(knob2Value);
-
-            // Handle CV1 as trigger input for resetting the read position to
-            // the loop start point.
-            if (isCv1Connected)
+            for (int i = 0; i < precision - fracStr.size(); i++)
             {
-                looper.mustRestart = cv1Trigger;
-            }
-
-            // Handle CV2 as loop start point when frozen.
-            if (looper.IsFrozen() && isCv2Connected)
-            {
-                looper.SetLoopStart(fmap(cv2.Value(), 0, looper.GetBufferSamples(0)));
+                fracStr = "0" + fracStr;
             }
         }
+
+        return std::to_string(static_cast<int>(inte)) + "." + fracStr;
     }
 
-    std::string FormatFloat(float value)
+    inline static void UpdateOled()
     {
-        float frac = value - (int)value;
-        float inte = value - frac;
-
-        return std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac) * 100);
-    }
-
-    void UpdateOled()
-    {
-        int width = hw.display.Width();
+        int width{hw.display.Width()};
 
         hw.display.Fill(false);
 
         std::string str = pageNames[currentPage];
-        //std::string str = FormatFloat(looper.temp());
+        //std::string str = FloatToString(looper.temp(), 2);
         char *cstr = &str[0];
         hw.display.SetCursor(0, 0);
         hw.display.WriteString(cstr, Font_6x8, !pageSelected);
@@ -113,10 +93,7 @@ namespace wreath
             hw.display.SetCursor(0, 16);
             hw.display.WriteString(cstr, Font_6x8, true);
             // Write seconds buffered.
-            float seconds = looper.GetBufferSeconds(currentLooper);
-            float frac = seconds - (int)seconds;
-            float inte = seconds - frac;
-            str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "/" + std::to_string(kBufferSeconds) + "s";
+            str = FloatToString(looper.GetBufferSeconds(currentLooper), 2) + "/" + std::to_string(kBufferSeconds) + "s";
             hw.display.SetCursor(0, 24);
             hw.display.WriteString(cstr, Font_6x8, true);
         }
@@ -128,26 +105,21 @@ namespace wreath
             {
                 float loopLength = looper.GetLoopLengthSeconds(currentLooper);
                 float position = looper.GetPositionSeconds(currentLooper);
-
-                float frac = position - (int)position;
-                float inte = position - frac;
                 // Write read position in seconds.
                 if (loopLength > 1.f)
                 {
-                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
+                    str = FloatToString(position, 2);
                 }
                 else
                 {
-                    position *= 1000;
+                    position *= looper.GetPositionSeconds(currentLooper);
                     str = std::to_string(static_cast<int>(position));
                 }
 
                 // Write the loop length in seconds.
-                frac = loopLength - (int)loopLength;
-                inte = loopLength - frac;
                 if (loopLength > 1.f)
                 {
-                    str += "/" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "s";
+                    str += "/" + FloatToString(loopLength, 2) + "s";
                 }
                 else
                 {
@@ -227,9 +199,7 @@ namespace wreath
             if (currentPage == 1)
             {
                 // Page 1: Speed.
-                float frac = looper.GetSpeedMult(currentLooper) - (int)looper.GetSpeedMult(currentLooper);
-                float inte = looper.GetSpeedMult(currentLooper) - frac;
-                str = "x" + std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10));
+                str = "x" + FloatToString(looper.GetSpeedMult(currentLooper), 2);
             }
             else if (currentPage == 2)
             {
@@ -237,9 +207,7 @@ namespace wreath
                 float loopLength = looper.GetLoopLengthSeconds(currentLooper);
                 if (loopLength > 1.f)
                 {
-                    float frac = loopLength - (int)loopLength;
-                    float inte = loopLength - frac;
-                    str = std::to_string(static_cast<int>(inte)) + "." + std::to_string(static_cast<int>(frac * 10)) + "s";
+                    str = FloatToString(loopLength, 2) + "s";
                 }
                 else
                 {
@@ -273,9 +241,7 @@ namespace wreath
         hw.display.Update();
     }
 
-    UiEventQueue eventQueue;
-
-    void ProcessEvent(const UiEventQueue::Event& e)
+    inline static void ProcessEvent(const UiEventQueue::Event& e)
     {
         switch(e.type)
         {
@@ -284,11 +250,10 @@ namespace wreath
                 break;
 
             case UiEventQueue::Event::EventType::buttonReleased:
-                if (clickOp == MenuClickOp::STOP)
+                if (looper.IsBuffering())
                 {
                     // Stop buffering.
                     looper.mustStopBuffering = true;
-                    clickOp = MenuClickOp::MENU;
                 }
                 else if (clickOp == MenuClickOp::FREEZE)
                 {
@@ -302,7 +267,7 @@ namespace wreath
                     looper.mustResetBuffer = true;
                     currentPage = 0;
                     pageSelected = false;
-                    clickOp = MenuClickOp::STOP;
+                    clickOp = MenuClickOp::MENU;
                 }
                 else if (clickOp == MenuClickOp::DUAL)
                 {
@@ -324,13 +289,14 @@ namespace wreath
                         }
                     }
                     else {
+                        currentLooper = 0; // Select the first looper
                         pageSelected = false;
                     }
                 }
                 break;
 
             case UiEventQueue::Event::EventType::encoderTurned:
-                if (pageSelected && 0 != e.asEncoderTurned.increments)
+                if (pageSelected)
                 {
                     if (currentPage == 0)
                     {
@@ -384,9 +350,9 @@ namespace wreath
                         }
                     }
                 }
-                else if (!buttonPressed)
+                else if (!buttonPressed && !looper.IsBuffering())
                 {
-                    currentPage +=  e.asEncoderTurned.increments;
+                    currentPage += e.asEncoderTurned.increments;
                     currentPage = fclamp(currentPage, 0, kMaxPages - 1);
                 }
                 break;
@@ -396,23 +362,31 @@ namespace wreath
         }
     }
 
-    void ProcessUi()
+    void UpdateControls()
     {
-        UpdateControls();
-
-        while (!eventQueue.IsQueueEmpty())
+        if (!looper.IsStartingUp())
         {
-            UiEventQueue::Event e = eventQueue.GetAndRemoveNextEvent();
-            if (e.type != UiEventQueue::Event::EventType::invalid)
+            ProcessControls();
+
+            looper.SetDryWet(knob1Value);
+            looper.SetFeedback(knob2Value);
+
+            // Handle CV1 as trigger input for resetting the read position to
+            // the loop start point.
+            if (isCv1Connected)
             {
-                ProcessEvent(e);
+                looper.mustRestart = cv1Trigger;
+            }
+
+            // Handle CV2 as loop start point when frozen.
+            if (looper.IsFrozen() && isCv2Connected)
+            {
+                //looper.SetLoopStart(fmap(cv2.Value(), 0, looper.GetBufferSamples(0)));
             }
         }
-
-        UpdateOled();
     }
 
-    void GenerateUiEvents()
+    inline void GenerateUiEvents()
     {
         if (hw.encoder.RisingEdge()) {
             eventQueue.AddButtonPressed(0, 1);
@@ -435,5 +409,21 @@ namespace wreath
         if (increments != 0) {
             eventQueue.AddEncoderTurned(0, increments, 12);
         }
+    }
+
+    inline void ProcessUi()
+    {
+        UpdateControls();
+
+        while (!eventQueue.IsQueueEmpty())
+        {
+            UiEventQueue::Event e = eventQueue.GetAndRemoveNextEvent();
+            if (e.type != UiEventQueue::Event::EventType::invalid)
+            {
+                ProcessEvent(e);
+            }
+        }
+
+        UpdateOled();
     }
 }

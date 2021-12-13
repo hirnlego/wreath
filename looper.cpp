@@ -215,7 +215,17 @@ float Looper::Read(float pos)
         {
             fadeIndex_ = 0;
             cf_.SetPos(0.f);
-            mustFade_ = Fade::NONE;
+            if (Fade::OUT == mustFade_)
+            {
+                fadeIndex_ = 0;
+                fadePos_ = writePos_;
+                mustFade_ = Fade::IN;
+            }
+            else
+            {
+                crossPointFound_ = false;
+                mustFade_ = Fade::NONE;
+            }
         }
     }
 
@@ -361,16 +371,21 @@ void Looper::CalculateHeadsDistance()
 void Looper::HandleFade()
 {
     size_t intPos{static_cast<size_t>(std::round(readPos_))};
-    size_t crossPoint{intPos};
+    static size_t crossPoint{};
 
     // When the two heads are going at different speeds, we must calculate
-    // the point in which the two will cross each other so we can set up fading.
-    if (readSpeed_ != writeSpeed_ && headsDistance_ <= fadeSamples_)
+    // the point in which the two will cross each other so we can set up a
+    // fading accordingly.
+    if ((readSpeed_ != writeSpeed_ || !forward_) && headsDistance_ > 0 && headsDistance_ <= fadeSamples_ * 2 && !crossPointFound_)
     {
         float deltaTime{};
         float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
+        if (!forward_)
+        {
+            relSpeed = writeSpeed_ + readSpeed_;
+        }
         deltaTime = headsDistance_ / relSpeed;
-        crossPoint = writePos_ + (writeSpeed_ * deltaTime);
+        crossPoint = writePos_ + (writeSpeed_ * deltaTime) - 1;
         // Wrap the meeting point if it's outside of the buffer.
         if (crossPoint >= bufferSamples_)
         {
@@ -385,39 +400,33 @@ void Looper::HandleFade()
             }
         }
         temp = crossPoint;
+        crossPointFound_ = true;
     }
 
     // Set up a fade in if:
     // - we're going forward and are right at the beginning of the loop;
     // - we're going backwards and are right at the end of the loop;
-    // - we're going at a different speed and the two heads have just crossed the meeting point.
-    if ((forward_ && intPos == loopStart_) || (!forward_ && intPos == loopEnd_) || (readSpeed_ != writeSpeed_ && headsDistance_ < 1.f))
+    // - we're going backwards, or at a different speed, and the two heads have just met (note that at this point the write position already stepped forward, so we must check against crossPoint + 1).
+    if ((forward_ && intPos == loopStart_) ||
+        (!forward_ && intPos == loopEnd_))
     {
-        fadePos_ = crossPoint;
+        fadePos_ = writePos_;
+        fadeIndex_ = 0;
         mustFade_ = Fade::IN;
     }
 
     // Set up a fade out if:
     // - we're going forward and are almost at the end of the loop;
     // - we're going backwards and are almost at the beginning of the loop;
-    // - we're going at a different speed and the two heads are about to cross the meeting point.
-    else if ((forward_ && intPos == loopEnd_ - fadeSamples_) || (!forward_ && intPos == loopStart_ + fadeSamples_) || (readSpeed_ != writeSpeed_ && headsDistance_ < 1.f))
+    // - we're going backwards, or at a different speed, and the two heads are about to meet.
+    else if ((forward_ && intPos == loopEnd_ - fadeSamples_) ||
+        (!forward_ && intPos == loopStart_ + fadeSamples_) ||
+        (crossPointFound_ && (writePos_ == crossPoint - fadeSamples_)))
     {
-        fadePos_ = crossPoint;
+        fadePos_ = writePos_;
+        fadeIndex_ = 0;
         mustFade_ = Fade::OUT;
     }
-
-    // Set up a fade out+in if:
-    // - the write and read position are about to cross.
-    // IDEA: maybe we must find the point when the read and write position will match and start the fade out samples/2 before?
-    /*
-    relativeSpeed = writeSpeed - readSpeed (forward)
-    relativeSpeed = writeSpeed + readSpeed (backwards)
-    time = (readPos - writePos) / relativeSpeed (forward)
-    time = (writePos - readPos) / relativeSpeed (backwards)
-    distance = readSpeed * time
-    crossPoint = readPos + distance
-    */
 }
 
 /**
@@ -429,10 +438,9 @@ void Looper::SetReadPos(float pos)
 {
     readPos_ = pos;
     readPosSeconds_ = readPos_ / sampleRate_;
-    if (readSpeed_ != writeSpeed_)
+    if (readSpeed_ != writeSpeed_ || !forward_)
     {
         CalculateHeadsDistance();
-        temp = headsDistance_;
     }
     if (mustFade_ == Fade::NONE)
     {

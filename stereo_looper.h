@@ -60,14 +60,14 @@ namespace wreath
         {
             if (IsFrozen())
             {
-                // Not frozen anymore.
+                // Un-freeze.
                 state_ = State::RECORDING;
-                loopers_[LEFT].SetLoopStart(0);
-                loopers_[RIGHT].SetLoopStart(0);
+                //loopers_[LEFT].SetLoopStart(0);
+                //loopers_[RIGHT].SetLoopStart(0);
             }
             else
             {
-                // Frozen.
+                // Freeze.
                 state_ = State::FROZEN;
                 feedbackPickup_ = false;
             }
@@ -157,6 +157,7 @@ namespace wreath
                 leftOut = cf_.Process(left, leftOut);
                 rightOut = cf_.Process(right, rightOut);
 
+                /* TODO
                 if (IsFrozen())
                 {
                     // When frozen, the feedback value sets the starting point.
@@ -186,6 +187,7 @@ namespace wreath
                     }
                     // Note that in this mode no writing is done while frozen.
                 }
+                */
 
                 float leftWritePos{static_cast<float>(loopers_[LEFT].GetWritePos())};
                 float rightWritePos{static_cast<float>(loopers_[RIGHT].GetWritePos())};
@@ -253,8 +255,10 @@ namespace wreath
                 }
 
                 // Move smoothly to the next position.
-                fonepole(leftReadPos, loopers_[LEFT].GetNextReadPos(), leftCoeff);
-                fonepole(rightReadPos, loopers_[RIGHT].GetNextReadPos(), rightCoeff);
+                //fonepole(leftReadPos, loopers_[LEFT].GetNextReadPos(), leftCoeff);
+                //fonepole(rightReadPos, loopers_[RIGHT].GetNextReadPos(), rightCoeff);
+                leftReadPos = loopers_[LEFT].GetNextReadPos();
+                rightReadPos = loopers_[RIGHT].GetNextReadPos();
                 loopers_[LEFT].HandlePosBoundaries(leftReadPos, true);
                 loopers_[RIGHT].HandlePosBoundaries(rightReadPos, true);
                 loopers_[LEFT].SetReadPos(leftReadPos);

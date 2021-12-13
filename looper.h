@@ -109,6 +109,7 @@ namespace wreath
         int fadeSamples_{};
         size_t sampleRate_{}; // The sample rate
         bool forward_{}; // True if the direction is forward
+        bool crossPointFound_{};
         Fade mustFade_{Fade::NONE};
 
         Movement movement_{}; // The current movement type of the looper

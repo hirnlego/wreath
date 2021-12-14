@@ -48,6 +48,7 @@ namespace wreath
         void HandlePosBoundaries(float &pos, bool isReadPos);
         void Restart();
         void SetReadPos(float pos);
+        void SetLoopStart(size_t pos);
         size_t GetRandomPosition();
 
         inline size_t GetBufferSamples() { return bufferSamples_; }
@@ -75,7 +76,6 @@ namespace wreath
             nextReadPos_ = pos;
             HandlePosBoundaries(nextReadPos_, true);
         };
-        inline void SetLoopStart(size_t pos) { loopStart_ = pos; };
         inline void SetLoopEnd(size_t pos) { loopEnd_ = pos; };
         inline void SetForward(bool forward) { forward_ = forward; };
         inline void ToggleDirection() { forward_ = !forward_; };

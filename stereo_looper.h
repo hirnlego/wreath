@@ -62,19 +62,8 @@ namespace wreath
 
         void ToggleFreeze()
         {
-            if (IsFrozen())
-            {
-                // Un-freeze.
-                state_ = State::RECORDING;
-                //loopers_[LEFT].SetLoopStart(0);
-                //loopers_[RIGHT].SetLoopStart(0);
-            }
-            else
-            {
-                // Freeze.
-                state_ = State::FROZEN;
-                feedbackPickup_ = false;
-            }
+            state_ = IsFrozen() ? State::RECORDING : state_ = State::FROZEN;
+            writingActive = !writingActive;
         }
 
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
@@ -94,7 +83,6 @@ namespace wreath
                 mustResetLooper = false;
                 gain_ = 1.f;
                 feedback_ = 0.f;
-                feedbackPickup_ = false;
                 loopers_[LEFT].Reset();
                 loopers_[RIGHT].Reset();
                 state_ = State::BUFFERING;
@@ -147,8 +135,11 @@ namespace wreath
                     loopers_[RIGHT].Restart();
                 }
 
-                leftOut = loopers_[LEFT].Read(loopers_[LEFT].GetReadPos());
-                rightOut = loopers_[RIGHT].Read(loopers_[RIGHT].GetReadPos());
+                if (readingActive)
+                {
+                    leftOut = loopers_[LEFT].Read(loopers_[LEFT].GetReadPos());
+                    rightOut = loopers_[RIGHT].Read(loopers_[RIGHT].GetReadPos());
+                }
 
                 // In cross mode swap the two channels, so what's read in the
                 // left buffer is written in the right one and vice-versa.
@@ -159,18 +150,23 @@ namespace wreath
                     rightOut = temp;
                 }
 
-                if (!IsFrozen())
+                if (writingActive)
                 {
-                    float leftWet{leftOut * feedback_};
-                    float rightWet{rightOut * feedback_};
-                    // Apply a LPF on the feedback path only if the loop is sufficiently long.
-                    if (loopers_[LEFT].GetLoopLength() > kMinSamplesForTone)
+                    float leftWet{};
+                    float rightWet{};
+                    if (readingActive)
                     {
-                        lpf_.Process(leftWet);
-                    }
-                    if (loopers_[RIGHT].GetLoopLength() > kMinSamplesForTone)
-                    {
-                        lpf_.Process(rightWet);
+                        leftWet = leftOut * feedback_;
+                        rightWet = rightOut * feedback_;
+                        // Apply a LPF on the feedback path only if the loop is sufficiently long.
+                        if (loopers_[LEFT].GetLoopLength() > kMinSamplesForTone)
+                        {
+                            lpf_.Process(leftWet);
+                        }
+                        if (loopers_[RIGHT].GetLoopLength() > kMinSamplesForTone)
+                        {
+                            lpf_.Process(rightWet);
+                        }
                     }
                     loopers_[LEFT].Write(SoftLimit(left + leftWet));
                     loopers_[RIGHT].Write(SoftLimit(right + rightWet));
@@ -179,38 +175,6 @@ namespace wreath
                 cf_.SetPos(dryWet_);
                 leftOut = cf_.Process(left, leftOut);
                 rightOut = cf_.Process(right, rightOut);
-
-                /* TODO
-                if (IsFrozen())
-                {
-                    // When frozen, the feedback value sets the starting point.
-                    size_t leftStart{static_cast<size_t>(std::floor(feedback_ * loopers_[LEFT].GetBufferSamples()))};
-                    size_t rightStart{static_cast<size_t>(std::floor(feedback_ * loopers_[RIGHT].GetBufferSamples()))};
-
-                    // Pick up where the loop start point is.
-                    // TODO: handle both LEFT and RIGHT loopers.
-                    if (std::abs(static_cast<int>(leftStart - loopers_[LEFT].GetLoopStart())) < static_cast<int>(loopers_[LEFT].GetBufferSamples() * 0.1f) && !feedbackPickup_)
-                    {
-                        feedbackPickup_ = true;
-                    }
-                    if (feedbackPickup_)
-                    {
-                        loopers_[LEFT].SetLoopStart(leftStart);
-                        loopers_[RIGHT].SetLoopStart(rightStart);
-                    }
-                    if (loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() > loopers_[LEFT].GetBufferSamples())
-                    {
-                        loopers_[LEFT].SetLoopEnd(loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() - loopers_[LEFT].GetBufferSamples());
-                        loopers_[RIGHT].SetLoopEnd(loopers_[RIGHT].GetLoopStart() + loopers_[RIGHT].GetLoopLength() - loopers_[RIGHT].GetBufferSamples());
-                    }
-                    else
-                    {
-                        loopers_[LEFT].SetLoopEnd(loopers_[LEFT].GetLoopStart() + loopers_[LEFT].GetLoopLength() - 1);
-                        loopers_[RIGHT].SetLoopEnd(loopers_[RIGHT].GetLoopStart() + loopers_[RIGHT].GetLoopLength() - 1);
-                    }
-                    // Note that in this mode no writing is done while frozen.
-                }
-                */
 
                 float leftWritePos{static_cast<float>(loopers_[LEFT].GetWritePos())};
                 float rightWritePos{static_cast<float>(loopers_[RIGHT].GetWritePos())};
@@ -336,19 +300,33 @@ namespace wreath
         inline void SetGain(float gain) { gain_ = gain; }
         inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
-        inline void SetMovement(int channel, Looper::Movement movement) { loopers_[channel].SetMovement(movement); }
-        inline void SetLoopStart(size_t value)
+
+        inline void SetMovement(int channel, Looper::Movement movement)
         {
-            loopers_[LEFT].SetNextReadPos(value);
-            loopers_[RIGHT].SetNextReadPos(value);
+            readingActive = false;
+            loopers_[channel].SetMovement(movement);
+            readingActive = true;
+        }
+        inline void SetLoopStart(int channel, size_t value)
+        {
+            readingActive = false;
+            loopers_[channel].SetLoopStart(value);
+            readingActive = true;
         }
         inline void SetSpeedMult(int channel, float multiplier) { loopers_[channel].SetSpeedMult(multiplier); }
-        inline void SetLoopLength(int channel, size_t length) { loopers_[channel].SetLoopLength(length); }
+        inline void SetLoopLength(int channel, size_t length)
+        {
+            readingActive = false;
+            loopers_[channel].SetLoopLength(length);
+            readingActive = true;
+        }
 
         bool mustResetLooper{};
         bool mustClearBuffer{};
         bool mustStopBuffering{};
         bool mustRestart{};
+        bool readingActive{true};
+        bool writingActive{true};
 
         inline float temp() { return loopers_[LEFT].temp; }
 
@@ -362,7 +340,6 @@ namespace wreath
         CrossFade cf_;
         Tone lpf_;
         size_t sampleRate_{};
-        bool feedbackPickup_{};
     };
 
 

@@ -351,12 +351,30 @@ namespace wreath
 
     void UpdateControls()
     {
+        static bool feedbackPickup{};
+
         if (!looper.IsStartingUp())
         {
             ProcessControls();
 
             looper.SetDryWet(knob1Value);
             looper.SetFeedback(knob2Value);
+
+            if (looper.IsFrozen())
+            {
+                size_t leftStart{static_cast<size_t>(std::floor(knob2Value * looper.GetBufferSamples(0)))};
+                size_t rightStart{static_cast<size_t>(std::floor(knob2Value * looper.GetBufferSamples(1)))};
+
+                if (std::abs(static_cast<int>(leftStart - looper.GetLoopStart(0))) < static_cast<int>(looper.GetBufferSamples(0) * 0.1f) && !feedbackPickup)
+                {
+                    feedbackPickup = true;
+                }
+                if (feedbackPickup)
+                {
+                    looper.SetLoopStart(0, leftStart);
+                    looper.SetLoopStart(1, rightStart);
+                }
+            }
 
             // Handle CV1 as trigger input for resetting the read position to
             // the loop start point.

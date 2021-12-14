@@ -243,6 +243,19 @@ void Looper::SetWritePos(float pos)
     writePos_ = (pos > loopEnd_) ? loopStart_ : pos;
 }
 
+void Looper::SetLoopStart(size_t pos)
+{
+    loopStart_ = pos;
+    if (loopStart_ + loopLength_ > bufferSamples_)
+    {
+        loopEnd_ = loopStart_ + loopLength_ - bufferSamples_;
+    }
+    else
+    {
+        loopEnd_ = loopStart_ + loopLength_ - 1;
+    }
+};
+
 /**
  * @brief Updates the given position depending on the loop boundaries and the
  *        current movement type.

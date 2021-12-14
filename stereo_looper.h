@@ -13,6 +13,7 @@ namespace wreath
 
     constexpr size_t kSampleRate{48000};
     constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    const float kMinSamplesForTone{kSampleRate * 0.03f}; // 30ms
     const size_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -50,8 +51,8 @@ namespace wreath
         void Init(size_t sampleRate)
         {
             sampleRate_ = sampleRate;
-            loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSeconds);
-            loopers_[RIGHT].Init(sampleRate_, rightBuffer_, kBufferSeconds);
+            loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSamples);
+            loopers_[RIGHT].Init(sampleRate_, rightBuffer_, kBufferSamples);
             state_ = State::INIT;
             cf_.Init(CROSSFADE_CPOW);
             lpf_.Init(sampleRate_);
@@ -163,11 +164,11 @@ namespace wreath
                     float leftWet{leftOut * feedback_};
                     float rightWet{rightOut * feedback_};
                     // Apply a LPF on the feedback path only if the loop is sufficiently long.
-                    if (loopers_[LEFT].GetLoopLength() > 4800)
+                    if (loopers_[LEFT].GetLoopLength() > kMinSamplesForTone)
                     {
                         lpf_.Process(leftWet);
                     }
-                    if (loopers_[RIGHT].GetLoopLength() > 4800)
+                    if (loopers_[RIGHT].GetLoopLength() > kMinSamplesForTone)
                     {
                         lpf_.Process(rightWet);
                     }
@@ -295,18 +296,14 @@ namespace wreath
 
         void SetMode(Mode mode)
         {
-            // When switching from dual mode to a coupled mode, reset the
-            // loopers.
+            // When switching from dual mode to any mono mode, align the RIGHT
+            // looper to the LEFT one.
             if (IsDualMode() && Mode::DUAL != mode)
             {
-                loopers_[LEFT].SetMovement(Looper::Movement::FORWARD);
-                loopers_[RIGHT].SetMovement(Looper::Movement::FORWARD);
-                loopers_[LEFT].SetSpeedMult(1.0f);
-                loopers_[RIGHT].SetSpeedMult(1.0f);
-                loopers_[LEFT].ResetLoopLength();
-                loopers_[RIGHT].ResetLoopLength();
-                loopers_[LEFT].Restart();
-                loopers_[RIGHT].Restart();
+                loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
+                loopers_[RIGHT].SetSpeedMult(loopers_[LEFT].GetSpeedMult());
+                loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
+                loopers_[RIGHT].SetReadPos(loopers_[LEFT].GetReadPos());
             }
 
             mode_ = mode;
@@ -345,8 +342,8 @@ namespace wreath
             loopers_[LEFT].SetNextReadPos(value);
             loopers_[RIGHT].SetNextReadPos(value);
         }
-        inline void IncrementSpeedMult(int channel, float value) { loopers_[channel].SetSpeedMult(loopers_[channel].GetSpeedMult() + value); }
-        inline void IncrementLoopLength(int channel, size_t samples) { loopers_[channel].SetLoopLength(loopers_[channel].GetLoopLength() + samples); }
+        inline void SetSpeedMult(int channel, float multiplier) { loopers_[channel].SetSpeedMult(multiplier); }
+        inline void SetLoopLength(int channel, size_t length) { loopers_[channel].SetLoopLength(length); }
 
         bool mustResetLooper{};
         bool mustClearBuffer{};

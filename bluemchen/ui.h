@@ -189,7 +189,7 @@ namespace wreath
                 }
                 else
                 {
-                    mpaland::sprintf(cstr, "%s%dms", cLR, loopLength * 1000);
+                    mpaland::sprintf(cstr, "%s%.0fms", cLR, loopLength * 1000);
                 }
             }
             else if (currentPage == 3)
@@ -292,26 +292,27 @@ namespace wreath
                     if (currentPage == 1)
                     {
                         // Page 1: Speed.
-                        float steps{};
-                        steps = (looper.GetSpeedMult(currentLooper) <= 4.95f) ? 0.05f : 5.f;
-                        steps *= e.asEncoderTurned.increments;
-                        looper.IncrementSpeedMult(currentLooper, steps);
+                        float currentSpeedMult{looper.GetSpeedMult(currentLooper)};
+                        float steps{static_cast<float>(e.asEncoderTurned.increments)};
+                        steps *= ((currentSpeedMult < 5.f) || (steps < 0 && currentSpeedMult - 5.f <= kMinSpeedMult)) ? kMinSpeedMult : 5.f;
+                        currentSpeedMult = fclamp(currentSpeedMult + steps, kMinSpeedMult, kMaxSpeedMult);
+                        looper.SetSpeedMult(currentLooper, currentSpeedMult);
                         if (!looper.IsDualMode())
                         {
-                            looper.IncrementSpeedMult(1, steps);
+                            looper.SetSpeedMult(1, currentSpeedMult);
                         }
                     }
                     else if (currentPage == 2)
                     {
                         // Page 2: Length.
                         // TODO: micro-steps for v/oct.
-                        int samples{};
-                        samples = (looper.GetLoopLength(currentLooper) >= 4800) ? std::floor(looper.GetLoopLength(currentLooper) * 0.1f) : kMinSamples;
-                        samples *= e.asEncoderTurned.increments;
-                        looper.IncrementLoopLength(currentLooper, samples);
+                        size_t currentLoopLength{looper.GetLoopLength(currentLooper)};
+                        int samples{e.asEncoderTurned.increments};
+                        samples *= (currentLoopLength >= kMinSamplesForTone) ? std::floor(currentLoopLength * 0.1f) : kMinLoopLengthSamples;
+                        looper.SetLoopLength(currentLooper, currentLoopLength + samples);
                         if (!looper.IsDualMode())
                         {
-                            looper.IncrementLoopLength(1, samples);
+                            looper.SetLoopLength(1, currentLoopLength + samples);
                         }
                     }
                     else if (currentPage == 3)

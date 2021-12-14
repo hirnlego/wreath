@@ -9,13 +9,13 @@ using namespace daisysp;
  *
  * @param sampleRate
  * @param mem
- * @param maxBufferSeconds
+ * @param maxBufferSamples
  */
-void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
+void Looper::Init(size_t sampleRate, float *mem, size_t maxBufferSamples)
 {
     sampleRate_ = sampleRate;
     buffer_ = mem;
-    initBufferSamples_ = sampleRate * maxBufferSeconds;
+    maxBufferSamples_ = maxBufferSamples;
     Reset();
 
     movement_ = Movement::FORWARD;
@@ -31,7 +31,7 @@ void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
  */
 void Looper::SetSpeedMult(float multiplier)
 {
-    speedMult_ = fclamp(multiplier, 0.f, kMaxSpeedMult);
+    speedMult_ = multiplier;
     readSpeed_ = sampleRate_ * speedMult_; // samples/s.
     writeSpeed_ = sampleRate_; // samples/s.
     sampleRateSpeed_ = static_cast<size_t>(sampleRate_ / speedMult_);
@@ -61,7 +61,7 @@ void Looper::SetMovement(Movement movement)
  */
 void Looper::ClearBuffer()
 {
-    std::fill(&buffer_[0], &buffer_[initBufferSamples_ - 1], 0.f);
+    std::fill(&buffer_[0], &buffer_[maxBufferSamples_ - 1], 0.f);
 }
 
 /**
@@ -89,7 +89,7 @@ void Looper::Reset()
 bool Looper::Buffer(float value)
 {
     // Handle end of buffer.
-    if (writePos_ > initBufferSamples_ - 1)
+    if (writePos_ > maxBufferSamples_ - 1)
     {
         return true;
     }
@@ -130,7 +130,7 @@ void Looper::StopBuffering()
 {
     loopStart_ = 0;
     writePos_ = 0;
-    ResetLoopLength();
+    SetLoopLength(bufferSamples_);
     SetReadPos(forward_ ? loopStart_ : loopEnd_);
 }
 
@@ -141,17 +141,9 @@ void Looper::StopBuffering()
  */
 void Looper::SetLoopLength(size_t length)
 {
-    loopLength_ = fclamp(length, kMinSamples, bufferSamples_);
+    loopLength_ = fclamp(length, kMinLoopLengthSamples, bufferSamples_);
     loopEnd_ = loopLength_ - 1;
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
-}
-
-/**
- * @brief Sets the loop length to that of the written buffer.
- */
-void Looper::ResetLoopLength()
-{
-    SetLoopLength(bufferSamples_);
 }
 
 /**
@@ -162,24 +154,24 @@ void Looper::ResetLoopLength()
  */
 void Looper::CalculateFadeSamples(size_t pos)
 {
-    if (loopLength_ < kFadeSamples)
+    if (loopLength_ < kSamplesToFade)
     {
         fadeSamples_ = 0;
     }
 
-    else if (forward_ && pos + kFadeSamples > loopEnd_)
+    else if (forward_ && pos + kSamplesToFade > loopEnd_)
     {
         fadeSamples_ = loopEnd_ - static_cast<int>(pos);
     }
 
-    else if (forward_ && pos - kFadeSamples < loopStart_)
+    else if (forward_ && pos - kSamplesToFade < loopStart_)
     {
         fadeSamples_ = static_cast<int>(pos);
     }
 
     else
     {
-        fadeSamples_ = kFadeSamples;
+        fadeSamples_ = kSamplesToFade;
     }
 }
 

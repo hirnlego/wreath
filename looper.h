@@ -7,10 +7,8 @@ namespace wreath
 {
     using namespace daisysp;
 
-    constexpr int kMinSamples{48};
-    constexpr int kFadeSamples{240}; // Note: 240 samples is 5ms @ 48KHz.
-    constexpr float kMinSpeed{-4.f};
-    constexpr float kMaxSpeedMult{50.f};
+    constexpr int kMinLoopLengthSamples{48};
+    constexpr int kSamplesToFade{240}; // Note: 240 samples is 5ms @ 48KHz.
 
     class Looper
     {
@@ -36,14 +34,13 @@ namespace wreath
             OUT,
         };
 
-        void Init(size_t sampleRate, float *mem, int maxBufferSeconds);
+        void Init(size_t sampleRate, float *mem, size_t maxBufferSamples);
         void Reset();
         void ClearBuffer();
         void StopBuffering();
         void SetSpeedMult(float speed);
         // looplength_ = loopEnd_ + (bufferSamples_ - loopStart_) + 1
         void SetLoopLength(size_t length);
-        void ResetLoopLength();
         void SetMovement(Movement movement);
         bool Buffer(float value);
         float Read(float pos);
@@ -105,7 +102,7 @@ namespace wreath
         float readSpeed_{}; // Actual read speed
         float writeSpeed_{}; // Actual write speed
         float headsDistance_{};
-        size_t initBufferSamples_{}; // The whole buffer length in samples
+        size_t maxBufferSamples_{}; // The whole buffer length in samples
         size_t bufferSamples_{}; // The written buffer length in samples
         size_t writePos_{}; // The write position
         size_t loopStart_{}; // Loop start position

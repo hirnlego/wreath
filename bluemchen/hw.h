@@ -33,12 +33,24 @@ namespace wreath
     bool isCv1Connected{};
     bool isCv2Connected{};
 
+    static size_t begin{};
+    static size_t end{};
+
     size_t ms{};
-    size_t begin{};
-    size_t end{};
     size_t cv1Bpm{};
 
-    void InitHw(float knobSlewSeconds, float cvSlewSeconds)
+    inline static int CalculateBpm()
+    {
+        end = ms;
+        // Handle the ms reset.
+        if (end < begin) {
+            end += 10000;
+        }
+
+        return std::round((1000.f / (end - begin)) * 60);
+    }
+
+    inline void InitHw(float knobSlewSeconds, float cvSlewSeconds)
     {
         hw.Init();
         hw.StartAdc();
@@ -58,7 +70,7 @@ namespace wreath
         hw.controls[hw.CTRL_4].SetCoeff(1.0f / (cvSlewSeconds * hw.AudioSampleRate() * 0.5f));
     }
 
-    void UpdateClock()
+    inline void UpdateClock()
     {
         if (ms > 10000)
         {
@@ -67,18 +79,7 @@ namespace wreath
         ms++;
     }
 
-    int CalculateBpm()
-    {
-        end = ms;
-        // Handle the ms reset.
-        if (end < begin) {
-            end += 10000;
-        }
-
-        return std::round((1000.f / (end - begin)) * 60);
-    }
-
-    void ProcessControls()
+    inline void ProcessControls()
     {
         hw.ProcessAllControls();
 

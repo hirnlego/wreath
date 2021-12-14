@@ -10,7 +10,7 @@ namespace wreath
     constexpr int kMinSamples{48};
     constexpr int kFadeSamples{240}; // Note: 240 samples is 5ms @ 48KHz.
     constexpr float kMinSpeed{-4.f};
-    constexpr float kMaxSpeedMult{4.f};
+    constexpr float kMaxSpeedMult{50.f};
 
     class Looper
     {
@@ -37,7 +37,8 @@ namespace wreath
         };
 
         void Init(size_t sampleRate, float *mem, int maxBufferSeconds);
-        void ResetBuffer();
+        void Reset();
+        void ClearBuffer();
         void StopBuffering();
         void SetSpeedMult(float speed);
         // looplength_ = loopEnd_ + (bufferSamples_ - loopStart_) + 1
@@ -63,6 +64,7 @@ namespace wreath
         inline float GetWritePos() { return writePos_; }
         inline float GetNextReadPos() { return nextReadPos_; }
         inline float GetSpeedMult() { return speedMult_; }
+        inline size_t GetSampleRateSpeed() { return sampleRateSpeed_; }
         inline Movement GetMovement() { return movement_; }
         inline bool IsForwardMovement() { return Movement::FORWARD == movement_; }
         inline bool IsBackwardsMovement() { return Movement::BACKWARDS == movement_; }
@@ -71,7 +73,11 @@ namespace wreath
         inline bool IsRandomMovement() { return Movement::RANDOM == movement_; }
         inline bool IsGoingForward() { return forward_; }
         inline void Write(float value) { buffer_[writePos_] = value; }
-        inline void SetNextReadPos(float pos) { nextReadPos_ = pos; };
+        inline void SetNextReadPos(float pos)
+        {
+            nextReadPos_ = pos;
+            HandlePosBoundaries(nextReadPos_, true);
+        };
         inline void SetLoopStart(size_t pos) { loopStart_ = pos; };
         inline void SetLoopEnd(size_t pos) { loopEnd_ = pos; };
         inline void SetForward(bool forward) { forward_ = forward; };
@@ -110,6 +116,7 @@ namespace wreath
         size_t sampleRate_{}; // The sample rate
         bool forward_{}; // True if the direction is forward
         bool crossPointFound_{};
+        size_t sampleRateSpeed_{};
         Fade mustFade_{Fade::NONE};
 
         Movement movement_{}; // The current movement type of the looper

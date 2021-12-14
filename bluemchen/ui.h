@@ -10,6 +10,11 @@ namespace wreath
     using namespace daisy;
     using namespace daisysp;
 
+    namespace mpaland {
+        #include "printf.h"
+        #include "printf.c"
+    };
+
     constexpr int kMaxPages{5};
     const char *pageNames[] = {
         "Wreath",
@@ -20,7 +25,7 @@ namespace wreath
     };
     const char *movementNames[] = {
         "Forward",
-        "Backwards",
+        "Back",
         "Pendulum",
         "Drunk",
         "Random",
@@ -36,6 +41,7 @@ namespace wreath
     {
         MENU,
         FREEZE,
+        CLEAR,
         RESET,
         DUAL,
     };
@@ -47,22 +53,6 @@ namespace wreath
     int currentLooper{0};
     UiEventQueue eventQueue;
 
-    static std::string FloatToString(float value, int precision)
-    {
-        float frac{value - (int)value};
-        float inte{value - frac};
-        std::string fracStr{std::to_string(static_cast<int>(frac * pow10f(precision)))};
-        if (fracStr.size() < precision)
-        {
-            for (int i = 0; i < precision - fracStr.size(); i++)
-            {
-                fracStr = "0" + fracStr;
-            }
-        }
-
-        return std::to_string(static_cast<int>(inte)) + "." + fracStr;
-    }
-
     inline static void UpdateOled()
     {
         int width{hw.display.Width()};
@@ -70,7 +60,6 @@ namespace wreath
         hw.display.Fill(false);
 
         std::string str = pageNames[currentPage];
-        //std::string str = FloatToString(looper.temp(), 2);
         char *cstr = &str[0];
         hw.display.SetCursor(0, 0);
         hw.display.WriteString(cstr, Font_6x8, !pageSelected);
@@ -93,7 +82,7 @@ namespace wreath
             hw.display.SetCursor(0, 16);
             hw.display.WriteString(cstr, Font_6x8, true);
             // Write seconds buffered.
-            str = FloatToString(looper.GetBufferSeconds(currentLooper), 2) + "/" + std::to_string(kBufferSeconds) + "s";
+            mpaland::sprintf(cstr, "%.2f%s", looper.GetBufferSeconds(currentLooper), ("/" + std::to_string(kBufferSeconds) + "s").c_str());
             hw.display.SetCursor(0, 24);
             hw.display.WriteString(cstr, Font_6x8, true);
         }
@@ -105,26 +94,14 @@ namespace wreath
             {
                 float loopLength = looper.GetLoopLengthSeconds(currentLooper);
                 float position = looper.GetPositionSeconds(currentLooper);
-                // Write read position in seconds.
+                // Write read position and the loop length in seconds.
                 if (loopLength > 1.f)
                 {
-                    str = FloatToString(position, 2);
+                    mpaland::sprintf(cstr, "%.2f/%.2fs", position, loopLength);
                 }
                 else
                 {
-                    position *= looper.GetPositionSeconds(currentLooper);
-                    str = std::to_string(static_cast<int>(position));
-                }
-
-                // Write the loop length in seconds.
-                if (loopLength > 1.f)
-                {
-                    str += "/" + FloatToString(loopLength, 2) + "s";
-                }
-                else
-                {
-                    loopLength *= 1000;
-                    str += "/" + std::to_string(static_cast<int>(loopLength)) + "ms";
+                    mpaland::sprintf(cstr, "%d/%dms", position * 1000, loopLength * 1000);
                 }
 
                 hw.display.SetCursor(0, 11);
@@ -148,7 +125,6 @@ namespace wreath
                     hw.display.DrawRect(0, 22 + y, end, 22 + y, true, true);
                     hw.display.DrawRect(start, 22 + y, width, 22 + y, true, true);
                 }
-
                 int cursor{};
                 // Draw the read position.
                 cursor = std::floor(looper.GetReadPos(i) * step);
@@ -191,15 +167,17 @@ namespace wreath
 
         if (pageSelected)
         {
+            const std::string sLR[3]{"", "L|", "R|"};
+            const char *cLR = sLR[looper.IsDualMode() * (currentLooper + 1)].c_str();
             if (currentPage == 0)
             {
                 // Page 0: Gain.
-                str = "x" + std::to_string(static_cast<int>(looper.GetGain()));
+                mpaland::sprintf(cstr, "x%d", looper.GetGain());
             }
             if (currentPage == 1)
             {
                 // Page 1: Speed.
-                str = "x" + FloatToString(looper.GetSpeedMult(currentLooper), 2);
+                mpaland::sprintf(cstr, "%s%.2fx", cLR, looper.GetSpeedMult(currentLooper));
             }
             else if (currentPage == 2)
             {
@@ -207,24 +185,22 @@ namespace wreath
                 float loopLength = looper.GetLoopLengthSeconds(currentLooper);
                 if (loopLength > 1.f)
                 {
-                    str = FloatToString(loopLength, 2) + "s";
+                    mpaland::sprintf(cstr, "%s%.2fs", cLR, loopLength);
                 }
                 else
                 {
-                    loopLength *= 1000;
-                    str = std::to_string(static_cast<int>(loopLength)) + "ms";
+                    mpaland::sprintf(cstr, "%s%dms", cLR, loopLength * 1000);
                 }
-                //str += "/" + std::to_string(loopers[0].GetLoopLength());
             }
             else if (currentPage == 3)
             {
                 // Page 3: Movement.
-                str = movementNames[static_cast<int>(looper.GetMovement(currentLooper))];
+                mpaland::sprintf(cstr, "%s%s", cLR, movementNames[static_cast<int>(looper.GetMovement(currentLooper))]);
             }
             else if (currentPage == 4)
             {
                 // Page 4: Mode.
-                str = modeNames[static_cast<int>(looper.GetMode())];
+                mpaland::sprintf(cstr, "%s", modeNames[static_cast<int>(looper.GetMode())]);
             }
 
             hw.display.SetCursor(0, 11);
@@ -261,10 +237,18 @@ namespace wreath
                     looper.ToggleFreeze();
                     clickOp = MenuClickOp::MENU;
                 }
+                else if (clickOp == MenuClickOp::CLEAR)
+                {
+                    // Clear the buffer.
+                    looper.mustClearBuffer = true;
+                    currentPage = 0;
+                    pageSelected = false;
+                    clickOp = MenuClickOp::MENU;
+                }
                 else if (clickOp == MenuClickOp::RESET)
                 {
-                    // ResetBuffer buffers.
-                    looper.mustResetBuffer = true;
+                    // Reset the looper.
+                    looper.mustResetLooper = true;
                     currentPage = 0;
                     pageSelected = false;
                     clickOp = MenuClickOp::MENU;
@@ -308,7 +292,9 @@ namespace wreath
                     if (currentPage == 1)
                     {
                         // Page 1: Speed.
-                        float steps{ e.asEncoderTurned.increments * 0.05f};
+                        float steps{};
+                        steps = (looper.GetSpeedMult(currentLooper) <= 4.95f) ? 0.05f : 5.f;
+                        steps *= e.asEncoderTurned.increments;
                         looper.IncrementSpeedMult(currentLooper, steps);
                         if (!looper.IsDualMode())
                         {
@@ -320,8 +306,8 @@ namespace wreath
                         // Page 2: Length.
                         // TODO: micro-steps for v/oct.
                         int samples{};
-                        samples = (looper.GetLoopLength(currentLooper) > 480) ? std::floor(looper.GetLoopLength(currentLooper) * 0.1f) : kMinSamples;
-                        samples *=  e.asEncoderTurned.increments;
+                        samples = (looper.GetLoopLength(currentLooper) >= 4800) ? std::floor(looper.GetLoopLength(currentLooper) * 0.1f) : kMinSamples;
+                        samples *= e.asEncoderTurned.increments;
                         looper.IncrementLoopLength(currentLooper, samples);
                         if (!looper.IsDualMode())
                         {
@@ -401,6 +387,10 @@ namespace wreath
             clickOp = MenuClickOp::FREEZE;
         }
         if (hw.encoder.TimeHeldMs() >= 2000.f)
+        {
+            clickOp = MenuClickOp::CLEAR;
+        }
+        if (hw.encoder.TimeHeldMs() >= 5000.f)
         {
             clickOp = MenuClickOp::RESET;
         }

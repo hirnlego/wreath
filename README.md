@@ -9,7 +9,6 @@ A multifaceted looper for the Daisy platform.
 - link loopers (eg. play in series)
 - stutter (stops and goes, repeats), drag, jitter
 - more play heads
-- high pass filter on writing
 
 
 

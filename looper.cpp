@@ -16,7 +16,7 @@ void Looper::Init(size_t sampleRate, float *mem, int maxBufferSeconds)
     sampleRate_ = sampleRate;
     buffer_ = mem;
     initBufferSamples_ = sampleRate * maxBufferSeconds;
-    ResetBuffer();
+    Reset();
 
     movement_ = Movement::FORWARD;
     forward_ = Movement::FORWARD == movement_;
@@ -34,6 +34,7 @@ void Looper::SetSpeedMult(float multiplier)
     speedMult_ = fclamp(multiplier, 0.f, kMaxSpeedMult);
     readSpeed_ = sampleRate_ * speedMult_; // samples/s.
     writeSpeed_ = sampleRate_; // samples/s.
+    sampleRateSpeed_ = static_cast<size_t>(sampleRate_ / speedMult_);
 }
 
 /**
@@ -56,25 +57,33 @@ void Looper::SetMovement(Movement movement)
 }
 
 /**
- * @brief Resets the buffer and the looper state.
+ * @brief Clears the buffer.
  */
-void Looper::ResetBuffer()
+void Looper::ClearBuffer()
 {
     std::fill(&buffer_[0], &buffer_[initBufferSamples_ - 1], 0.f);
+}
+
+/**
+ * @brief Resets the looper.
+ */
+void Looper::Reset()
+{
+    ClearBuffer();
     bufferSamples_ = 0;
     bufferSeconds_ = 0.f;
-    readPos_ = 0.f;
-    readPosSeconds_ = 0.f;
-    nextReadPos_ = 0.f;
-    fadePos_ = 0;
-    loopLengthSeconds_ = 0.f;
-    writePos_ = 0;
     loopStart_ = 0;
     loopEnd_ = 0;
     loopLength_ = 0;
+    loopLengthSeconds_ = 0.f;
+    readPos_ = 0.f;
+    readPosSeconds_ = 0.f;
+    nextReadPos_ = 0.f;
+    fadeIndex_ = 0;
+    fadePos_ = 0;
+    writePos_ = 0;
     speedMult_ = 1.f;
     readSpeed_ = writeSpeed_ = sampleRate_;
-    fadeIndex_ = 0;
 }
 
 bool Looper::Buffer(float value)

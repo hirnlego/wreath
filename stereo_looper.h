@@ -2,6 +2,7 @@
 
 #include "looper.h"
 #include "Utility/dsp.h"
+#include "Filters/tone.h"
 #include "dev/sdram.h"
 #include <cmath>
 #include <stddef.h>
@@ -11,8 +12,7 @@ namespace wreath
     using namespace daisysp;
 
     constexpr size_t kSampleRate{48000};
-    //constexpr int kBufferSeconds{150}; // 2:30 minutes max
-    constexpr int kBufferSeconds{2}; // 2:30 minutes max
+    constexpr int kBufferSeconds{150}; // 2:30 minutes max
     const size_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -54,6 +54,9 @@ namespace wreath
             loopers_[RIGHT].Init(sampleRate_, rightBuffer_, kBufferSeconds);
             state_ = State::INIT;
             cf_.Init(CROSSFADE_CPOW);
+            lpf_.Init(sampleRate_);
+            float f{1000.f};
+            lpf_.SetFreq(f);
         }
 
         void ToggleFreeze()
@@ -78,13 +81,21 @@ namespace wreath
             leftOut = 0.f;
             rightOut = 0.f;
 
-            if (mustResetBuffer)
+            if (mustClearBuffer)
             {
-                mustResetBuffer = false;
+                mustClearBuffer = false;
+                loopers_[LEFT].ClearBuffer();
+                loopers_[RIGHT].ClearBuffer();
+            }
+
+            if (mustResetLooper)
+            {
+                mustResetLooper = false;
+                gain_ = 1.f;
                 feedback_ = 0.f;
                 feedbackPickup_ = false;
-                loopers_[LEFT].ResetBuffer();
-                loopers_[RIGHT].ResetBuffer();
+                loopers_[LEFT].Reset();
+                loopers_[RIGHT].Reset();
                 state_ = State::BUFFERING;
             }
 
@@ -149,8 +160,19 @@ namespace wreath
 
                 if (!IsFrozen())
                 {
-                    loopers_[LEFT].Write(SoftLimit(left + leftOut * feedback_));
-                    loopers_[RIGHT].Write(SoftLimit(right + rightOut * feedback_));
+                    float leftWet{leftOut * feedback_};
+                    float rightWet{rightOut * feedback_};
+                    // Apply a LPF on the feedback path only if the loop is sufficiently long.
+                    if (loopers_[LEFT].GetLoopLength() > 4800)
+                    {
+                        lpf_.Process(leftWet);
+                    }
+                    if (loopers_[RIGHT].GetLoopLength() > 4800)
+                    {
+                        lpf_.Process(rightWet);
+                    }
+                    loopers_[LEFT].Write(SoftLimit(left + leftWet));
+                    loopers_[RIGHT].Write(SoftLimit(right + rightWet));
                 }
 
                 cf_.SetPos(dryWet_);
@@ -204,10 +226,14 @@ namespace wreath
                 float leftSpeedMult{loopers_[LEFT].GetSpeedMult()};
                 float rightSpeedMult{loopers_[RIGHT].GetSpeedMult()};
 
+                bool toggleDir{rand() % loopers_[LEFT].GetSampleRateSpeed()  == 1};
+                //bool toggleDir{rand() % sampleRate_  == 1};
+
                 float leftCoeff{leftSpeedMult};
                 float rightCoeff{rightSpeedMult};
                 if (loopers_[LEFT].IsRandomMovement())
                 {
+                    /*
                     // In this case we just choose randomly the next position.
                     if (std::abs(leftReadPos - loopers_[LEFT].GetNextReadPos()) < loopers_[LEFT].GetLoopLength() * 0.01f)
                     {
@@ -215,13 +241,14 @@ namespace wreath
                         loopers_[LEFT].SetForward(loopers_[LEFT].GetNextReadPos() > leftReadPos);
                     }
                     leftCoeff = 1.0f / ((2.f - leftSpeedMult) * sampleRate_);
+                    */
                 }
                 else
                 {
                     if (loopers_[LEFT].IsDrunkMovement())
                     {
                         // When drunk there's a small probability of changing direction.
-                        if ((rand() % sampleRate_) == 1)
+                        if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
                         {
                             loopers_[LEFT].ToggleDirection();
                         }
@@ -232,6 +259,7 @@ namespace wreath
 
                 if (loopers_[RIGHT].IsRandomMovement())
                 {
+                    /*
                     // In this case we just choose randomly the next position.
                     if (std::abs(rightReadPos - loopers_[RIGHT].GetNextReadPos()) < loopers_[RIGHT].GetLoopLength() * 0.01f)
                     {
@@ -239,13 +267,14 @@ namespace wreath
                         loopers_[RIGHT].SetForward(loopers_[RIGHT].GetNextReadPos() > rightReadPos);
                     }
                     rightCoeff = 1.0f / ((2.f - rightSpeedMult) * sampleRate_);
+                    */
                 }
                 else
                 {
                     if (loopers_[RIGHT].IsDrunkMovement())
                     {
                         // When drunk there's a small probability of changing direction.
-                        if ((rand() % sampleRate_) == 1)
+                        if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
                         {
                             loopers_[RIGHT].ToggleDirection();
                         }
@@ -259,8 +288,6 @@ namespace wreath
                 //fonepole(rightReadPos, loopers_[RIGHT].GetNextReadPos(), rightCoeff);
                 leftReadPos = loopers_[LEFT].GetNextReadPos();
                 rightReadPos = loopers_[RIGHT].GetNextReadPos();
-                loopers_[LEFT].HandlePosBoundaries(leftReadPos, true);
-                loopers_[RIGHT].HandlePosBoundaries(rightReadPos, true);
                 loopers_[LEFT].SetReadPos(leftReadPos);
                 loopers_[RIGHT].SetReadPos(rightReadPos);
             }
@@ -321,7 +348,8 @@ namespace wreath
         inline void IncrementSpeedMult(int channel, float value) { loopers_[channel].SetSpeedMult(loopers_[channel].GetSpeedMult() + value); }
         inline void IncrementLoopLength(int channel, size_t samples) { loopers_[channel].SetLoopLength(loopers_[channel].GetLoopLength() + samples); }
 
-        bool mustResetBuffer{};
+        bool mustResetLooper{};
+        bool mustClearBuffer{};
         bool mustStopBuffering{};
         bool mustRestart{};
 
@@ -335,6 +363,7 @@ namespace wreath
         State state_{}; // The current state of the looper
         Mode mode_{}; // The current mode of the looper
         CrossFade cf_;
+        Tone lpf_;
         size_t sampleRate_{};
         bool feedbackPickup_{};
     };

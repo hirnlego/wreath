@@ -28,12 +28,10 @@ namespace wreath
         "Back",
         "Pendulum",
         "Drunk",
-        "Random",
     };
     const char *modeNames[] = {
-        "Mimeo",
+        "Mono",
         "Cross",
-        //"Mode 2",
         "Dual",
     };
 
@@ -101,7 +99,7 @@ namespace wreath
                 }
                 else
                 {
-                    mpaland::sprintf(cstr, "%d/%dms", position * 1000, loopLength * 1000);
+                    mpaland::sprintf(cstr, "%.0f/%.0fms", position * 1000, loopLength * 1000);
                 }
 
                 hw.display.SetCursor(0, 11);
@@ -172,7 +170,7 @@ namespace wreath
             if (currentPage == 0)
             {
                 // Page 0: Gain.
-                mpaland::sprintf(cstr, "x%d", looper.GetGain());
+                mpaland::sprintf(cstr, "x%.2f", looper.GetGain());
             }
             if (currentPage == 1)
             {
@@ -286,8 +284,8 @@ namespace wreath
                     {
                         // Page 0: Gain.
                         float gain = looper.GetGain();
-                        gain += e.asEncoderTurned.increments;
-                        looper.SetGain(fclamp(gain, 0, 10));
+                        float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.1f};
+                        looper.SetGain(fclamp(gain + steps, 0.1f, 10.f));
                     }
                     if (currentPage == 1)
                     {
@@ -344,6 +342,10 @@ namespace wreath
                 }
                 break;
 
+            case UiEventQueue::Event::EventType::encoderActivityChanged:
+                looper.SetReading(!static_cast<bool>(e.asEncoderActivityChanged.newActivityType));
+                break;
+
             default:
                 break;
         }
@@ -351,28 +353,39 @@ namespace wreath
 
     void UpdateControls()
     {
-        static bool feedbackPickup{};
+        ProcessControls();
+
+        if (knob1Changed)
+        {
+            looper.SetDryWet(knob1Value);
+        }
 
         if (!looper.IsStartingUp())
         {
-            ProcessControls();
+            looper.SetReading(!knob1Changed && !knob2Changed);
 
-            looper.SetDryWet(knob1Value);
-            looper.SetFeedback(knob2Value);
-
-            if (looper.IsFrozen())
+            if (knob2Changed)
             {
-                size_t leftStart{static_cast<size_t>(std::floor(knob2Value * looper.GetBufferSamples(0)))};
-                size_t rightStart{static_cast<size_t>(std::floor(knob2Value * looper.GetBufferSamples(1)))};
+                if (looper.IsFrozen())
+                {
+                    static bool feedbackPickup{};
 
-                if (std::abs(static_cast<int>(leftStart - looper.GetLoopStart(0))) < static_cast<int>(looper.GetBufferSamples(0) * 0.1f) && !feedbackPickup)
-                {
-                    feedbackPickup = true;
+                    size_t leftStart{static_cast<size_t>(std::floor(knob2Value * looper.GetBufferSamples(0)))};
+                    size_t rightStart{static_cast<size_t>(std::floor(knob2Value * looper.GetBufferSamples(1)))};
+
+                    if (std::abs(static_cast<int>(leftStart - looper.GetLoopStart(0))) < static_cast<int>(looper.GetBufferSamples(0) * 0.1f) && !feedbackPickup)
+                    {
+                        feedbackPickup = true;
+                    }
+                    if (feedbackPickup)
+                    {
+                        looper.SetLoopStart(0, leftStart);
+                        looper.SetLoopStart(1, rightStart);
+                    }
                 }
-                if (feedbackPickup)
+                else
                 {
-                    looper.SetLoopStart(0, leftStart);
-                    looper.SetLoopStart(1, rightStart);
+                    looper.SetFeedback(knob2Value);
                 }
             }
 
@@ -415,8 +428,17 @@ namespace wreath
         }
 
         const auto increments = hw.encoder.Increment();
-        if (increments != 0) {
+        static bool active = false;
+        if (increments != 0)
+        {
+            active = true;
             eventQueue.AddEncoderTurned(0, increments, 12);
+            eventQueue.AddEncoderActivityChanged(0, active);
+        }
+        else if (active)
+        {
+            active = false;
+            eventQueue.AddEncoderActivityChanged(0, active);
         }
     }
 

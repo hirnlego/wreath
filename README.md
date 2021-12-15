@@ -6,6 +6,11 @@ BUGS
 
 1) clicks when going backwards or at a speed different than the write one
 2) in pendulum sometimes a flanger-like effect is produced (check feedback and (1))
+3) when modifying the loop start point while frozen, if the start point "pushes" the read position smearing occurs
+4) no dry sound during buffering
+5) clearing buffer keeps too long
+6) after clearing buffer dry/wet doesn't work (feedback does?)
+7) fade is broken when frozen across the boundary
 
 TODO
 

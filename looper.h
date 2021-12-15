@@ -23,7 +23,6 @@ namespace wreath
             BACKWARDS,
             PENDULUM,
             DRUNK,
-            RANDOM,
             LAST_MOVEMENT,
         };
 
@@ -45,7 +44,6 @@ namespace wreath
         bool Buffer(float value);
         float Read(float pos);
         void SetWritePos(float pos);
-        void HandlePosBoundaries(float &pos, bool isReadPos);
         void Restart();
         void SetReadPos(float pos);
         void SetLoopStart(size_t pos);
@@ -68,17 +66,20 @@ namespace wreath
         inline bool IsBackwardsMovement() { return Movement::BACKWARDS == movement_; }
         inline bool IsPendulumMovement() { return Movement::PENDULUM == movement_; }
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
-        inline bool IsRandomMovement() { return Movement::RANDOM == movement_; }
         inline bool IsGoingForward() { return forward_; }
         inline void Write(float value) { buffer_[writePos_] = value; }
-        inline void SetNextReadPos(float pos)
+        bool SetNextReadPos(float pos)
         {
             nextReadPos_ = pos;
-            HandlePosBoundaries(nextReadPos_, true);
+
+            return HandlePosBoundaries(nextReadPos_, true);
         };
         inline void SetLoopEnd(size_t pos) { loopEnd_ = pos; };
         inline void SetForward(bool forward) { forward_ = forward; };
         inline void ToggleDirection() { forward_ = !forward_; };
+        inline void ToggleWriting() { writingActive_ = !writingActive_; };
+        inline void ToggleReading() { readingActive_ = !readingActive_; };
+        inline void SetReading(bool active) { readingActive_ = active; };
 
         float temp{};
 
@@ -90,6 +91,8 @@ namespace wreath
         void CalculateHeadsDistance();
         void HandleFade();
         void CalculateFadeSamples(size_t pos);
+        void UpdateLoopEnd();
+        bool HandlePosBoundaries(float &pos, bool isReadPos);
 
         float *buffer_{}; // The buffer
         float bufferSeconds_{}; // Written buffer length in seconds
@@ -113,6 +116,8 @@ namespace wreath
         size_t sampleRate_{}; // The sample rate
         bool forward_{}; // True if the direction is forward
         bool crossPointFound_{};
+        bool readingActive_{true};
+        bool writingActive_{true};
         size_t sampleRateSpeed_{};
         Fade mustFade_{Fade::NONE};
 

@@ -27,6 +27,8 @@ namespace wreath
     float knob2Value{};
     float cv1Value{};
     float cv2Value{};
+    bool knob1Changed{};
+    bool knob2Changed{};
     bool cv1Trigger{};
     bool raising{};
     bool triggered{};
@@ -92,8 +94,16 @@ namespace wreath
         cv1.Process();
         cv2.Process();
 
-        knob1Value = knob1.Value();
-        knob2Value = knob2.Value();
+        knob1Changed = std::abs(knob1Value - knob1.Value()) > kMinValueDelta;
+        if (knob1Changed)
+        {
+            knob1Value = knob1.Value();
+        }
+        knob2Changed = std::abs(knob2Value - knob2.Value()) > kMinValueDelta;
+        if (knob2Changed)
+        {
+            knob2Value = knob2.Value();
+        }
 
         isCv1Connected = std::abs(cv1Value - cv1.Value()) > kMinValueDelta;
         if (isCv1Connected) {

@@ -41,9 +41,8 @@ namespace wreath
 
         enum Mode
         {
-            MIMEO,
+            MONO,
             CROSS,
-            //MODE2,
             DUAL,
             LAST_MODE,
         };
@@ -62,8 +61,10 @@ namespace wreath
 
         void ToggleFreeze()
         {
-            state_ = IsFrozen() ? State::RECORDING : state_ = State::FROZEN;
-            writingActive = !writingActive;
+            state_ = IsFrozen() ? State::RECORDING : State::FROZEN;
+            writingActive_ = !writingActive_;
+            loopers_[LEFT].ToggleWriting();
+            loopers_[RIGHT].ToggleWriting();
         }
 
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
@@ -135,7 +136,7 @@ namespace wreath
                     loopers_[RIGHT].Restart();
                 }
 
-                if (readingActive)
+                if (readingActive_)
                 {
                     leftOut = loopers_[LEFT].Read(loopers_[LEFT].GetReadPos());
                     rightOut = loopers_[RIGHT].Read(loopers_[RIGHT].GetReadPos());
@@ -146,15 +147,21 @@ namespace wreath
                 if (IsCrossMode())
                 {
                     float temp = leftOut;
-                    leftOut = rightOut;
-                    rightOut = temp;
+                    if (hasChangedLeft_)
+                    {
+                        leftOut = rightOut;
+                    }
+                    if (hasChangedRight_)
+                    {
+                        rightOut = temp;
+                    }
                 }
 
-                if (writingActive)
+                if (writingActive_)
                 {
                     float leftWet{};
                     float rightWet{};
-                    if (readingActive)
+                    if (readingActive_)
                     {
                         leftWet = leftOut * feedback_;
                         rightWet = rightOut * feedback_;
@@ -191,62 +198,27 @@ namespace wreath
                 float leftSpeedMult{loopers_[LEFT].GetSpeedMult()};
                 float rightSpeedMult{loopers_[RIGHT].GetSpeedMult()};
 
-                bool toggleDir{rand() % loopers_[LEFT].GetSampleRateSpeed()  == 1};
-                //bool toggleDir{rand() % sampleRate_  == 1};
-
-                float leftCoeff{leftSpeedMult};
-                float rightCoeff{rightSpeedMult};
-                if (loopers_[LEFT].IsRandomMovement())
+                // When drunk there's a small probability of changing direction.
+                bool toggleDir{rand() % loopers_[LEFT].GetSampleRateSpeed() == 1};
+                if (loopers_[LEFT].IsDrunkMovement())
                 {
-                    /*
-                    // In this case we just choose randomly the next position.
-                    if (std::abs(leftReadPos - loopers_[LEFT].GetNextReadPos()) < loopers_[LEFT].GetLoopLength() * 0.01f)
+                    if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
                     {
-                        loopers_[LEFT].SetNextReadPos(loopers_[LEFT].GetRandomPosition());
-                        loopers_[LEFT].SetForward(loopers_[LEFT].GetNextReadPos() > leftReadPos);
+                        loopers_[LEFT].ToggleDirection();
+                        hasChangedLeft_ = true;
                     }
-                    leftCoeff = 1.0f / ((2.f - leftSpeedMult) * sampleRate_);
-                    */
                 }
-                else
+                if (loopers_[RIGHT].IsDrunkMovement())
                 {
-                    if (loopers_[LEFT].IsDrunkMovement())
+                    if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
                     {
-                        // When drunk there's a small probability of changing direction.
-                        if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
-                        {
-                            loopers_[LEFT].ToggleDirection();
-                        }
+                        loopers_[RIGHT].ToggleDirection();
+                        hasChangedRight_ = true;
                     }
-                    // Otherwise, move the reading position normally.
-                    loopers_[LEFT].SetNextReadPos(loopers_[LEFT].IsGoingForward() ? loopers_[LEFT].GetReadPos() + leftSpeedMult : loopers_[LEFT].GetReadPos() - leftSpeedMult);
                 }
-
-                if (loopers_[RIGHT].IsRandomMovement())
-                {
-                    /*
-                    // In this case we just choose randomly the next position.
-                    if (std::abs(rightReadPos - loopers_[RIGHT].GetNextReadPos()) < loopers_[RIGHT].GetLoopLength() * 0.01f)
-                    {
-                        loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].GetRandomPosition());
-                        loopers_[RIGHT].SetForward(loopers_[RIGHT].GetNextReadPos() > rightReadPos);
-                    }
-                    rightCoeff = 1.0f / ((2.f - rightSpeedMult) * sampleRate_);
-                    */
-                }
-                else
-                {
-                    if (loopers_[RIGHT].IsDrunkMovement())
-                    {
-                        // When drunk there's a small probability of changing direction.
-                        if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
-                        {
-                            loopers_[RIGHT].ToggleDirection();
-                        }
-                    }
-                    // Otherwise, move the reading position normally.
-                    loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].IsGoingForward() ? loopers_[RIGHT].GetReadPos() + rightSpeedMult : loopers_[RIGHT].GetReadPos() - rightSpeedMult);
-                }
+                // Otherwise, move the reading position normally.
+                hasChangedLeft_ = loopers_[LEFT].SetNextReadPos(loopers_[LEFT].IsGoingForward() ? loopers_[LEFT].GetReadPos() + leftSpeedMult : loopers_[LEFT].GetReadPos() - leftSpeedMult);
+                hasChangedRight_ = loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].IsGoingForward() ? loopers_[RIGHT].GetReadPos() + rightSpeedMult : loopers_[RIGHT].GetReadPos() - rightSpeedMult);
 
                 // Move smoothly to the next position.
                 //fonepole(leftReadPos, loopers_[LEFT].GetNextReadPos(), leftCoeff);
@@ -291,9 +263,8 @@ namespace wreath
         inline bool IsBuffering() { return State::BUFFERING == state_; }
         inline bool IsRecording() { return State::RECORDING == state_; }
         inline bool IsFrozen() { return State::FROZEN == state_; }
-        inline bool IsMimeoMode() { return Mode::MIMEO == mode_; }
+        inline bool IsMonoMode() { return Mode::MONO == mode_; }
         inline bool IsCrossMode() { return Mode::CROSS == mode_; }
-        //inline bool IsMode2Mode() { return Mode::MODE2 == mode_; }
         inline bool IsDualMode() { return Mode::DUAL == mode_; }
         inline Mode GetMode() { return mode_; }
         inline float GetGain() { return gain_; }
@@ -301,32 +272,34 @@ namespace wreath
         inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
 
-        inline void SetMovement(int channel, Looper::Movement movement)
+        void SetReading(bool active)
         {
-            readingActive = false;
+            readingActive_ = active;
+            loopers_[LEFT].SetReading(active);
+            loopers_[RIGHT].SetReading(active);
+        }
+
+        void SetMovement(int channel, Looper::Movement movement)
+        {
             loopers_[channel].SetMovement(movement);
-            readingActive = true;
         }
-        inline void SetLoopStart(int channel, size_t value)
+        void SetLoopStart(int channel, size_t value)
         {
-            readingActive = false;
             loopers_[channel].SetLoopStart(value);
-            readingActive = true;
         }
-        inline void SetSpeedMult(int channel, float multiplier) { loopers_[channel].SetSpeedMult(multiplier); }
-        inline void SetLoopLength(int channel, size_t length)
+        void SetSpeedMult(int channel, float multiplier)
         {
-            readingActive = false;
+            loopers_[channel].SetSpeedMult(multiplier);
+        }
+        void SetLoopLength(int channel, size_t length)
+        {
             loopers_[channel].SetLoopLength(length);
-            readingActive = true;
         }
 
         bool mustResetLooper{};
         bool mustClearBuffer{};
         bool mustStopBuffering{};
         bool mustRestart{};
-        bool readingActive{true};
-        bool writingActive{true};
 
         inline float temp() { return loopers_[LEFT].temp; }
 
@@ -340,7 +313,10 @@ namespace wreath
         CrossFade cf_;
         Tone lpf_;
         size_t sampleRate_{};
+        bool readingActive_{true};
+        bool writingActive_{true};
+        bool hasChangedLeft_{};
+        bool hasChangedRight_{};
     };
-
 
 }

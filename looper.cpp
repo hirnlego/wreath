@@ -82,8 +82,7 @@ void Looper::Reset()
     fadeIndex_ = 0;
     fadePos_ = 0;
     writePos_ = 0;
-    speedMult_ = 1.f;
-    readSpeed_ = writeSpeed_ = sampleRate_;
+    SetSpeedMult(1.f);
 }
 
 bool Looper::Buffer(float value)
@@ -104,22 +103,7 @@ bool Looper::Buffer(float value)
 
 void Looper::Restart()
 {
-    if (Movement::RANDOM == movement_)
-    {
-        nextReadPos_ = GetRandomPosition();
-        forward_ = nextReadPos_ > readPos_;
-    }
-    else
-    {
-        if (forward_)
-        {
-            SetReadPosAtStart();
-        }
-        else
-        {
-            SetReadPosAtEnd();
-        }
-    }
+    forward_ ? SetReadPosAtStart() : SetReadPosAtEnd();
     writePos_ = 0;
 }
 
@@ -134,6 +118,18 @@ void Looper::StopBuffering()
     SetReadPos(forward_ ? loopStart_ : loopEnd_);
 }
 
+void Looper::UpdateLoopEnd()
+{
+    if (loopStart_ + loopLength_ < bufferSamples_)
+    {
+        loopEnd_ = loopStart_ + loopLength_;
+    }
+    else
+    {
+        loopEnd_ = loopLength_ - (bufferSamples_ - loopStart_);
+    }
+}
+
 /**
  * @brief Sets the loop length.
  *
@@ -142,8 +138,8 @@ void Looper::StopBuffering()
 void Looper::SetLoopLength(size_t length)
 {
     loopLength_ = fclamp(length, kMinLoopLengthSamples, bufferSamples_);
-    loopEnd_ = loopLength_ - 1;
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
+    UpdateLoopEnd();
 }
 
 /**
@@ -246,30 +242,25 @@ void Looper::SetWritePos(float pos)
 void Looper::SetLoopStart(size_t pos)
 {
     loopStart_ = pos;
-    if (loopStart_ + loopLength_ > bufferSamples_)
-    {
-        loopEnd_ = loopStart_ + loopLength_ - bufferSamples_;
-    }
-    else
-    {
-        loopEnd_ = loopStart_ + loopLength_ - 1;
-    }
+    UpdateLoopEnd();
 };
 
 /**
  * @brief Updates the given position depending on the loop boundaries and the
- *        current movement type.
+ *        current movement type. Returns true if the position has been altered.
  *
  * @param pos
  * @param isReadPos
+ * @return true
+ * @return false
  */
-void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
+bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
 {
     // Handle normal loop boundaries.
     if (loopEnd_ > loopStart_)
     {
         // Forward direction.
-        if (forward_ && pos > loopEnd_)
+        if (forward_ && pos >= loopEnd_)
         {
             pos = loopStart_;
             // Invert direction when in pendulum.
@@ -281,9 +272,11 @@ void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
                 }
                 pos = loopEnd_;
             }
+
+            return true;
         }
         // Backwards direction.
-        else if (!forward_ && pos < loopStart_)
+        else if (!forward_ && pos <= loopStart_)
         {
             pos = loopEnd_;
             // Invert direction when in pendulum.
@@ -295,6 +288,7 @@ void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
                 }
                 pos = loopStart_;
             }
+            return true;
         }
     }
     // Handle inverted loop boundaries (end point comes before start point).
@@ -302,12 +296,14 @@ void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
     {
         if (forward_)
         {
-            if (pos > bufferSamples_)
+            if (pos >= bufferSamples_)
             {
                 // Wrap-around.
                 pos = 0;
+
+                return true;
             }
-            else if (pos > loopEnd_ && pos < loopStart_)
+            else if (pos >= loopEnd_ && pos <= loopStart_)
             {
                 pos = loopStart_;
                 // Invert direction when in pendulum.
@@ -319,16 +315,20 @@ void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
                     }
                     pos = loopEnd_;
                 }
+
+                return true;
             }
         }
         else
         {
-            if (pos < 0)
+            if (pos <= 0)
             {
                 // Wrap-around.
                 pos = bufferSamples_ - 1;
+
+                return true;
             }
-            else if (pos > loopEnd_ && pos < loopStart_)
+            else if (pos >= loopEnd_ && pos <= loopStart_)
             {
                 pos = loopEnd_;
                 // Invert direction when in pendulum.
@@ -340,9 +340,13 @@ void Looper::HandlePosBoundaries(float &pos, bool isReadPos)
                     }
                     pos = loopStart_;
                 }
+
+                return true;
             }
         }
     }
+
+    return false;
 }
 
 void Looper::CalculateHeadsDistance()
@@ -390,7 +394,7 @@ void Looper::HandleFade()
     // When the two heads are going at different speeds, we must calculate
     // the point in which the two will cross each other so we can set up a
     // fading accordingly.
-    if ((readSpeed_ != writeSpeed_ || !forward_) && headsDistance_ > 0 && headsDistance_ <= fadeSamples_ * 2 && !crossPointFound_)
+    if ((readSpeed_ != writeSpeed_ || !forward_) && headsDistance_ > 0 && headsDistance_ <= fadeSamples_ * 2 && !crossPointFound_ && writingActive_)
     {
         float deltaTime{};
         float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
@@ -452,16 +456,19 @@ void Looper::SetReadPos(float pos)
 {
     readPos_ = pos;
     readPosSeconds_ = readPos_ / sampleRate_;
-    if (readSpeed_ != writeSpeed_ || !forward_)
+    if (readingActive_)
     {
-        CalculateHeadsDistance();
-    }
-    if (mustFade_ == Fade::NONE)
-    {
-        CalculateFadeSamples(static_cast<size_t>(std::round(pos)));
-        if (fadeSamples_ > 0)
+        if (readSpeed_ != writeSpeed_ || !forward_)
         {
-            HandleFade();
+            CalculateHeadsDistance();
+        }
+        if (mustFade_ == Fade::NONE)
+        {
+            CalculateFadeSamples(static_cast<size_t>(std::round(pos)));
+            if (fadeSamples_ > 0)
+            {
+                HandleFade();
+            }
         }
     }
 }

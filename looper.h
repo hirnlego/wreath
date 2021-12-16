@@ -53,6 +53,7 @@ namespace wreath
         inline size_t GetLoopStart() { return loopStart_; }
         inline size_t GetLoopEnd() { return loopEnd_; }
         inline size_t GetLoopLength() { return loopLength_; }
+        inline float GetLoopStartSeconds() { return loopStartSeconds_; }
         inline float GetLoopLengthSeconds() { return loopLengthSeconds_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }
         inline float GetPositionSeconds() { return readPosSeconds_; }
@@ -94,27 +95,28 @@ namespace wreath
         void UpdateLoopEnd();
         bool HandlePosBoundaries(float &pos, bool isReadPos);
 
-        float *buffer_{}; // The buffer
-        float bufferSeconds_{}; // Written buffer length in seconds
-        float readPos_{}; // The read position
-        float readPosSeconds_{}; // Read position in seconds
-        float nextReadPos_{}; // Next read position
-        float fadePos_{}; // Fade position
+        float *buffer_{};           // The buffer
+        float bufferSeconds_{};     // Written buffer length in seconds
+        float readPos_{};           // The read position
+        float readPosSeconds_{};    // Read position in seconds
+        float nextReadPos_{};       // Next read position
+        float fadePos_{};           // Fade position
+        float loopStartSeconds_{};  // Start of the loop in seconds
         float loopLengthSeconds_{}; // Length of the loop in seconds
-        float speedMult_{}; // Speed multiplier
-        float readSpeed_{}; // Actual read speed
-        float writeSpeed_{}; // Actual write speed
-        float headsDistance_{};
+        float speedMult_{};         // Speed multiplier
+        float readSpeed_{};         // Actual read speed
+        float writeSpeed_{};        // Actual write speed
+        float headsDistance_{};     // Distance in samples between the reading and writing heads
         size_t maxBufferSamples_{}; // The whole buffer length in samples
-        size_t bufferSamples_{}; // The written buffer length in samples
-        size_t writePos_{}; // The write position
-        size_t loopStart_{}; // Loop start position
-        size_t loopEnd_{}; // Loop end position
-        size_t loopLength_{}; // Length of the loop in samples
-        int fadeIndex_{}; // Counter used for fades
+        size_t bufferSamples_{};    // The written buffer length in samples
+        size_t writePos_{};         // The write position
+        size_t loopStart_{};        // Loop start position
+        size_t loopEnd_{};          // Loop end position
+        size_t loopLength_{};       // Length of the loop in samples
+        int fadeIndex_{};           // Counter used for fades
         int fadeSamples_{};
         size_t sampleRate_{}; // The sample rate
-        bool forward_{}; // True if the direction is forward
+        bool forward_{};      // True if the direction is forward
         bool crossPointFound_{};
         bool readingActive_{true};
         bool writingActive_{true};
@@ -122,6 +124,6 @@ namespace wreath
         Fade mustFade_{Fade::NONE};
 
         Movement movement_{}; // The current movement type of the looper
-        CrossFade cf_; // Crossfade used for fading in/out of the read value
+        CrossFade cf_;        // Crossfade used for fading in/out of the read value
     };
 } // namespace wreath

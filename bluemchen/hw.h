@@ -45,7 +45,8 @@ namespace wreath
     {
         end = ms;
         // Handle the ms reset.
-        if (end < begin) {
+        if (end < begin)
+        {
             end += 10000;
         }
 
@@ -106,13 +107,15 @@ namespace wreath
         }
 
         isCv1Connected = std::abs(cv1Value - cv1.Value()) > kMinValueDelta;
-        if (isCv1Connected) {
+        if (isCv1Connected)
+        {
             cv1Trigger = false;
             raising = cv1.Value() < cv1Value;
             if (!triggered && raising && cv1.Value() >= kTriggerThres)
             {
                 int bpm = CalculateBpm();
-                if (bpm < kMaxBpm) {
+                if (bpm < kMaxBpm)
+                {
                     cv1Bpm = bpm;
                 }
                 triggered = true;

@@ -12,7 +12,7 @@ namespace wreath
     using namespace daisysp;
 
     constexpr size_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    constexpr int kBufferSeconds{150};                   // 2:30 minutes max
     const float kMinSamplesForTone{kSampleRate * 0.03f}; // 30ms
     const size_t kBufferSamples{kSampleRate * kBufferSeconds};
 
@@ -55,8 +55,7 @@ namespace wreath
             state_ = State::INIT;
             cf_.Init(CROSSFADE_CPOW);
             lpf_.Init(sampleRate_);
-            float f{1000.f};
-            lpf_.SetFreq(f);
+            lpf_.SetFreq(filterValue_);
         }
 
         void ToggleFreeze()
@@ -77,13 +76,12 @@ namespace wreath
                 mustClearBuffer = false;
                 loopers_[LEFT].ClearBuffer();
                 loopers_[RIGHT].ClearBuffer();
+                state_ = State::BUFFERING;
             }
 
             if (mustResetLooper)
             {
                 mustResetLooper = false;
-                gain_ = 1.f;
-                feedback_ = 0.f;
                 loopers_[LEFT].Reset();
                 loopers_[RIGHT].Reset();
                 state_ = State::BUFFERING;
@@ -109,17 +107,17 @@ namespace wreath
                 fadeIndex++;
             }
 
-            // Gain stage.
-            float left{leftIn * gain_};
-            float right{rightIn * gain_};
-            left = (left > 0) ? 1 - expf(-left) : -1 + expf(left);
-            right = (right > 0) ? 1 - expf(-right) : -1 + expf(right);
+            // Input gain stage.
+            float leftDry{leftIn * gain_};
+            float rightDry{rightIn * gain_};
+            leftDry = (leftDry > 0) ? 1 - expf(-leftDry) : -1 + expf(leftDry);
+            rightDry = (rightDry > 0) ? 1 - expf(-rightDry) : -1 + expf(rightDry);
 
             // Fill up the buffer for the first time.
             if (IsBuffering())
             {
-                bool doneLeft{loopers_[LEFT].Buffer(left)};
-                bool doneRight{loopers_[RIGHT].Buffer(right)};
+                bool doneLeft{loopers_[LEFT].Buffer(leftDry)};
+                bool doneRight{loopers_[RIGHT].Buffer(rightDry)};
                 if (doneLeft && doneRight)
                 {
                     mustStopBuffering = true;
@@ -174,14 +172,11 @@ namespace wreath
                         {
                             lpf_.Process(rightWet);
                         }
+                        // TODO: Other stuff in the feedback path!
                     }
-                    loopers_[LEFT].Write(SoftLimit(left + leftWet));
-                    loopers_[RIGHT].Write(SoftLimit(right + rightWet));
+                    loopers_[LEFT].Write(SoftLimit(leftDry + leftWet));
+                    loopers_[RIGHT].Write(SoftLimit(rightDry + rightWet));
                 }
-
-                cf_.SetPos(dryWet_);
-                leftOut = cf_.Process(left, leftOut);
-                rightOut = cf_.Process(right, rightOut);
 
                 float leftWritePos{static_cast<float>(loopers_[LEFT].GetWritePos())};
                 float rightWritePos{static_cast<float>(loopers_[RIGHT].GetWritePos())};
@@ -228,6 +223,10 @@ namespace wreath
                 loopers_[LEFT].SetReadPos(leftReadPos);
                 loopers_[RIGHT].SetReadPos(rightReadPos);
             }
+
+            cf_.SetPos(dryWet_);
+            leftOut = cf_.Process(leftDry, leftOut);
+            rightOut = cf_.Process(rightDry, rightOut);
         }
 
         void SetMode(Mode mode)
@@ -247,6 +246,7 @@ namespace wreath
 
         inline size_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
         inline float GetBufferSeconds(int channel) { return loopers_[channel].GetBufferSeconds(); }
+        inline float GetLoopStartSeconds(int channel) { return loopers_[channel].GetLoopStartSeconds(); }
         inline float GetLoopLengthSeconds(int channel) { return loopers_[channel].GetLoopLengthSeconds(); }
         inline float GetPositionSeconds(int channel) { return loopers_[channel].GetPositionSeconds(); }
         inline size_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
@@ -268,9 +268,13 @@ namespace wreath
         inline bool IsDualMode() { return Mode::DUAL == mode_; }
         inline Mode GetMode() { return mode_; }
         inline float GetGain() { return gain_; }
+        inline float GetDryWet() { return dryWet_; }
+        inline float GetFeedBack() { return feedback_; }
+        inline float GetFilter() { return lpf_.GetFreq(); }
         inline void SetGain(float gain) { gain_ = gain; }
         inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
         inline void SetFeedback(float feedback) { feedback_ = feedback; }
+        inline void SetFilter(float filterValue) { lpf_.SetFreq(filterValue); }
 
         void SetReading(bool active)
         {
@@ -306,10 +310,11 @@ namespace wreath
     private:
         Looper loopers_[2];
         float gain_{1.f};
-        float dryWet_{};
-        float feedback_{};
+        float dryWet_{1.f};
+        float feedback_{0.f};
+        float filterValue_{1000.f};
         State state_{}; // The current state of the looper
-        Mode mode_{}; // The current mode of the looper
+        Mode mode_{};   // The current mode of the looper
         CrossFade cf_;
         Tone lpf_;
         size_t sampleRate_{};

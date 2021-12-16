@@ -10,18 +10,23 @@ namespace wreath
     using namespace daisy;
     using namespace daisysp;
 
-    namespace mpaland {
-        #include "printf.h"
-        #include "printf.c"
+    namespace mpaland
+    {
+#include "printf.h"
+#include "printf.c"
     };
 
-    constexpr int kMaxPages{5};
     const char *pageNames[] = {
         "Wreath",
+        "Mix",
+        "Feedback",
+        "Filter",
         "Speed",
+        "Start",
         "Length",
         "Movement",
         "Mode",
+        "Gain",
     };
     const char *movementNames[] = {
         "Forward",
@@ -35,6 +40,21 @@ namespace wreath
         "Dual",
     };
 
+    enum Page
+    {
+        HOME,
+        MIX,
+        FEEDBACK,
+        FILTER,
+        SPEED,
+        START,
+        LENGTH,
+        MOVEMENT,
+        MODE,
+        GAIN,
+        LAST_PAGE,
+    };
+
     enum class MenuClickOp
     {
         MENU,
@@ -44,8 +64,8 @@ namespace wreath
         DUAL,
     };
 
-    int currentPage{0};
-    bool pageSelected{false};
+    Page selectedPage{Page::HOME};
+    bool enteredPage{false};
     MenuClickOp clickOp{MenuClickOp::MENU};
     bool buttonPressed{false};
     int currentLooper{0};
@@ -57,10 +77,10 @@ namespace wreath
 
         hw.display.Fill(false);
 
-        std::string str = pageNames[currentPage];
+        std::string str = pageNames[selectedPage];
         char *cstr = &str[0];
         hw.display.SetCursor(0, 0);
-        hw.display.WriteString(cstr, Font_6x8, !pageSelected);
+        hw.display.WriteString(cstr, Font_6x8, !enteredPage);
 
         float step = width;
 
@@ -88,7 +108,7 @@ namespace wreath
         {
             step = width / (float)looper.GetBufferSamples(currentLooper);
 
-            if (!pageSelected)
+            if (!enteredPage)
             {
                 float loopLength = looper.GetLoopLengthSeconds(currentLooper);
                 float position = looper.GetPositionSeconds(currentLooper);
@@ -163,23 +183,44 @@ namespace wreath
             */
         }
 
-        if (pageSelected)
+        if (enteredPage)
         {
             const std::string sLR[3]{"", "L|", "R|"};
             const char *cLR = sLR[looper.IsDualMode() * (currentLooper + 1)].c_str();
-            if (currentPage == 0)
+            switch (selectedPage)
             {
-                // Page 0: Gain.
+            case Page::HOME:
+                break;
+            case Page::MIX:
+                mpaland::sprintf(cstr, "x%.2f", looper.GetDryWet());
+                break;
+            case Page::FEEDBACK:
+                mpaland::sprintf(cstr, "x%.2f", looper.GetFeedBack());
+                break;
+            case Page::FILTER:
+                mpaland::sprintf(cstr, "x%.2f", looper.GetFilter());
+                break;
+            case Page::GAIN:
                 mpaland::sprintf(cstr, "x%.2f", looper.GetGain());
-            }
-            if (currentPage == 1)
-            {
-                // Page 1: Speed.
+                break;
+            case Page::SPEED:
                 mpaland::sprintf(cstr, "%s%.2fx", cLR, looper.GetSpeedMult(currentLooper));
-            }
-            else if (currentPage == 2)
+                break;
+            case Page::START:
             {
-                // Page 2: Length.
+                float loopStart = looper.GetLoopStartSeconds(currentLooper);
+                if (loopStart > 1.f)
+                {
+                    mpaland::sprintf(cstr, "%s%.2fs", cLR, loopStart);
+                }
+                else
+                {
+                    mpaland::sprintf(cstr, "%s%.0fms", cLR, loopStart * 1000);
+                }
+                break;
+            }
+            case Page::LENGTH:
+            {
                 float loopLength = looper.GetLoopLengthSeconds(currentLooper);
                 if (loopLength > 1.f)
                 {
@@ -189,16 +230,16 @@ namespace wreath
                 {
                     mpaland::sprintf(cstr, "%s%.0fms", cLR, loopLength * 1000);
                 }
+                break;
             }
-            else if (currentPage == 3)
-            {
-                // Page 3: Movement.
+            case Page::MOVEMENT:
                 mpaland::sprintf(cstr, "%s%s", cLR, movementNames[static_cast<int>(looper.GetMovement(currentLooper))]);
-            }
-            else if (currentPage == 4)
-            {
-                // Page 4: Mode.
+                break;
+            case Page::MODE:
                 mpaland::sprintf(cstr, "%s", modeNames[static_cast<int>(looper.GetMode())]);
+                break;
+            default:
+                break;
             }
 
             hw.display.SetCursor(0, 11);
@@ -215,139 +256,175 @@ namespace wreath
         hw.display.Update();
     }
 
-    inline static void ProcessEvent(const UiEventQueue::Event& e)
+    inline static void ProcessEvent(const UiEventQueue::Event &e)
     {
-        switch(e.type)
+        switch (e.type)
         {
-            case UiEventQueue::Event::EventType::buttonPressed:
-                buttonPressed = false;
-                break;
+        case UiEventQueue::Event::EventType::buttonPressed:
+            buttonPressed = false;
+            break;
 
-            case UiEventQueue::Event::EventType::buttonReleased:
-                if (looper.IsBuffering())
+        case UiEventQueue::Event::EventType::buttonReleased:
+            if (looper.IsBuffering())
+            {
+                // Stop buffering.
+                looper.mustStopBuffering = true;
+            }
+            else if (clickOp == MenuClickOp::FREEZE)
+            {
+                // Toggle freeze.
+                looper.ToggleFreeze();
+                clickOp = MenuClickOp::MENU;
+            }
+            else if (clickOp == MenuClickOp::CLEAR)
+            {
+                // Clear the buffer.
+                looper.mustClearBuffer = true;
+                selectedPage = Page::HOME;
+                enteredPage = false;
+                clickOp = MenuClickOp::MENU;
+            }
+            else if (clickOp == MenuClickOp::RESET)
+            {
+                // Reset the looper.
+                looper.mustResetLooper = true;
+                selectedPage = Page::HOME;
+                enteredPage = false;
+                clickOp = MenuClickOp::MENU;
+            }
+            else if (clickOp == MenuClickOp::DUAL)
+            {
+                currentLooper = 1; // Select the second looper
+                clickOp = MenuClickOp::MENU;
+            }
+            else
+            {
+                // When not in the main page, toggle the page selection.
+                if (!enteredPage)
                 {
-                    // Stop buffering.
-                    looper.mustStopBuffering = true;
-                }
-                else if (clickOp == MenuClickOp::FREEZE)
-                {
-                    // Toggle freeze.
-                    looper.ToggleFreeze();
-                    clickOp = MenuClickOp::MENU;
-                }
-                else if (clickOp == MenuClickOp::CLEAR)
-                {
-                    // Clear the buffer.
-                    looper.mustClearBuffer = true;
-                    currentPage = 0;
-                    pageSelected = false;
-                    clickOp = MenuClickOp::MENU;
-                }
-                else if (clickOp == MenuClickOp::RESET)
-                {
-                    // Reset the looper.
-                    looper.mustResetLooper = true;
-                    currentPage = 0;
-                    pageSelected = false;
-                    clickOp = MenuClickOp::MENU;
-                }
-                else if (clickOp == MenuClickOp::DUAL)
-                {
-                    currentLooper = 1; // Select the second looper
-                    clickOp = MenuClickOp::MENU;
+                    enteredPage = true;
+                    if (looper.IsDualMode())
+                    {
+                        // In dual mode the controls for the two loopers are
+                        // independent.
+                        currentLooper = 0; // Select the first looper
+                        clickOp = MenuClickOp::DUAL;
+                    }
                 }
                 else
                 {
-                    // When not in the main page, toggle the page selection.
-                    if (!pageSelected)
-                    {
-                        pageSelected = true;
-                        if (looper.IsDualMode())
-                        {
-                            // In dual mode the controls for the two loopers are
-                            // independent.
-                            currentLooper = 0; // Select the first looper
-                            clickOp = MenuClickOp::DUAL;
-                        }
-                    }
-                    else {
-                        currentLooper = 0; // Select the first looper
-                        pageSelected = false;
-                    }
+                    currentLooper = 0; // Select the first looper
+                    enteredPage = false;
                 }
-                break;
+            }
+            break;
 
-            case UiEventQueue::Event::EventType::encoderTurned:
-                if (pageSelected)
+        case UiEventQueue::Event::EventType::encoderTurned:
+            if (enteredPage)
+            {
+                switch (selectedPage)
                 {
-                    if (currentPage == 0)
-                    {
-                        // Page 0: Gain.
-                        float gain = looper.GetGain();
-                        float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.1f};
-                        looper.SetGain(fclamp(gain + steps, 0.1f, 10.f));
-                    }
-                    if (currentPage == 1)
-                    {
-                        // Page 1: Speed.
-                        float currentSpeedMult{looper.GetSpeedMult(currentLooper)};
-                        float steps{static_cast<float>(e.asEncoderTurned.increments)};
-                        steps *= ((currentSpeedMult < 5.f) || (steps < 0 && currentSpeedMult - 5.f <= kMinSpeedMult)) ? kMinSpeedMult : 5.f;
-                        currentSpeedMult = fclamp(currentSpeedMult + steps, kMinSpeedMult, kMaxSpeedMult);
-                        looper.SetSpeedMult(currentLooper, currentSpeedMult);
-                        if (!looper.IsDualMode())
-                        {
-                            looper.SetSpeedMult(1, currentSpeedMult);
-                        }
-                    }
-                    else if (currentPage == 2)
-                    {
-                        // Page 2: Length.
-                        // TODO: micro-steps for v/oct.
-                        size_t currentLoopLength{looper.GetLoopLength(currentLooper)};
-                        int samples{e.asEncoderTurned.increments};
-                        samples *= (currentLoopLength >= kMinSamplesForTone) ? std::floor(currentLoopLength * 0.1f) : kMinLoopLengthSamples;
-                        looper.SetLoopLength(currentLooper, currentLoopLength + samples);
-                        if (!looper.IsDualMode())
-                        {
-                            looper.SetLoopLength(1, currentLoopLength + samples);
-                        }
-                    }
-                    else if (currentPage == 3)
-                    {
-                        // Page 3: Movement.
-                        int currentMovement{looper.GetMovement(currentLooper) + e.asEncoderTurned.increments};
-                        looper.SetMovement(currentLooper, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
-                        if (!looper.IsDualMode())
-                        {
-                            looper.SetMovement(1, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
-                        }
-                    }
-                    else if (currentPage == 4)
-                    {
-                        // Page 4: Mode.
-                        bool isDualMode{looper.IsDualMode()};
-                        int currentMode{looper.GetMode() + e.asEncoderTurned.increments};
-                        looper.SetMode(static_cast<StereoLooper::Mode>(fclamp(currentMode, 0, StereoLooper::Mode::LAST_MODE - 1)));
-                        if (isDualMode && !looper.IsDualMode())
-                        {
-                            currentLooper = 0;
-                        }
-                    }
-                }
-                else if (!buttonPressed && !looper.IsBuffering())
+                case Page::MIX:
                 {
-                    currentPage += e.asEncoderTurned.increments;
-                    currentPage = fclamp(currentPage, 0, kMaxPages - 1);
+                    float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.05f};
+                    looper.SetDryWet(fclamp(looper.GetDryWet() + steps, 0.f, 1.f));
+                    break;
                 }
-                break;
+                case Page::FEEDBACK:
+                {
+                    float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.05f};
+                    looper.SetFeedback(fclamp(looper.GetFeedBack() + steps, 0.f, 1.f));
+                    break;
+                }
+                case Page::FILTER:
+                {
+                    float steps{static_cast<float>(e.asEncoderTurned.increments) * 100.f};
+                    looper.SetFilter(fclamp(looper.GetFilter() + steps, 0.f, 5000.f));
+                    break;
+                }
+                case Page::GAIN:
+                {
+                    float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.1f};
+                    looper.SetGain(fclamp(looper.GetGain() + steps, 0.1f, 10.f));
+                    break;
+                }
+                case Page::SPEED:
+                {
+                    float currentSpeedMult{looper.GetSpeedMult(currentLooper)};
+                    float steps{static_cast<float>(e.asEncoderTurned.increments)};
+                    steps *= ((currentSpeedMult < 5.f) || (steps < 0 && currentSpeedMult - 5.f <= kMinSpeedMult)) ? kMinSpeedMult : 5.f;
+                    currentSpeedMult = fclamp(currentSpeedMult + steps, kMinSpeedMult, kMaxSpeedMult);
+                    looper.SetSpeedMult(currentLooper, currentSpeedMult);
+                    if (!looper.IsDualMode())
+                    {
+                        looper.SetSpeedMult(1, currentSpeedMult);
+                    }
+                    break;
+                }
+                case Page::START:
+                {
+                    size_t currentLoopStart{looper.GetLoopStart(currentLooper)};
+                    int samples{e.asEncoderTurned.increments};
+                    currentLoopStart += samples * std::floor(looper.GetBufferSamples(currentLooper) * 0.05f);
+                    looper.SetLoopStart(currentLooper, currentLoopStart);
+                    if (!looper.IsDualMode())
+                    {
+                        looper.SetLoopStart(1, currentLoopStart);
+                    }
+                    break;
+                }
+                case Page::LENGTH:
+                {
+                    // TODO: micro-steps for v/oct.
+                    size_t currentLoopLength{looper.GetLoopLength(currentLooper)};
+                    int samples{e.asEncoderTurned.increments};
+                    samples *= (currentLoopLength >= kMinSamplesForTone) ? std::floor(currentLoopLength * 0.1f) : kMinLoopLengthSamples;
+                    currentLoopLength += samples;
+                    looper.SetLoopLength(currentLooper, currentLoopLength);
+                    if (!looper.IsDualMode())
+                    {
+                        looper.SetLoopLength(1, currentLoopLength);
+                    }
+                    break;
+                }
+                case Page::MOVEMENT:
+                {
+                    int currentMovement{looper.GetMovement(currentLooper) + e.asEncoderTurned.increments};
+                    looper.SetMovement(currentLooper, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
+                    if (!looper.IsDualMode())
+                    {
+                        looper.SetMovement(1, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
+                    }
+                    break;
+                }
+                case Page::MODE:
+                {
+                    bool isDualMode{looper.IsDualMode()};
+                    int currentMode{looper.GetMode() + e.asEncoderTurned.increments};
+                    looper.SetMode(static_cast<StereoLooper::Mode>(fclamp(currentMode, 0, StereoLooper::Mode::LAST_MODE - 1)));
+                    if (isDualMode && !looper.IsDualMode())
+                    {
+                        currentLooper = 0;
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+            else if (!buttonPressed && !looper.IsBuffering())
+            {
+                int currentPage{selectedPage + e.asEncoderTurned.increments};
+                selectedPage = static_cast<Page>(fclamp(currentPage, 0, Page::LAST_PAGE - 1));
+            }
+            break;
 
-            case UiEventQueue::Event::EventType::encoderActivityChanged:
-                looper.SetReading(!static_cast<bool>(e.asEncoderActivityChanged.newActivityType));
-                break;
+        case UiEventQueue::Event::EventType::encoderActivityChanged:
+            looper.SetReading(!static_cast<bool>(e.asEncoderActivityChanged.newActivityType));
+            break;
 
-            default:
-                break;
+        default:
+            break;
         }
     }
 
@@ -355,40 +432,8 @@ namespace wreath
     {
         ProcessControls();
 
-        if (knob1Changed)
-        {
-            looper.SetDryWet(knob1Value);
-        }
-
         if (!looper.IsStartingUp())
         {
-            looper.SetReading(!knob1Changed && !knob2Changed);
-
-            if (knob2Changed)
-            {
-                if (looper.IsFrozen())
-                {
-                    static bool feedbackPickup{};
-
-                    size_t leftStart{static_cast<size_t>(std::floor(knob2Value * looper.GetBufferSamples(0)))};
-                    size_t rightStart{static_cast<size_t>(std::floor(knob2Value * looper.GetBufferSamples(1)))};
-
-                    if (std::abs(static_cast<int>(leftStart - looper.GetLoopStart(0))) < static_cast<int>(looper.GetBufferSamples(0) * 0.1f) && !feedbackPickup)
-                    {
-                        feedbackPickup = true;
-                    }
-                    if (feedbackPickup)
-                    {
-                        looper.SetLoopStart(0, leftStart);
-                        looper.SetLoopStart(1, rightStart);
-                    }
-                }
-                else
-                {
-                    looper.SetFeedback(knob2Value);
-                }
-            }
-
             // Handle CV1 as trigger input for resetting the read position to
             // the loop start point.
             if (isCv1Connected)
@@ -406,39 +451,44 @@ namespace wreath
 
     inline void GenerateUiEvents()
     {
-        if (hw.encoder.RisingEdge()) {
+        if (hw.encoder.RisingEdge())
+        {
             eventQueue.AddButtonPressed(0, 1);
         }
 
-        if (hw.encoder.FallingEdge()) {
+        if (hw.encoder.FallingEdge())
+        {
             eventQueue.AddButtonReleased(0);
         }
 
-        if (hw.encoder.TimeHeldMs() >= 500.f)
+        if (!looper.IsBuffering())
         {
-            clickOp = MenuClickOp::FREEZE;
-        }
-        if (hw.encoder.TimeHeldMs() >= 2000.f)
-        {
-            clickOp = MenuClickOp::CLEAR;
-        }
-        if (hw.encoder.TimeHeldMs() >= 5000.f)
-        {
-            clickOp = MenuClickOp::RESET;
-        }
+            if (hw.encoder.TimeHeldMs() >= 500.f)
+            {
+                clickOp = MenuClickOp::FREEZE;
+            }
+            if (hw.encoder.TimeHeldMs() >= 2000.f)
+            {
+                clickOp = MenuClickOp::CLEAR;
+            }
+            if (hw.encoder.TimeHeldMs() >= 5000.f)
+            {
+                clickOp = MenuClickOp::RESET;
+            }
 
-        const auto increments = hw.encoder.Increment();
-        static bool active = false;
-        if (increments != 0)
-        {
-            active = true;
-            eventQueue.AddEncoderTurned(0, increments, 12);
-            eventQueue.AddEncoderActivityChanged(0, active);
-        }
-        else if (active)
-        {
-            active = false;
-            eventQueue.AddEncoderActivityChanged(0, active);
+            const auto increments = hw.encoder.Increment();
+            static bool active = false;
+            if (increments != 0)
+            {
+                active = true;
+                eventQueue.AddEncoderTurned(0, increments, 12);
+                eventQueue.AddEncoderActivityChanged(0, active);
+            }
+            else if (active)
+            {
+                active = false;
+                eventQueue.AddEncoderActivityChanged(0, active);
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 #include "looper.h"
 #include "Utility/dsp.h"
+#include <cstring>
 
 using namespace wreath;
 using namespace daisysp;
@@ -33,7 +34,7 @@ void Looper::SetSpeedMult(float multiplier)
 {
     speedMult_ = multiplier;
     readSpeed_ = sampleRate_ * speedMult_; // samples/s.
-    writeSpeed_ = sampleRate_; // samples/s.
+    writeSpeed_ = sampleRate_;             // samples/s.
     sampleRateSpeed_ = static_cast<size_t>(sampleRate_ / speedMult_);
 }
 
@@ -61,7 +62,8 @@ void Looper::SetMovement(Movement movement)
  */
 void Looper::ClearBuffer()
 {
-    std::fill(&buffer_[0], &buffer_[maxBufferSamples_ - 1], 0.f);
+    //std::fill(&buffer_[0], &buffer_[maxBufferSamples_ - 1], 0.f);
+    memset(buffer_, 0.f, maxBufferSamples_);
 }
 
 /**
@@ -75,6 +77,7 @@ void Looper::Reset()
     loopStart_ = 0;
     loopEnd_ = 0;
     loopLength_ = 0;
+    loopStartSeconds_ = 0.f;
     loopLengthSeconds_ = 0.f;
     readPos_ = 0.f;
     readPosSeconds_ = 0.f;
@@ -113,20 +116,28 @@ void Looper::Restart()
 void Looper::StopBuffering()
 {
     loopStart_ = 0;
+    loopStartSeconds_ = 0.f;
     writePos_ = 0;
     SetLoopLength(bufferSamples_);
     SetReadPos(forward_ ? loopStart_ : loopEnd_);
 }
 
+void Looper::SetLoopStart(size_t pos)
+{
+    loopStart_ = fclamp(pos, 0, bufferSamples_ - 1);
+    loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
+    UpdateLoopEnd();
+};
+
 void Looper::UpdateLoopEnd()
 {
-    if (loopStart_ + loopLength_ < bufferSamples_)
+    if (loopStart_ + loopLength_ > bufferSamples_)
     {
-        loopEnd_ = loopStart_ + loopLength_;
+        loopEnd_ = loopLength_ - (bufferSamples_ - loopStart_);
     }
     else
     {
-        loopEnd_ = loopLength_ - (bufferSamples_ - loopStart_);
+        loopEnd_ = loopStart_ + loopLength_;
     }
 }
 
@@ -204,7 +215,7 @@ float Looper::Read(float pos)
     {
         // The number of samples we need to fade.
         cf_.SetPos(fadeIndex_ * (1.f / fadeSamples_));
-        float fadeValues[2][2]{{ 0.f, 1.f }, { 1.f, 0.f }};
+        float fadeValues[2][2]{{0.f, 1.f}, {1.f, 0.f}};
         val *= cf_.Process(fadeValues[mustFade_][0], fadeValues[mustFade_][1]);
         fadeIndex_ += 1;
         // End and reset the fade when done.
@@ -239,12 +250,6 @@ void Looper::SetWritePos(float pos)
     writePos_ = (pos > loopEnd_) ? loopStart_ : pos;
 }
 
-void Looper::SetLoopStart(size_t pos)
-{
-    loopStart_ = pos;
-    UpdateLoopEnd();
-};
-
 /**
  * @brief Updates the given position depending on the loop boundaries and the
  *        current movement type. Returns true if the position has been altered.
@@ -267,7 +272,8 @@ bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
             if (Movement::PENDULUM == movement_)
             {
                 // Switch direction only if we're handling the read position.
-                if (isReadPos) {
+                if (isReadPos)
+                {
                     forward_ = !forward_;
                 }
                 pos = loopEnd_;
@@ -283,7 +289,8 @@ bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
             if (Movement::PENDULUM == movement_)
             {
                 // Switch direction only if we're handling the read position.
-                if (isReadPos) {
+                if (isReadPos)
+                {
                     forward_ = !forward_;
                 }
                 pos = loopStart_;
@@ -310,7 +317,8 @@ bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
                 if (Movement::PENDULUM == movement_)
                 {
                     // Switch direction only if we're handling the read position.
-                    if (isReadPos) {
+                    if (isReadPos)
+                    {
                         forward_ = !forward_;
                     }
                     pos = loopEnd_;
@@ -335,7 +343,8 @@ bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
                 if (Movement::PENDULUM == movement_)
                 {
                     // Switch direction only if we're handling the read position.
-                    if (isReadPos) {
+                    if (isReadPos)
+                    {
                         forward_ = !forward_;
                     }
                     pos = loopStart_;
@@ -438,8 +447,8 @@ void Looper::HandleFade()
     // - we're going backwards and are almost at the beginning of the loop;
     // - we're going backwards, or at a different speed, and the two heads are about to meet.
     else if ((forward_ && intPos == loopEnd_ - fadeSamples_) ||
-        (!forward_ && intPos == loopStart_ + fadeSamples_) ||
-        (crossPointFound_ && (writePos_ == crossPoint - fadeSamples_)))
+             (!forward_ && intPos == loopStart_ + fadeSamples_) ||
+             (crossPointFound_ && (writePos_ == crossPoint - fadeSamples_)))
     {
         fadePos_ = writePos_;
         fadeIndex_ = 0;

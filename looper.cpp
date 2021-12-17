@@ -133,11 +133,11 @@ void Looper::UpdateLoopEnd()
 {
     if (loopStart_ + loopLength_ > bufferSamples_)
     {
-        loopEnd_ = loopLength_ - (bufferSamples_ - loopStart_);
+        loopEnd_ = (loopStart_ + loopLength_) - bufferSamples_ - 1;
     }
     else
     {
-        loopEnd_ = loopStart_ + loopLength_;
+        loopEnd_ = loopStart_ + loopLength_ - 1;
     }
 }
 
@@ -161,6 +161,8 @@ void Looper::SetLoopLength(size_t length)
  */
 void Looper::CalculateFadeSamples(size_t pos)
 {
+    fadeSamples_ = kSamplesToFade;
+    /*
     if (loopLength_ < kSamplesToFade)
     {
         fadeSamples_ = 0;
@@ -180,6 +182,7 @@ void Looper::CalculateFadeSamples(size_t pos)
     {
         fadeSamples_ = kSamplesToFade;
     }
+    */
 }
 
 /**
@@ -223,6 +226,7 @@ float Looper::Read(float pos)
         {
             fadeIndex_ = 0;
             cf_.SetPos(0.f);
+            // After a fade out there's always a fade in.
             if (Fade::OUT == mustFade_)
             {
                 fadeIndex_ = 0;
@@ -245,9 +249,9 @@ float Looper::Read(float pos)
  *
  * @param pos
  */
-void Looper::SetWritePos(float pos)
+void Looper::SetWritePos(size_t pos)
 {
-    writePos_ = (pos > loopEnd_) ? loopStart_ : pos;
+    writePos_ = (pos > loopEnd_) ? loopStart_ + (pos - loopEnd_) : pos;
 }
 
 /**
@@ -265,9 +269,9 @@ bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
     if (loopEnd_ > loopStart_)
     {
         // Forward direction.
-        if (forward_ && pos >= loopEnd_)
+        if (forward_ && pos > loopEnd_)
         {
-            pos = loopStart_;
+            pos = loopStart_ + (pos - loopEnd_);
             // Invert direction when in pendulum.
             if (Movement::PENDULUM == movement_)
             {
@@ -282,9 +286,9 @@ bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
             return true;
         }
         // Backwards direction.
-        else if (!forward_ && pos <= loopStart_)
+        else if (!forward_ && pos < loopStart_)
         {
-            pos = loopEnd_;
+            pos = loopEnd_ - (loopStart_ - pos);
             // Invert direction when in pendulum.
             if (Movement::PENDULUM == movement_)
             {
@@ -303,14 +307,14 @@ bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
     {
         if (forward_)
         {
-            if (pos >= bufferSamples_)
+            if (pos > bufferSamples_ - 1)
             {
                 // Wrap-around.
-                pos = 0;
+                pos = pos - bufferSamples_;
 
                 return true;
             }
-            else if (pos >= loopEnd_ && pos <= loopStart_)
+            else if (pos > loopEnd_ && pos < loopStart_)
             {
                 pos = loopStart_;
                 // Invert direction when in pendulum.
@@ -329,14 +333,14 @@ bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
         }
         else
         {
-            if (pos <= 0)
+            if (pos < 0)
             {
                 // Wrap-around.
-                pos = bufferSamples_ - 1;
+                pos = (bufferSamples_ - 1) + pos;
 
                 return true;
             }
-            else if (pos >= loopEnd_ && pos <= loopStart_)
+            else if (pos > loopEnd_ && pos < loopStart_)
             {
                 pos = loopEnd_;
                 // Invert direction when in pendulum.
@@ -392,6 +396,11 @@ void Looper::CalculateHeadsDistance()
     {
         headsDistance_ = 0.f;
     }
+
+    if (headsDistance_ <= fadeSamples_ * 2)
+    {
+        headsDistance_ = headsDistance_;
+    }
 }
 
 // Handle read fade.
@@ -412,7 +421,7 @@ void Looper::HandleFade()
             relSpeed = writeSpeed_ + readSpeed_;
         }
         deltaTime = headsDistance_ / relSpeed;
-        crossPoint = writePos_ + (writeSpeed_ * deltaTime) - 1;
+        crossPoint = writePos_ + (writeSpeed_ * deltaTime);
         // Wrap the meeting point if it's outside of the buffer.
         if (crossPoint >= bufferSamples_)
         {
@@ -428,6 +437,7 @@ void Looper::HandleFade()
         }
         temp = crossPoint;
         crossPointFound_ = true;
+        fadeSamples_ = headsDistance_;
     }
 
     // Set up a fade in if:
@@ -437,18 +447,16 @@ void Looper::HandleFade()
     if ((forward_ && intPos == loopStart_) ||
         (!forward_ && intPos == loopEnd_))
     {
-        fadePos_ = writePos_;
-        fadeIndex_ = 0;
-        mustFade_ = Fade::IN;
+        //fadePos_ = writePos_;
+        //fadeIndex_ = 0;
+        //mustFade_ = Fade::IN;
     }
 
     // Set up a fade out if:
     // - we're going forward and are almost at the end of the loop;
     // - we're going backwards and are almost at the beginning of the loop;
     // - we're going backwards, or at a different speed, and the two heads are about to meet.
-    else if ((forward_ && intPos == loopEnd_ - fadeSamples_) ||
-             (!forward_ && intPos == loopStart_ + fadeSamples_) ||
-             (crossPointFound_ && (writePos_ == crossPoint - fadeSamples_)))
+    else if ((crossPointFound_ && (writePos_ == crossPoint - fadeSamples_)))
     {
         fadePos_ = writePos_;
         fadeIndex_ = 0;

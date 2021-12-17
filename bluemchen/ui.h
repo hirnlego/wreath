@@ -192,13 +192,13 @@ namespace wreath
             case Page::HOME:
                 break;
             case Page::MIX:
-                mpaland::sprintf(cstr, "x%.2f", looper.GetDryWet());
+                mpaland::sprintf(cstr, "%.2f", looper.GetMix());
                 break;
             case Page::FEEDBACK:
-                mpaland::sprintf(cstr, "x%.2f", looper.GetFeedBack());
+                mpaland::sprintf(cstr, "%.2f", looper.GetFeedBack());
                 break;
             case Page::FILTER:
-                mpaland::sprintf(cstr, "x%.2f", looper.GetFilter());
+                mpaland::sprintf(cstr, "%.2f", looper.GetFilter());
                 break;
             case Page::GAIN:
                 mpaland::sprintf(cstr, "x%.2f", looper.GetGain());
@@ -327,25 +327,25 @@ namespace wreath
                 case Page::MIX:
                 {
                     float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.05f};
-                    looper.SetDryWet(fclamp(looper.GetDryWet() + steps, 0.f, 1.f));
+                    looper.nextMix = fclamp(looper.GetMix() + steps, 0.f, 2.f);
                     break;
                 }
                 case Page::FEEDBACK:
                 {
                     float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.05f};
-                    looper.SetFeedback(fclamp(looper.GetFeedBack() + steps, 0.f, 1.f));
+                    looper.nextFeedback = fclamp(looper.GetFeedBack() + steps, 0.f, 1.f);
                     break;
                 }
                 case Page::FILTER:
                 {
                     float steps{static_cast<float>(e.asEncoderTurned.increments) * 100.f};
-                    looper.SetFilter(fclamp(looper.GetFilter() + steps, 0.f, 5000.f));
+                    looper.nextFilterValue = fclamp(looper.GetFilter() + steps, 0.f, 5000.f);
                     break;
                 }
                 case Page::GAIN:
                 {
                     float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.1f};
-                    looper.SetGain(fclamp(looper.GetGain() + steps, 0.1f, 10.f));
+                    looper.nextGain = fclamp(looper.GetGain() + steps, 0.1f, 10.f);
                     break;
                 }
                 case Page::SPEED:
@@ -420,7 +420,7 @@ namespace wreath
             break;
 
         case UiEventQueue::Event::EventType::encoderActivityChanged:
-            looper.SetReading(!static_cast<bool>(e.asEncoderActivityChanged.newActivityType));
+            //looper.SetReading(!static_cast<bool>(e.asEncoderActivityChanged.newActivityType));
             break;
 
         default:

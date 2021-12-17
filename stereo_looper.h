@@ -2,7 +2,7 @@
 
 #include "looper.h"
 #include "Utility/dsp.h"
-#include "Filters/tone.h"
+#include "Filters/moogladder.h"
 #include "dev/sdram.h"
 #include <cmath>
 #include <stddef.h>
@@ -54,8 +54,8 @@ namespace wreath
             loopers_[RIGHT].Init(sampleRate_, rightBuffer_, kBufferSamples);
             state_ = State::INIT;
             cf_.Init(CROSSFADE_CPOW);
-            lpf_.Init(sampleRate_);
-            lpf_.SetFreq(filterValue_);
+            feedbackFilter_.Init(sampleRate_);
+            feedbackFilter_.SetFreq(filterValue_);
         }
 
         void ToggleFreeze()
@@ -106,6 +106,13 @@ namespace wreath
                 }
                 fadeIndex++;
             }
+
+            fonepole(feedback_, nextFeedback, 0.01f);
+            fonepole(gain_, nextGain, 0.01f);
+            fonepole(mix_, nextMix, 0.01f);
+            fonepole(filterValue_, nextFilterValue, 0.01f);
+            feedbackFilter_.SetFreq(filterValue_);
+            feedbackFilter_.SetRes(1.f - filterValue_ * (1.f / 5000.f));
 
             // Input gain stage.
             float leftDry{leftIn * gain_};
@@ -163,23 +170,19 @@ namespace wreath
                     {
                         leftWet = leftOut * feedback_;
                         rightWet = rightOut * feedback_;
-                        // Apply a LPF on the feedback path only if the loop is sufficiently long.
-                        if (loopers_[LEFT].GetLoopLength() > kMinSamplesForTone)
+                        if (filterValue_ > 0.f)
                         {
-                            lpf_.Process(leftWet);
+                            feedbackFilter_.Process(leftWet);
+                            feedbackFilter_.Process(rightWet);
                         }
-                        if (loopers_[RIGHT].GetLoopLength() > kMinSamplesForTone)
-                        {
-                            lpf_.Process(rightWet);
-                        }
-                        // TODO: Other stuff in the feedback path!
                     }
-                    loopers_[LEFT].Write(SoftLimit(leftDry + leftWet));
-                    loopers_[RIGHT].Write(SoftLimit(rightDry + rightWet));
+                    float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
+                    loopers_[LEFT].Write(SoftLimit(leftDry * dryLevel + leftWet));
+                    loopers_[RIGHT].Write(SoftLimit(rightDry * dryLevel + rightWet));
                 }
 
-                float leftWritePos{static_cast<float>(loopers_[LEFT].GetWritePos())};
-                float rightWritePos{static_cast<float>(loopers_[RIGHT].GetWritePos())};
+                size_t leftWritePos{loopers_[LEFT].GetWritePos()};
+                size_t rightWritePos{loopers_[RIGHT].GetWritePos()};
 
                 // Always write forward at original speed.
                 leftWritePos += 1;
@@ -211,6 +214,7 @@ namespace wreath
                         hasChangedRight_ = true;
                     }
                 }
+
                 // Otherwise, move the reading position normally.
                 hasChangedLeft_ = loopers_[LEFT].SetNextReadPos(loopers_[LEFT].IsGoingForward() ? loopers_[LEFT].GetReadPos() + leftSpeedMult : loopers_[LEFT].GetReadPos() - leftSpeedMult);
                 hasChangedRight_ = loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].IsGoingForward() ? loopers_[RIGHT].GetReadPos() + rightSpeedMult : loopers_[RIGHT].GetReadPos() - rightSpeedMult);
@@ -224,7 +228,7 @@ namespace wreath
                 loopers_[RIGHT].SetReadPos(rightReadPos);
             }
 
-            cf_.SetPos(dryWet_);
+            cf_.SetPos(fclamp(mix_, 0.f, 1.f));
             leftOut = cf_.Process(leftDry, leftOut);
             rightOut = cf_.Process(rightDry, rightOut);
         }
@@ -268,13 +272,9 @@ namespace wreath
         inline bool IsDualMode() { return Mode::DUAL == mode_; }
         inline Mode GetMode() { return mode_; }
         inline float GetGain() { return gain_; }
-        inline float GetDryWet() { return dryWet_; }
+        inline float GetMix() { return mix_; }
         inline float GetFeedBack() { return feedback_; }
-        inline float GetFilter() { return lpf_.GetFreq(); }
-        inline void SetGain(float gain) { gain_ = gain; }
-        inline void SetDryWet(float dryWet) { dryWet_ = dryWet; }
-        inline void SetFeedback(float feedback) { feedback_ = feedback; }
-        inline void SetFilter(float filterValue) { lpf_.SetFreq(filterValue); }
+        inline float GetFilter() { return filterValue_; }
 
         void SetReading(bool active)
         {
@@ -282,7 +282,6 @@ namespace wreath
             loopers_[LEFT].SetReading(active);
             loopers_[RIGHT].SetReading(active);
         }
-
         void SetMovement(int channel, Looper::Movement movement)
         {
             loopers_[channel].SetMovement(movement);
@@ -305,18 +304,23 @@ namespace wreath
         bool mustStopBuffering{};
         bool mustRestart{};
 
+        float nextGain{1.f};
+        float nextMix{1.f};
+        float nextFeedback{0.f};
+        float nextFilterValue{0.f};
+
         inline float temp() { return loopers_[LEFT].temp; }
 
     private:
         Looper loopers_[2];
-        float gain_{1.f};
-        float dryWet_{1.f};
-        float feedback_{0.f};
-        float filterValue_{1000.f};
+        float gain_{};
+        float mix_{};
+        float feedback_{};
+        float filterValue_{};
         State state_{}; // The current state of the looper
         Mode mode_{};   // The current mode of the looper
         CrossFade cf_;
-        Tone lpf_;
+        MoogLadder feedbackFilter_;
         size_t sampleRate_{};
         bool readingActive_{true};
         bool writingActive_{true};

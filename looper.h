@@ -43,7 +43,7 @@ namespace wreath
         void SetMovement(Movement movement);
         bool Buffer(float value);
         float Read(float pos);
-        void SetWritePos(float pos);
+        void SetWritePos(size_t pos);
         void Restart();
         void SetReadPos(float pos);
         void SetLoopStart(size_t pos);

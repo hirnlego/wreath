@@ -198,7 +198,7 @@ namespace wreath
                 mpaland::sprintf(cstr, "%.2f", looper.GetFeedBack());
                 break;
             case Page::FILTER:
-                mpaland::sprintf(cstr, "%.2f", looper.GetFilter());
+                mpaland::sprintf(cstr, "%.0f", looper.GetFilter());
                 break;
             case Page::GAIN:
                 mpaland::sprintf(cstr, "x%.2f", looper.GetGain());
@@ -332,14 +332,14 @@ namespace wreath
                 }
                 case Page::FEEDBACK:
                 {
-                    float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.05f};
+                    float steps{static_cast<float>(e.asEncoderTurned.increments) * 0.01f};
                     looper.nextFeedback = fclamp(looper.GetFeedBack() + steps, 0.f, 1.f);
                     break;
                 }
                 case Page::FILTER:
                 {
-                    float steps{static_cast<float>(e.asEncoderTurned.increments) * 100.f};
-                    looper.nextFilterValue = fclamp(looper.GetFilter() + steps, 0.f, 5000.f);
+                    float steps{static_cast<float>(e.asEncoderTurned.increments) * 20.f};
+                    looper.nextFilterValue = fclamp(looper.GetFilter() + steps, 0.f, 1000.f);
                     break;
                 }
                 case Page::GAIN:

@@ -1,8 +1,9 @@
 #pragma once
 
 #include "looper.h"
+#include "envelope_follower.h"
 #include "Utility/dsp.h"
-#include "Filters/moogladder.h"
+#include "Filters/svf.h"
 #include "dev/sdram.h"
 #include <cmath>
 #include <stddef.h>
@@ -112,7 +113,8 @@ namespace wreath
             fonepole(mix_, nextMix, 0.01f);
             fonepole(filterValue_, nextFilterValue, 0.01f);
             feedbackFilter_.SetFreq(filterValue_);
-            feedbackFilter_.SetRes(1.f - filterValue_ * (1.f / 5000.f));
+            feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
+            feedbackFilter_.SetRes(0.45f + filterValue_ * 0.0005f);
 
             // Input gain stage.
             float leftDry{leftIn * gain_};
@@ -170,10 +172,14 @@ namespace wreath
                     {
                         leftWet = leftOut * feedback_;
                         rightWet = rightOut * feedback_;
-                        if (filterValue_ > 0.f)
+                        if (filterValue_ >= 20.f)
                         {
-                            feedbackFilter_.Process(leftWet);
-                            feedbackFilter_.Process(rightWet);
+                            feedbackFilter_.Process(leftDry);
+                            float lf = feedbackFilter_.Band();
+                            feedbackFilter_.Process(rightDry);
+                            float rf = feedbackFilter_.Band();
+                            leftWet = SoftClip(leftWet + lf * (feedback_ - filterEnvelope_.GetEnv(lf)));
+                            rightWet = SoftClip(rightWet + rf * (feedback_ - filterEnvelope_.GetEnv(rf)));
                         }
                     }
                     float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
@@ -305,8 +311,8 @@ namespace wreath
         bool mustRestart{};
 
         float nextGain{1.f};
-        float nextMix{1.f};
-        float nextFeedback{0.f};
+        float nextMix{0.5f};
+        float nextFeedback{0.98f};
         float nextFilterValue{0.f};
 
         inline float temp() { return loopers_[LEFT].temp; }
@@ -320,7 +326,8 @@ namespace wreath
         State state_{}; // The current state of the looper
         Mode mode_{};   // The current mode of the looper
         CrossFade cf_;
-        MoogLadder feedbackFilter_;
+        Svf feedbackFilter_;
+        EnvFollow filterEnvelope_;
         size_t sampleRate_{};
         bool readingActive_{true};
         bool writingActive_{true};

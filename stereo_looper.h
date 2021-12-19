@@ -1,7 +1,7 @@
 #pragma once
 
 #include "looper.h"
-#include "envelope_follower.h"
+//#include "envelope_follower.h"
 #include "Utility/dsp.h"
 #include "Filters/svf.h"
 #include "dev/sdram.h"
@@ -175,11 +175,9 @@ namespace wreath
                         if (filterValue_ >= 20.f)
                         {
                             feedbackFilter_.Process(leftDry);
-                            float lf = feedbackFilter_.Band();
+                            leftWet = SoftLimit(leftWet + feedbackFilter_.Band());
                             feedbackFilter_.Process(rightDry);
-                            float rf = feedbackFilter_.Band();
-                            leftWet = SoftClip(leftWet + lf * (feedback_ - filterEnvelope_.GetEnv(lf)));
-                            rightWet = SoftClip(rightWet + rf * (feedback_ - filterEnvelope_.GetEnv(rf)));
+                            rightWet = SoftLimit(rightWet + feedbackFilter_.Band());
                         }
                     }
                     float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
@@ -247,6 +245,7 @@ namespace wreath
             {
                 loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
                 loopers_[RIGHT].SetSpeedMult(loopers_[LEFT].GetSpeedMult());
+                loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
                 loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
                 loopers_[RIGHT].SetReadPos(loopers_[LEFT].GetReadPos());
             }
@@ -311,8 +310,8 @@ namespace wreath
         bool mustRestart{};
 
         float nextGain{1.f};
-        float nextMix{0.5f};
-        float nextFeedback{0.98f};
+        float nextMix{1.f};
+        float nextFeedback{0.f};
         float nextFilterValue{0.f};
 
         inline float temp() { return loopers_[LEFT].temp; }
@@ -327,7 +326,7 @@ namespace wreath
         Mode mode_{};   // The current mode of the looper
         CrossFade cf_;
         Svf feedbackFilter_;
-        EnvFollow filterEnvelope_;
+        //EnvFollow filterEnvelope_;
         size_t sampleRate_{};
         bool readingActive_{true};
         bool writingActive_{true};

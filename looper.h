@@ -29,8 +29,8 @@ namespace wreath
         enum Fade
         {
             NONE = -1,
-            IN,
             OUT,
+            IN,
         };
 
         void Init(size_t sampleRate, float *mem, size_t maxBufferSamples);
@@ -73,7 +73,7 @@ namespace wreath
         {
             nextReadPos_ = pos;
 
-            return HandlePosBoundaries(nextReadPos_, true);
+            return HandlePosBoundaries(nextReadPos_);
         };
         inline void SetLoopEnd(size_t pos) { loopEnd_ = pos; };
         inline void SetForward(bool forward) { forward_ = forward; };
@@ -93,7 +93,9 @@ namespace wreath
         void HandleFade();
         void CalculateFadeSamples(size_t pos);
         void UpdateLoopEnd();
-        bool HandlePosBoundaries(float &pos, bool isReadPos);
+        bool HandlePosBoundaries(float &pos);
+        float FindMinValPos(float pos);
+        float ZeroCrossingPos(float pos);
 
         float *buffer_{};           // The buffer
         float bufferSeconds_{};     // Written buffer length in seconds

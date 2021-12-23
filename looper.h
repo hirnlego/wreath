@@ -58,7 +58,7 @@ namespace wreath
         inline float GetBufferSeconds() { return bufferSeconds_; }
         inline float GetPositionSeconds() { return readPosSeconds_; }
         inline float GetReadPos() { return readPos_; }
-        inline float GetWritePos() { return writePos_; }
+        inline size_t GetWritePos() { return writePos_; }
         inline float GetNextReadPos() { return nextReadPos_; }
         inline float GetSpeedMult() { return speedMult_; }
         inline size_t GetSampleRateSpeed() { return sampleRateSpeed_; }
@@ -85,8 +85,6 @@ namespace wreath
         float temp{};
 
     private:
-        void SetReadPosAtStart();
-        void SetReadPosAtEnd();
         void CalculateDeltaTime();
         void WrapPos(size_t &pos);
         void CalculateHeadsDistance();

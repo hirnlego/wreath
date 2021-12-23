@@ -8,9 +8,7 @@ BUGS
 2) in pendulum sometimes a flanger-like effect is produced (check feedback and (1))
 3) when modifying the loop start point while frozen, if the start point "pushes" the read position smearing occurs
 7) fade is broken when frozen across the boundary
-8) clicks when clocking restart (maybe find a zero crossing to start from)
 9) strange behaviour when speed < 1 (the feedback disappears)
-10) when clock in is removed the write head stop moving
 
 TODO
 

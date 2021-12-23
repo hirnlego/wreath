@@ -30,6 +30,8 @@ namespace wreath
         {
             LEFT,
             RIGHT,
+            NONE,
+            BOTH,
         };
 
         enum State
@@ -77,7 +79,6 @@ namespace wreath
                 mustClearBuffer = false;
                 loopers_[LEFT].ClearBuffer();
                 loopers_[RIGHT].ClearBuffer();
-                state_ = State::BUFFERING;
             }
 
             if (mustResetLooper)
@@ -108,6 +109,7 @@ namespace wreath
                 fadeIndex++;
             }
 
+            // Update parameters.
             fonepole(feedback_, nextFeedback, 0.01f);
             fonepole(gain_, nextGain, 0.01f);
             fonepole(mix_, nextMix, 0.01f);
@@ -139,8 +141,60 @@ namespace wreath
                 // point.
                 if (mustRestart)
                 {
+                    mustRestart = false;
                     loopers_[LEFT].Restart();
                     loopers_[RIGHT].Restart();
+                }
+
+                switch (mustSetChannelLoopStart)
+                {
+                case BOTH:
+                    loopers_[LEFT].SetLoopStart(nextLoopStart);
+                    loopers_[RIGHT].SetLoopStart(nextLoopStart);
+                    mustSetChannelLoopStart = NONE;
+                    break;
+                case LEFT:
+                case RIGHT:
+                    loopers_[mustSetChannelLoopStart].SetLoopStart(nextLoopStart);
+                    mustSetChannelLoopStart = NONE;
+                    break;
+
+                default:
+                    break;
+                }
+
+                switch (mustSetChannelLoopLength)
+                {
+                case BOTH:
+                    loopers_[LEFT].SetLoopLength(nextLoopLength);
+                    loopers_[RIGHT].SetLoopLength(nextLoopLength);
+                    mustSetChannelLoopLength = NONE;
+                    break;
+                case LEFT:
+                case RIGHT:
+                    loopers_[mustSetChannelLoopLength].SetLoopLength(nextLoopLength);
+                    mustSetChannelLoopLength = NONE;
+                    break;
+
+                default:
+                    break;
+                }
+
+                switch (mustSetChannelSpeedMult)
+                {
+                case BOTH:
+                    loopers_[LEFT].SetSpeedMult(nextSpeedMult);
+                    loopers_[RIGHT].SetSpeedMult(nextSpeedMult);
+                    mustSetChannelSpeedMult = NONE;
+                    break;
+                case LEFT:
+                case RIGHT:
+                    loopers_[mustSetChannelSpeedMult].SetSpeedMult(nextSpeedMult);
+                    mustSetChannelSpeedMult = NONE;
+                    break;
+
+                default:
+                    break;
                 }
 
                 if (readingActive_)
@@ -200,22 +254,25 @@ namespace wreath
                 float leftSpeedMult{loopers_[LEFT].GetSpeedMult()};
                 float rightSpeedMult{loopers_[RIGHT].GetSpeedMult()};
 
-                // When drunk there's a small probability of changing direction.
-                bool toggleDir{rand() % loopers_[LEFT].GetSampleRateSpeed() == 1};
-                if (loopers_[LEFT].IsDrunkMovement())
+                if (!hasCvRestart)
                 {
-                    if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
+                    // When drunk there's a small probability of changing direction.
+                    bool toggleDir{rand() % loopers_[LEFT].GetSampleRateSpeed() == 1};
+                    if (loopers_[LEFT].IsDrunkMovement())
                     {
-                        loopers_[LEFT].ToggleDirection();
-                        hasChangedLeft_ = true;
+                        if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
+                        {
+                            loopers_[LEFT].ToggleDirection();
+                            hasChangedLeft_ = true;
+                        }
                     }
-                }
-                if (loopers_[RIGHT].IsDrunkMovement())
-                {
-                    if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
+                    if (loopers_[RIGHT].IsDrunkMovement())
                     {
-                        loopers_[RIGHT].ToggleDirection();
-                        hasChangedRight_ = true;
+                        if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
+                        {
+                            loopers_[RIGHT].ToggleDirection();
+                            hasChangedRight_ = true;
+                        }
                     }
                 }
 
@@ -293,15 +350,18 @@ namespace wreath
         }
         void SetLoopStart(int channel, size_t value)
         {
-            loopers_[channel].SetLoopStart(value);
+            mustSetChannelLoopStart = channel;
+            nextLoopStart = value;
         }
         void SetSpeedMult(int channel, float multiplier)
         {
-            loopers_[channel].SetSpeedMult(multiplier);
+            mustSetChannelSpeedMult = channel;
+            nextSpeedMult = multiplier;
         }
         void SetLoopLength(int channel, size_t length)
         {
-            loopers_[channel].SetLoopLength(length);
+            mustSetChannelLoopLength = channel;
+            nextLoopLength = length;
         }
 
         bool mustResetLooper{};
@@ -309,10 +369,21 @@ namespace wreath
         bool mustStopBuffering{};
         bool mustRestart{};
 
+        bool hasCvRestart{};
+
         float nextGain{1.f};
         float nextMix{1.f};
         float nextFeedback{0.f};
-        float nextFilterValue{0.f};
+        float nextFilterValue{};
+
+        int mustSetChannelLoopStart{NONE};
+        size_t nextLoopStart{};
+
+        int mustSetChannelLoopLength{NONE};
+        size_t nextLoopLength{};
+
+        int mustSetChannelSpeedMult{NONE};
+        float nextSpeedMult{};
 
         inline float temp() { return loopers_[LEFT].temp; }
 

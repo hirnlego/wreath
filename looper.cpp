@@ -18,10 +18,6 @@ void Looper::Init(size_t sampleRate, float *mem, size_t maxBufferSamples)
     buffer_ = mem;
     maxBufferSamples_ = maxBufferSamples;
     Reset();
-
-    movement_ = Movement::FORWARD;
-    forward_ = Movement::FORWARD == movement_;
-
     cf_.Init(CROSSFADE_CPOW);
 }
 
@@ -86,6 +82,8 @@ void Looper::Reset()
     //fadePos_ = 0;
     writePos_ = 0;
     SetSpeedMult(1.f);
+    movement_ = Movement::FORWARD;
+    forward_ = Movement::FORWARD == movement_;
 }
 
 bool Looper::Buffer(float value)
@@ -106,8 +104,18 @@ bool Looper::Buffer(float value)
 
 void Looper::Restart()
 {
-    forward_ ? SetReadPosAtStart() : SetReadPosAtEnd();
-    writePos_ = 0;
+    size_t startPositions[]{loopEnd_, loopStart_};
+    // Invert direction when in pendulum.
+    if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
+    {
+        forward_ = !forward_;
+    }
+    if (Movement::DRUNK != movement_)
+    {
+        writePos_ = loopStart_;
+        size_t pos = FindMinValPos(startPositions[forward_]);
+        SetReadPos(pos);
+    }
 }
 
 /**
@@ -161,8 +169,6 @@ void Looper::SetLoopLength(size_t length)
  */
 void Looper::CalculateFadeSamples(size_t pos)
 {
-    fadeSamples_ = kSamplesToFade;
-    /*
     if (loopLength_ < kSamplesToFade)
     {
         fadeSamples_ = 0;
@@ -182,7 +188,6 @@ void Looper::CalculateFadeSamples(size_t pos)
     {
         fadeSamples_ = kSamplesToFade;
     }
-    */
 }
 
 /**
@@ -259,7 +264,7 @@ float Looper::FindMinValPos(float pos)
 
 	for (int i = 0; i < 10; i++)
 	{
-        pos += i;
+        pos = pos + (forward_ ? i : -i);
         HandlePosBoundaries(pos);
         float val = buffer_[static_cast<size_t>(std::round(pos))];
         if (std::abs(value - val) < min)
@@ -469,8 +474,8 @@ void Looper::HandleFade()
     // - we're going forward and are right at the beginning of the loop;
     // - we're going backwards and are right at the end of the loop;
     // - we're going backwards, or at a different speed, and the two heads have just met (note that at this point the write position already stepped forward, so we must check against crossPoint + 1).
-    if ((forward_ && intPos == loopStart_) ||
-        (!forward_ && intPos == loopEnd_))
+    if ((forward_ && writePos_ == loopStart_) ||
+        (!forward_ && writePos_ == loopEnd_))
     {
         //fadePos_ = writePos_;
         //fadeIndex_ = 0;
@@ -533,32 +538,4 @@ size_t Looper::GetRandomPosition()
     }
 
     return pos;
-}
-
-/**
- * @brief Sets the read position at the beginning of the loop.
- */
-void Looper::SetReadPosAtStart()
-{
-    SetReadPos(loopStart_);
-    // Invert direction when in pendulum.
-    if (Movement::PENDULUM == movement_)
-    {
-        forward_ = !forward_;
-        SetReadPos(loopEnd_);
-    }
-}
-
-/**
- * @brief Sets the read position at the end of the loop.
- */
-void Looper::SetReadPosAtEnd()
-{
-    SetReadPos(loopEnd_);
-    // Invert direction when in pendulum.
-    if (Movement::PENDULUM == movement_)
-    {
-        forward_ = !forward_;
-        SetReadPos(loopStart_);
-    }
 }

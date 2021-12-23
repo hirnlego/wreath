@@ -62,8 +62,6 @@ int main(void)
 
     looper.Init(hw.AudioSampleRate());
 
-    //hw.SetAudioBlockSize(24);
-
     hw.StartAudio(AudioCallback);
 
     while (1)

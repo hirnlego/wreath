@@ -10,7 +10,7 @@ namespace wreath
     // The minimum difference in parameter value to be registered.
     constexpr float kMinValueDelta{0.01f};
     // The trigger threshold value.
-    constexpr float kTriggerThres{0.5f};
+    constexpr float kTriggerThres{0.3f};
     // Maximum BPM supported.
     constexpr int kMaxBpm{300};
 
@@ -86,32 +86,26 @@ namespace wreath
     {
         hw.ProcessAllControls();
 
-        knob1.Process();
-        knob2.Process();
-
         hw.seed.dac.WriteValue(daisy::DacHandle::Channel::ONE, static_cast<uint16_t>(knob1_dac.Process()));
         hw.seed.dac.WriteValue(daisy::DacHandle::Channel::TWO, static_cast<uint16_t>(knob2_dac.Process()));
 
-        cv1.Process();
-        cv2.Process();
-
-        knob1Changed = std::abs(knob1Value - knob1.Value()) > kMinValueDelta;
+        knob1Changed = std::abs(knob1Value - knob1.Process()) > kMinValueDelta;
         if (knob1Changed)
         {
-            knob1Value = knob1.Value();
+            knob1Value = knob1.Process();
         }
-        knob2Changed = std::abs(knob2Value - knob2.Value()) > kMinValueDelta;
+        knob2Changed = std::abs(knob2Value - knob2.Process()) > kMinValueDelta;
         if (knob2Changed)
         {
-            knob2Value = knob2.Value();
+            knob2Value = knob2.Process();
         }
 
-        isCv1Connected = std::abs(cv1Value - cv1.Value()) > kMinValueDelta;
+        isCv1Connected = std::abs(cv1Value - cv1.Process()) > kMinValueDelta;
         if (isCv1Connected)
         {
             cv1Trigger = false;
-            raising = cv1.Value() < cv1Value;
-            if (!triggered && raising && cv1.Value() >= kTriggerThres)
+            raising = cv1.Process() < cv1Value;
+            if (!triggered && raising && cv1.Process() >= kTriggerThres)
             {
                 int bpm = CalculateBpm();
                 if (bpm < kMaxBpm)
@@ -122,14 +116,14 @@ namespace wreath
                 cv1Trigger = true;
                 begin = ms;
             }
-            else if (!raising || cv1.Value() < kTriggerThres)
+            else if (!raising || cv1.Process() < kTriggerThres)
             {
                 triggered = false;
             }
         }
-        cv1Value = cv1.Value();
+        cv1Value = cv1.Process();
 
-        isCv2Connected = std::abs(cv2Value - cv2.Value()) > kMinValueDelta;
-        cv2Value = cv2.Value();
+        isCv2Connected = std::abs(cv2Value - cv2.Process()) > kMinValueDelta;
+        cv2Value = cv2.Process();
     }
 }

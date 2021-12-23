@@ -280,8 +280,6 @@ namespace wreath
             {
                 // Clear the buffer.
                 looper.mustClearBuffer = true;
-                selectedPage = Page::HOME;
-                enteredPage = false;
                 clickOp = MenuClickOp::MENU;
             }
             else if (clickOp == MenuClickOp::RESET)
@@ -354,11 +352,7 @@ namespace wreath
                     float steps{static_cast<float>(e.asEncoderTurned.increments)};
                     steps *= ((currentSpeedMult < 5.f) || (steps < 0 && currentSpeedMult - 5.f <= kMinSpeedMult)) ? kMinSpeedMult : 5.f;
                     currentSpeedMult = fclamp(currentSpeedMult + steps, kMinSpeedMult, kMaxSpeedMult);
-                    looper.SetSpeedMult(currentLooper, currentSpeedMult);
-                    if (!looper.IsDualMode())
-                    {
-                        looper.SetSpeedMult(1, currentSpeedMult);
-                    }
+                    looper.SetSpeedMult(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, currentSpeedMult);
                     break;
                 }
                 case Page::START:
@@ -366,11 +360,7 @@ namespace wreath
                     size_t currentLoopStart{looper.GetLoopStart(currentLooper)};
                     int samples{e.asEncoderTurned.increments};
                     currentLoopStart += samples * std::floor(looper.GetBufferSamples(currentLooper) * 0.05f);
-                    looper.SetLoopStart(currentLooper, currentLoopStart);
-                    if (!looper.IsDualMode())
-                    {
-                        looper.SetLoopStart(1, currentLoopStart);
-                    }
+                    looper.SetLoopStart(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, currentLoopStart);
                     break;
                 }
                 case Page::LENGTH:
@@ -380,11 +370,7 @@ namespace wreath
                     int samples{e.asEncoderTurned.increments};
                     samples *= (currentLoopLength >= kMinSamplesForTone) ? std::floor(currentLoopLength * 0.1f) : kMinLoopLengthSamples;
                     currentLoopLength += samples;
-                    looper.SetLoopLength(currentLooper, currentLoopLength);
-                    if (!looper.IsDualMode())
-                    {
-                        looper.SetLoopLength(1, currentLoopLength);
-                    }
+                    looper.SetLoopLength(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, currentLoopLength);
                     break;
                 }
                 case Page::MOVEMENT:
@@ -436,6 +422,7 @@ namespace wreath
         {
             // Handle CV1 as trigger input for resetting the read position to
             // the loop start point.
+            looper.hasCvRestart = isCv1Connected;
             if (isCv1Connected)
             {
                 looper.mustRestart = cv1Trigger;

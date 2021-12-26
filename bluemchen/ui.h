@@ -357,7 +357,7 @@ namespace wreath
                 }
                 case Page::START:
                 {
-                    size_t currentLoopStart{looper.GetLoopStart(currentLooper)};
+                    int32_t currentLoopStart{looper.GetLoopStart(currentLooper)};
                     int samples{e.asEncoderTurned.increments};
                     currentLoopStart += samples * std::floor(looper.GetBufferSamples(currentLooper) * 0.05f);
                     looper.SetLoopStart(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, currentLoopStart);
@@ -366,7 +366,7 @@ namespace wreath
                 case Page::LENGTH:
                 {
                     // TODO: micro-steps for v/oct.
-                    size_t currentLoopLength{looper.GetLoopLength(currentLooper)};
+                    int32_t currentLoopLength{looper.GetLoopLength(currentLooper)};
                     int samples{e.asEncoderTurned.increments};
                     samples *= (currentLoopLength >= kMinSamplesForTone) ? std::floor(currentLoopLength * 0.1f) : kMinLoopLengthSamples;
                     currentLoopLength += samples;

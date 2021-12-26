@@ -12,7 +12,7 @@ using namespace daisysp;
  * @param mem
  * @param maxBufferSamples
  */
-void Looper::Init(size_t sampleRate, float *mem, size_t maxBufferSamples)
+void Looper::Init(int32_t sampleRate, float *mem, int32_t maxBufferSamples)
 {
     sampleRate_ = sampleRate;
     buffer_ = mem;
@@ -31,7 +31,7 @@ void Looper::SetSpeedMult(float multiplier)
     speedMult_ = multiplier;
     readSpeed_ = sampleRate_ * speedMult_; // samples/s.
     writeSpeed_ = sampleRate_;             // samples/s.
-    sampleRateSpeed_ = static_cast<size_t>(sampleRate_ / speedMult_);
+    sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / speedMult_);
 }
 
 /**
@@ -104,7 +104,7 @@ bool Looper::Buffer(float value)
 
 void Looper::Restart()
 {
-    size_t startPositions[]{loopEnd_, loopStart_};
+    int32_t startPositions[]{loopEnd_, loopStart_};
     // Invert direction when in pendulum.
     if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
     {
@@ -113,7 +113,7 @@ void Looper::Restart()
     if (Movement::DRUNK != movement_)
     {
         writePos_ = loopStart_;
-        size_t pos = FindMinValPos(startPositions[forward_]);
+        int32_t pos = FindMinValPos(startPositions[forward_]);
         SetReadPos(pos);
     }
 }
@@ -130,7 +130,7 @@ void Looper::StopBuffering()
     SetReadPos(forward_ ? loopStart_ : loopEnd_);
 }
 
-void Looper::SetLoopStart(size_t pos)
+void Looper::SetLoopStart(int32_t pos)
 {
     loopStart_ = fclamp(pos, 0, bufferSamples_ - 1);
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
@@ -154,41 +154,13 @@ void Looper::UpdateLoopEnd()
  *
  * @param length
  */
-void Looper::SetLoopLength(size_t length)
+void Looper::SetLoopLength(int32_t length)
 {
     loopLength_ = fclamp(length, kMinLoopLengthSamples, bufferSamples_);
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
     UpdateLoopEnd();
 }
 
-/**
- * @brief Returns the number of samples to fade given the provided read
- *        position in the buffer.
- *
- * @param pos
- */
-void Looper::CalculateFadeSamples(size_t pos)
-{
-    if (loopLength_ < kSamplesToFade)
-    {
-        fadeSamples_ = 0;
-    }
-
-    else if (forward_ && pos + kSamplesToFade > loopEnd_)
-    {
-        fadeSamples_ = loopEnd_ - static_cast<int>(pos);
-    }
-
-    else if (forward_ && pos - kSamplesToFade < loopStart_)
-    {
-        fadeSamples_ = static_cast<int>(pos);
-    }
-
-    else
-    {
-        fadeSamples_ = kSamplesToFade;
-    }
-}
 
 /**
  * @brief Reads from a specified point in the delay line using linear
@@ -200,50 +172,7 @@ void Looper::CalculateFadeSamples(size_t pos)
  */
 float Looper::Read(float pos)
 {
-    // 1) get the value at position.
 
-    // Integer position.
-    size_t intPos{static_cast<size_t>(std::round(pos))};
-    // Value at the integer position.
-    float val{buffer_[intPos]};
-    // Position decimal part.
-    float frac{pos - intPos};
-    // If the position is not an integer number we need to interpolate the value.
-    float pos2 = pos + (forward_ ? 1.f : -1.f);
-    HandlePosBoundaries(pos2);
-    float val2{buffer_[static_cast<size_t>(std::round(pos2))]};
-    // Interpolated value.
-    val = val + (val2 - val) * frac;
-
-    // 2) fade the value if needed.
-    if (mustFade_ != -1)
-    {
-        cf_.SetPos(fadeIndex_ * (1.f / fadeSamples_));
-        float fadeValues[2][2]{{val, 0.f}, {0.f, val}};
-        val = cf_.Process(fadeValues[mustFade_][0], fadeValues[mustFade_][1]);
-        fadeIndex_ += 1;
-        // End and reset the fade when done.
-        if (fadeIndex_ > fadeSamples_)
-        {
-            fadeIndex_ = 0;
-            cf_.SetPos(0.f);
-            // After a fade out there's always a fade in.
-            if (Fade::OUT == mustFade_)
-            {
-                fadeIndex_ = 0;
-                //fadePos_ = writePos_;
-                mustFade_ = Fade::IN;
-                val = 0;
-            }
-            else
-            {
-                crossPointFound_ = false;
-                mustFade_ = Fade::NONE;
-            }
-        }
-    }
-
-    return val;
 }
 
 /**
@@ -251,7 +180,7 @@ float Looper::Read(float pos)
  *
  * @param pos
  */
-void Looper::SetWritePos(size_t pos)
+void Looper::SetWritePos(int32_t pos)
 {
     writePos_ = (pos > loopEnd_) ? loopStart_ : pos;
 }
@@ -260,13 +189,13 @@ float Looper::FindMinValPos(float pos)
 {
     float min{};
     float minPos{pos};
-    float value{buffer_[static_cast<size_t>(std::round(pos))]};
+    float value{buffer_[static_cast<int32_t>(std::round(pos))]};
 
 	for (int i = 0; i < 10; i++)
 	{
         pos = pos + (forward_ ? i : -i);
         HandlePosBoundaries(pos);
-        float val = buffer_[static_cast<size_t>(std::round(pos))];
+        float val = buffer_[static_cast<int32_t>(std::round(pos))];
         if (std::abs(value - val) < min)
         {
             min = val;
@@ -287,10 +216,10 @@ float Looper::ZeroCrossingPos(float pos)
 	{
         float pos1 = pos + i;
         HandlePosBoundaries(pos1);
-		sign1 = buffer_[static_cast<size_t>(std::round(pos))] > 0;
+		sign1 = buffer_[static_cast<int32_t>(std::round(pos))] > 0;
         float pos2 = pos1 + 1;
         HandlePosBoundaries(pos2);
-		sign2 = buffer_[static_cast<size_t>(std::round(pos2))] > 0;
+		sign2 = buffer_[static_cast<int32_t>(std::round(pos2))] > 0;
 		if (sign1 != sign2)
         {
 			return pos1;
@@ -300,95 +229,27 @@ float Looper::ZeroCrossingPos(float pos)
     return pos;
 }
 
-/**
- * @brief Updates the given position depending on the loop boundaries and the
- *        current movement type. Returns true if the position has been altered.
- *
- * @param pos
- * @return true
- * @return false
- */
-bool Looper::HandlePosBoundaries(float &pos)
+void Looper::CalculateFadeSamples(int32_t pos)
 {
-    // Handle normal loop boundaries.
-    if (loopEnd_ > loopStart_)
+    if (loopLength_ < kSamplesToFade)
     {
-        // Forward direction.
-        if (forward_ && pos > loopEnd_)
-        {
-            pos = loopStart_ + (pos - loopEnd_) - 1;
-            // Invert direction when in pendulum.
-            if (Movement::PENDULUM == movement_)
-            {
-                pos = loopEnd_ - pos;
-                forward_ = !forward_;
-            }
-
-            return true;
-        }
-        // Backwards direction.
-        else if (!forward_ && pos < loopStart_)
-        {
-            pos = loopEnd_ - (loopStart_ - pos) + 1;
-            // Invert direction when in pendulum.
-            if (Movement::PENDULUM == movement_)
-            {
-                pos = loopStart_ + std::abs(pos);
-                forward_ = !forward_;
-            }
-            return true;
-        }
+        fadeSamples_ = 0;
     }
-    // Handle inverted loop boundaries (end point comes before start point).
+
+    else if (forward_ && pos + kSamplesToFade > loopEnd_)
+    {
+        fadeSamples_ = loopEnd_ - static_cast<int>(pos);
+    }
+
+    else if (forward_ && pos - kSamplesToFade < loopStart_)
+    {
+        fadeSamples_ = static_cast<int>(pos);
+    }
+
     else
     {
-        if (forward_)
-        {
-            if (pos > bufferSamples_ - 1)
-            {
-                // Wrap-around.
-                pos = pos - bufferSamples_;
-
-                return true;
-            }
-            else if (pos > loopEnd_ && pos < loopStart_)
-            {
-                pos = loopStart_;
-                // Invert direction when in pendulum.
-                if (Movement::PENDULUM == movement_)
-                {
-                    pos = loopEnd_;
-                    forward_ = !forward_;
-                }
-
-                return true;
-            }
-        }
-        else
-        {
-            if (pos < 0)
-            {
-                // Wrap-around.
-                pos = (bufferSamples_ - 1) + pos;
-
-                return true;
-            }
-            else if (pos > loopEnd_ && pos < loopStart_)
-            {
-                pos = loopEnd_;
-                // Invert direction when in pendulum.
-                if (Movement::PENDULUM == movement_)
-                {
-                    pos = loopStart_;
-                    forward_ = !forward_;
-                }
-
-                return true;
-            }
-        }
+        fadeSamples_ = kSamplesToFade;
     }
-
-    return false;
 }
 
 void Looper::CalculateHeadsDistance()
@@ -425,18 +286,13 @@ void Looper::CalculateHeadsDistance()
     {
         headsDistance_ = 0.f;
     }
-
-    if (headsDistance_ <= fadeSamples_ * 2)
-    {
-        headsDistance_ = headsDistance_;
-    }
 }
 
 // Handle read fade.
 void Looper::HandleFade()
 {
-    size_t intPos{static_cast<size_t>(std::round(readPos_))};
-    static size_t crossPoint{};
+    int32_t intPos{static_cast<int32_t>(std::round(readPos_))};
+    static int32_t crossPoint{};
 
     // When the two heads are going at different speeds, we must calculate
     // the point in which the two will cross each other so we can set up a
@@ -454,7 +310,7 @@ void Looper::HandleFade()
         // Wrap the crossing point if it's outside of the buffer.
         if (crossPoint >= bufferSamples_)
         {
-            size_t r = crossPoint % loopLength_;
+            int32_t r = crossPoint % loopLength_;
             if (loopStart_ + r > bufferSamples_)
             {
                 crossPoint = r - (bufferSamples_ - loopStart_);
@@ -501,6 +357,7 @@ void Looper::HandleFade()
  */
 void Looper::SetReadPos(float pos)
 {
+
     readPos_ = pos;
     readPosSeconds_ = readPos_ / sampleRate_;
     if (readingActive_ && writingActive_)
@@ -511,7 +368,7 @@ void Looper::SetReadPos(float pos)
         }
         if (mustFade_ == Fade::NONE)
         {
-            CalculateFadeSamples(static_cast<size_t>(std::round(pos)));
+            CalculateFadeSamples(static_cast<int32_t>(std::round(pos)));
             if (fadeSamples_ > 0)
             {
                 HandleFade();
@@ -523,11 +380,11 @@ void Looper::SetReadPos(float pos)
 /**
  * @brief Returns a random position within the loop.
  *
- * @return size_t
+ * @return int32_t
  */
-size_t Looper::GetRandomPosition()
+int32_t Looper::GetRandomPosition()
 {
-    size_t pos{loopStart_ + rand() % (loopLength_ - 1)};
+    int32_t pos{loopStart_ + rand() % (loopLength_ - 1)};
     if (forward_ && pos > loopEnd_)
     {
         pos = loopEnd_;

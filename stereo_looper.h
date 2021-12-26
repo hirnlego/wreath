@@ -12,10 +12,10 @@ namespace wreath
 {
     using namespace daisysp;
 
-    constexpr size_t kSampleRate{48000};
+    constexpr int32_t kSampleRate{48000};
     constexpr int kBufferSeconds{150};                   // 2:30 minutes max
     const float kMinSamplesForTone{kSampleRate * 0.03f}; // 30ms
-    const size_t kBufferSamples{kSampleRate * kBufferSeconds};
+    const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightBuffer_[kBufferSamples];
@@ -50,7 +50,7 @@ namespace wreath
             LAST_MODE,
         };
 
-        void Init(size_t sampleRate)
+        void Init(int32_t sampleRate)
         {
             sampleRate_ = sampleRate;
             loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSamples);
@@ -100,7 +100,7 @@ namespace wreath
             // Wait a few samples to avoid potential clicking on module's startup.
             if (IsStartingUp())
             {
-                static size_t fadeIndex{0};
+                static int32_t fadeIndex{0};
                 if (fadeIndex > sampleRate_)
                 {
                     fadeIndex = 0;
@@ -239,8 +239,8 @@ namespace wreath
                     loopers_[RIGHT].Write(SoftLimit(rightDry * dryLevel + rightWet));
                 }
 
-                size_t leftWritePos{loopers_[LEFT].GetWritePos()};
-                size_t rightWritePos{loopers_[RIGHT].GetWritePos()};
+                int32_t leftWritePos{loopers_[LEFT].GetWritePos()};
+                int32_t rightWritePos{loopers_[RIGHT].GetWritePos()};
 
                 // Always write forward at original speed.
                 leftWritePos += 1;
@@ -310,14 +310,14 @@ namespace wreath
             mode_ = mode;
         }
 
-        inline size_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
+        inline int32_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
         inline float GetBufferSeconds(int channel) { return loopers_[channel].GetBufferSeconds(); }
         inline float GetLoopStartSeconds(int channel) { return loopers_[channel].GetLoopStartSeconds(); }
         inline float GetLoopLengthSeconds(int channel) { return loopers_[channel].GetLoopLengthSeconds(); }
         inline float GetPositionSeconds(int channel) { return loopers_[channel].GetPositionSeconds(); }
-        inline size_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
-        inline size_t GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
-        inline size_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
+        inline int32_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
+        inline int32_t GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
+        inline int32_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
         inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
         inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
         inline float GetNextReadPos(int channel) { return loopers_[channel].GetNextReadPos(); }
@@ -348,7 +348,7 @@ namespace wreath
         {
             loopers_[channel].SetMovement(movement);
         }
-        void SetLoopStart(int channel, size_t value)
+        void SetLoopStart(int channel, int32_t value)
         {
             mustSetChannelLoopStart = channel;
             nextLoopStart = value;
@@ -358,7 +358,7 @@ namespace wreath
             mustSetChannelSpeedMult = channel;
             nextSpeedMult = multiplier;
         }
-        void SetLoopLength(int channel, size_t length)
+        void SetLoopLength(int channel, int32_t length)
         {
             mustSetChannelLoopLength = channel;
             nextLoopLength = length;
@@ -377,10 +377,10 @@ namespace wreath
         float nextFilterValue{};
 
         int mustSetChannelLoopStart{NONE};
-        size_t nextLoopStart{};
+        int32_t nextLoopStart{};
 
         int mustSetChannelLoopLength{NONE};
-        size_t nextLoopLength{};
+        int32_t nextLoopLength{};
 
         int mustSetChannelSpeedMult{NONE};
         float nextSpeedMult{};
@@ -398,7 +398,7 @@ namespace wreath
         CrossFade cf_;
         Svf feedbackFilter_;
         //EnvFollow filterEnvelope_;
-        size_t sampleRate_{};
+        int32_t sampleRate_{};
         bool readingActive_{true};
         bool writingActive_{true};
         bool hasChangedLeft_{};

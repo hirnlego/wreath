@@ -2,7 +2,7 @@
 
 #include "head.h"
 #include "Dynamics/crossfade.h"
-#include <stddef.h>
+#include <stdint.h>
 
 namespace wreath
 {
@@ -41,8 +41,8 @@ namespace wreath
         void SetLoopLength(int32_t length);
         void SetMovement(Movement movement);
         bool Buffer(float value);
-        float Read(float pos);
-        void SetWritePos(int32_t pos);
+        float Read();
+        void UpdateWritePos();
         void Restart();
         void SetReadPos(float pos);
         void SetLoopStart(int32_t pos);

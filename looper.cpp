@@ -58,7 +58,6 @@ void Looper::SetMovement(Movement movement)
  */
 void Looper::ClearBuffer()
 {
-    //std::fill(&buffer_[0], &buffer_[maxBufferSamples_ - 1], 0.f);
     memset(buffer_, 0.f, maxBufferSamples_);
 }
 
@@ -118,71 +117,36 @@ void Looper::Restart()
     }
 }
 
-/**
- * @brief Stops the buffering.
- */
 void Looper::StopBuffering()
 {
+    readHead_.InitBuffer(writeHead_.StopBuffering());
     loopStart_ = 0;
     loopStartSeconds_ = 0.f;
-    writePos_ = 0;
-    SetLoopLength(bufferSamples_);
-    SetReadPos(forward_ ? loopStart_ : loopEnd_);
 }
 
 void Looper::SetLoopStart(int32_t pos)
 {
-    loopStart_ = fclamp(pos, 0, bufferSamples_ - 1);
+    loopStart_ = readHead_.SetLoopStart(pos);
+    writeHead_.SetLoopStart(pos);
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
-    UpdateLoopEnd();
 };
 
-void Looper::UpdateLoopEnd()
-{
-    if (loopStart_ + loopLength_ > bufferSamples_)
-    {
-        loopEnd_ = (loopStart_ + loopLength_) - bufferSamples_ - 1;
-    }
-    else
-    {
-        loopEnd_ = loopStart_ + loopLength_ - 1;
-    }
-}
-
-/**
- * @brief Sets the loop length.
- *
- * @param length
- */
 void Looper::SetLoopLength(int32_t length)
 {
-    loopLength_ = fclamp(length, kMinLoopLengthSamples, bufferSamples_);
+    loopLength_ = readHead_.SetLoopLength(length);
+    writeHead_.SetLoopLength(length);
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
-    UpdateLoopEnd();
 }
 
-
-/**
- * @brief Reads from a specified point in the delay line using linear
- *        interpolation. Also applies a fade in and out at the beginning and end
- *        of the loop.
- *
- * @param pos
- * @return float
- */
-float Looper::Read(float pos)
+float Looper::Read()
 {
-
+    readHead_.Read()
 }
 
-/**
- * @brief
- *
- * @param pos
- */
-void Looper::SetWritePos(int32_t pos)
+void Looper::UpdateWritePos()
 {
-    writePos_ = (pos > loopEnd_) ? loopStart_ : pos;
+    writeHead_.UpdatePosition();
+    writePos_ = writeHead_.GetPosition();
 }
 
 float Looper::FindMinValPos(float pos)
@@ -357,8 +321,8 @@ void Looper::HandleFade()
  */
 void Looper::SetReadPos(float pos)
 {
-
-    readPos_ = pos;
+    readHead_.UpdatePosition();
+    readPos_ = readHead_.GetPosition();
     readPosSeconds_ = readPos_ / sampleRate_;
     if (readingActive_ && writingActive_)
     {

@@ -239,14 +239,8 @@ namespace wreath
                     loopers_[RIGHT].Write(SoftLimit(rightDry * dryLevel + rightWet));
                 }
 
-                int32_t leftWritePos{loopers_[LEFT].GetWritePos()};
-                int32_t rightWritePos{loopers_[RIGHT].GetWritePos()};
-
-                // Always write forward at original speed.
-                leftWritePos += 1;
-                rightWritePos += 1;
-                loopers_[LEFT].SetWritePos(leftWritePos);
-                loopers_[RIGHT].SetWritePos(rightWritePos);
+                loopers_[LEFT].UpdateWritePos();
+                loopers_[RIGHT].UpdateWritePos();
 
                 float leftReadPos{loopers_[LEFT].GetReadPos()};
                 float rightReadPos{loopers_[RIGHT].GetReadPos()};

@@ -153,16 +153,20 @@ namespace wreath
             direction_ = FORWARD;
         }
 
-        void SetLoopStart(int32_t start)
+        int32_t SetLoopStart(int32_t start)
         {
             loopStart_ = std::min(std::max(start, static_cast<int32_t>(0)), bufferSamples_ - 1);
             CalculateLoopEnd();
+
+            return loopStart_;
         }
 
-        void SetLoopLength(int32_t length)
+        int32_t SetLoopLength(int32_t length)
         {
             loopLength_ = std::min(std::max(length, static_cast<int32_t>(kMinLoopLengthSamples)), bufferSamples_);
             CalculateLoopEnd();
+
+            return loopLength_;
         }
 
         void SetRate(float rate)

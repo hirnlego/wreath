@@ -36,15 +36,16 @@ namespace wreath
         void Reset();
         void ClearBuffer();
         void StopBuffering();
-        void SetSpeedMult(float speed);
+        void SetRate(float rate);
         // looplength_ = loopEnd_ + (bufferSamples_ - loopStart_) + 1
         void SetLoopLength(int32_t length);
         void SetMovement(Movement movement);
         bool Buffer(float value);
         float Read();
+        void Write(float value);
+        void UpdateReadPos();
         void UpdateWritePos();
         void Restart();
-        void SetReadPos(float pos);
         void SetLoopStart(int32_t pos);
         int32_t GetRandomPosition();
 
@@ -59,7 +60,7 @@ namespace wreath
         inline float GetReadPos() { return readPos_; }
         inline int32_t GetWritePos() { return writePos_; }
         inline float GetNextReadPos() { return nextReadPos_; }
-        inline float GetSpeedMult() { return speedMult_; }
+        inline float GetRate() { return rate_; }
         inline int32_t GetSampleRateSpeed() { return sampleRateSpeed_; }
         inline Movement GetMovement() { return movement_; }
         inline bool IsForwardMovement() { return Movement::FORWARD == movement_; }
@@ -67,18 +68,17 @@ namespace wreath
         inline bool IsPendulumMovement() { return Movement::PENDULUM == movement_; }
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
         inline bool IsGoingForward() { return forward_; }
-        inline void Write(float value) { buffer_[writePos_] = value; }
         bool SetNextReadPos(float pos)
         {
             nextReadPos_ = pos;
 
             return HandlePosBoundaries(nextReadPos_);
-        };
-        inline void SetLoopEnd(int32_t pos) { loopEnd_ = pos; };
-        inline void SetForward(bool forward) { forward_ = forward; };
-        inline void ToggleDirection() { forward_ = !forward_; };
-        inline void ToggleWriting() { writingActive_ = !writingActive_; };
-        inline void ToggleReading() { readingActive_ = !readingActive_; };
+        }
+        inline void SetLoopEnd(int32_t pos) { loopEnd_ = pos; }
+        inline void SetForward(bool forward) { forward_ = forward; }
+        inline void ToggleDirection() { heads_[READ].ToggleDirection(); }
+        inline void ToggleWriting() { heads_[WRITE].ToggleRun();  }
+        inline void ToggleReading() { heads_[READ].ToggleRun(); }
         inline void SetReading(bool active) { readingActive_ = active; };
 
         float temp{};
@@ -102,7 +102,7 @@ namespace wreath
         float fadePos_{};           // Fade position
         float loopStartSeconds_{};  // Start of the loop in seconds
         float loopLengthSeconds_{}; // Length of the loop in seconds
-        float speedMult_{};         // Speed multiplier
+        float rate_{};         // Speed multiplier
         float readSpeed_{};         // Actual read speed
         float writeSpeed_{};        // Actual write speed
         float headsDistance_{};     // Distance in samples between the reading and writing heads
@@ -122,8 +122,7 @@ namespace wreath
         int32_t sampleRateSpeed_{};
         Fade mustFade_{Fade::NONE};
 
-        Head readHead_{Type::READ};
-        Head writeHead_{Type::WRITE};
+        Head heads_[]{{Type::READ}, {Type::WRITE}};
 
         Movement movement_{}; // The current movement type of the looper
         CrossFade cf_;        // Crossfade used for fading in/out of the read value

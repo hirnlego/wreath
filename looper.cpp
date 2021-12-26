@@ -21,17 +21,12 @@ void Looper::Init(int32_t sampleRate, float *mem, int32_t maxBufferSamples)
     cf_.Init(CROSSFADE_CPOW);
 }
 
-/**
- * @brief Sets the speed multiplier, clamping its value just in case.
- *
- * @param multiplier
- */
-void Looper::SetSpeedMult(float multiplier)
+void Looper::SetRate(Type head, float rate)
 {
-    speedMult_ = multiplier;
-    readSpeed_ = sampleRate_ * speedMult_; // samples/s.
+    heads_[head] = rate;
+    readSpeed_ = sampleRate_ * rate_; // samples/s.
     writeSpeed_ = sampleRate_;             // samples/s.
-    sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / speedMult_);
+    sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / rate_);
 }
 
 /**
@@ -80,7 +75,7 @@ void Looper::Reset()
     fadeIndex_ = 0;
     //fadePos_ = 0;
     writePos_ = 0;
-    SetSpeedMult(1.f);
+    SetRate(1.f);
     movement_ = Movement::FORWARD;
     forward_ = Movement::FORWARD == movement_;
 }
@@ -113,40 +108,96 @@ void Looper::Restart()
     {
         writePos_ = loopStart_;
         int32_t pos = FindMinValPos(startPositions[forward_]);
-        SetReadPos(pos);
+        UpdateReadPos(pos);
     }
 }
 
 void Looper::StopBuffering()
 {
-    readHead_.InitBuffer(writeHead_.StopBuffering());
+    heads_[READ].InitBuffer(heads_[WRITE].StopBuffering());
     loopStart_ = 0;
     loopStartSeconds_ = 0.f;
 }
 
 void Looper::SetLoopStart(int32_t pos)
 {
-    loopStart_ = readHead_.SetLoopStart(pos);
-    writeHead_.SetLoopStart(pos);
+    loopStart_ = heads_[READ].SetLoopStart(pos);
+    heads_[WRITE].SetLoopStart(pos);
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
 };
 
 void Looper::SetLoopLength(int32_t length)
 {
-    loopLength_ = readHead_.SetLoopLength(length);
-    writeHead_.SetLoopLength(length);
+    loopLength_ = heads_[READ].SetLoopLength(length);
+    heads_[WRITE].SetLoopLength(length);
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
 }
 
 float Looper::Read()
 {
-    readHead_.Read()
+    float val = heads_[READ].Read();
+
+    // Fade the value if needed.
+    if (mustFade_ != -1)
+    {
+        cf_.SetPos(fadeIndex_ * (1.f / fadeSamples_));
+        float fadeValues[2][2]{{val, 0.f}, {0.f, val}};
+        val = cf_.Process(fadeValues[mustFade_][0], fadeValues[mustFade_][1]);
+        fadeIndex_ += 1;
+        // End and reset the fade when done.
+        if (fadeIndex_ > fadeSamples_)
+        {
+            fadeIndex_ = 0;
+            cf_.SetPos(0.f);
+            // After a fade out there's always a fade in.
+            if (Fade::OUT == mustFade_)
+            {
+                fadeIndex_ = 0;
+                mustFade_ = Fade::IN;
+                val = 0;
+            }
+            else
+            {
+                crossPointFound_ = false;
+                mustFade_ = Fade::NONE;
+            }
+        }
+    }
+
+    return val;
+}
+
+void Looper::Write(float value) 
+{ 
+    heads_[WRITE].Write(value); 
+}
+
+void Looper::UpdateReadPos()
+{
+    heads_[READ].UpdatePosition();
+    readPos_ = heads_[READ].GetPosition();
+    readPosSeconds_ = readPos_ / sampleRate_;
+    if (readingActive_ && writingActive_)
+    {
+        if (readSpeed_ != writeSpeed_ || !forward_)
+        {
+            CalculateHeadsDistance();
+        }
+        if (mustFade_ == Fade::NONE)
+        {
+            CalculateFadeSamples(static_cast<int32_t>(std::round(pos)));
+            if (fadeSamples_ > 0)
+            {
+                HandleFade();
+            }
+        }
+    }
 }
 
 void Looper::UpdateWritePos()
 {
-    writeHead_.UpdatePosition();
-    writePos_ = writeHead_.GetPosition();
+    heads_[WRITE].UpdatePosition();
+    writePos_ = heads_[WRITE].GetPosition();
 }
 
 float Looper::FindMinValPos(float pos)
@@ -311,33 +362,6 @@ void Looper::HandleFade()
         //fadePos_ = writePos_;
         fadeIndex_ = 0;
         mustFade_ = Fade::OUT;
-    }
-}
-
-/**
- * @brief Sets the read position. Also, sets a fade in/out if needed.
- *
- * @param pos
- */
-void Looper::SetReadPos(float pos)
-{
-    readHead_.UpdatePosition();
-    readPos_ = readHead_.GetPosition();
-    readPosSeconds_ = readPos_ / sampleRate_;
-    if (readingActive_ && writingActive_)
-    {
-        if (readSpeed_ != writeSpeed_ || !forward_)
-        {
-            CalculateHeadsDistance();
-        }
-        if (mustFade_ == Fade::NONE)
-        {
-            CalculateFadeSamples(static_cast<int32_t>(std::round(pos)));
-            if (fadeSamples_ > 0)
-            {
-                HandleFade();
-            }
-        }
     }
 }
 

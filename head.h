@@ -17,8 +17,16 @@ namespace wreath
     {
         READ,
         WRITE,
-     };
+    };
 
+    enum Movement
+    {
+        NORMAL,
+        PENDULUM,
+        DRUNK,
+        LAST_MOVEMENT,
+    };
+    
     enum Direction
     {
         BACKWARDS = -1,
@@ -45,7 +53,9 @@ namespace wreath
         int fadeSamples_{};
 
         bool run_{};
+        bool loop_{};
 
+        Movement movement_{};
         Direction direction_{};
 
         static inline float Hermite(float x, float y0, float y1, float y2, float y3)
@@ -62,8 +72,7 @@ namespace wreath
                 if (FORWARD == direction_ && index > loopEnd_)
                 {
                     index = loopStart_ + (index - loopEnd_) - 1;
-                    // Invert direction when in pendulum.
-                    if (Movement::PENDULUM == movement_)
+                    if (PENDULUM == movement_)
                     {
                         index = loopEnd_ - index;
                     }
@@ -72,8 +81,7 @@ namespace wreath
                 else if (BACKWARDS == direction_ && index < loopStart_)
                 {
                     index = loopEnd_ - (loopStart_ - index) + 1;
-                    // Invert direction when in pendulum.
-                    if (Movement::PENDULUM == movement_)
+                    if (PENDULUM == movement_)
                     {
                         index = loopStart_ + std::abs(index);
                     }
@@ -87,13 +95,12 @@ namespace wreath
                     if (index > bufferSamples_ - 1)
                     {
                         // Wrap-around.
-                        index = index - bufferSamples_;
+                        index -= bufferSamples_;
                     }
                     else if (index > loopEnd_ && index < loopStart_)
                     {
                         index = loopStart_;
-                        // Invert direction when in pendulum.
-                        if (Movement::PENDULUM == movement_)
+                        if (PENDULUM == movement_)
                         {
                             index = loopEnd_;
                         }
@@ -109,8 +116,7 @@ namespace wreath
                     else if (index > loopEnd_ && index < loopStart_)
                     {
                         index = loopEnd_;
-                        // Invert direction when in pendulum.
-                        if (Movement::PENDULUM == movement_)
+                        if (PENDULUM == movement_)
                         {
                             index = loopStart_;
                         }
@@ -150,6 +156,9 @@ namespace wreath
             loopStart_ = 0;
             loopEnd_ = 0;
             loopLength_ = 0;
+            run_ = true;
+            loop_ = true;
+            movement_ = NORMAL;
             direction_ = FORWARD;
         }
 
@@ -198,35 +207,7 @@ namespace wreath
 
             float x = index_ - phase1;
 
-            float value = Hermite(x, y0, y1, y2, y3);
-
-            // 2) fade the value if needed.
-            if (mustFade_ != -1)
-            {
-                cf_.SetPos(fadeIndex_ * (1.f / fadeSamples_));
-                float fadeValues[2][2]{{val, 0.f}, {0.f, val}};
-                val = cf_.Process(fadeValues[mustFade_][0], fadeValues[mustFade_][1]);
-                fadeIndex_ += 1;
-                // End and reset the fade when done.
-                if (fadeIndex_ > fadeSamples_)
-                {
-                    fadeIndex_ = 0;
-                    cf_.SetPos(0.f);
-                    // After a fade out there's always a fade in.
-                    if (Fade::OUT == mustFade_)
-                    {
-                        fadeIndex_ = 0;
-                        //fadePos_ = writePos_;
-                        mustFade_ = Fade::IN;
-                        val = 0;
-                    }
-                    else
-                    {
-                        crossPointFound_ = false;
-                        mustFade_ = Fade::NONE;
-                    }
-                }
-            }
+            return Hermite(x, y0, y1, y2, y3);
         }
 
         void Write(float value)
@@ -273,6 +254,11 @@ namespace wreath
         void ToggleDirection()
         {
             direction_ = static_cast<Direction>(direction_ * -1);
+        }
+
+        void ToggleRun()
+        {
+            run_ = !run_;
         }
 
         int32_t GetBufferSamples()

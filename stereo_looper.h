@@ -242,12 +242,6 @@ namespace wreath
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
 
-                float leftReadPos{loopers_[LEFT].GetReadPos()};
-                float rightReadPos{loopers_[RIGHT].GetReadPos()};
-
-                float leftSpeedMult{loopers_[LEFT].GetSpeedMult()};
-                float rightSpeedMult{loopers_[RIGHT].GetSpeedMult()};
-
                 if (!hasCvRestart)
                 {
                     // When drunk there's a small probability of changing direction.
@@ -270,17 +264,8 @@ namespace wreath
                     }
                 }
 
-                // Otherwise, move the reading position normally.
-                hasChangedLeft_ = loopers_[LEFT].SetNextReadPos(loopers_[LEFT].IsGoingForward() ? loopers_[LEFT].GetReadPos() + leftSpeedMult : loopers_[LEFT].GetReadPos() - leftSpeedMult);
-                hasChangedRight_ = loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].IsGoingForward() ? loopers_[RIGHT].GetReadPos() + rightSpeedMult : loopers_[RIGHT].GetReadPos() - rightSpeedMult);
-
-                // Move smoothly to the next position.
-                //fonepole(leftReadPos, loopers_[LEFT].GetNextReadPos(), leftCoeff);
-                //fonepole(rightReadPos, loopers_[RIGHT].GetNextReadPos(), rightCoeff);
-                leftReadPos = loopers_[LEFT].GetNextReadPos();
-                rightReadPos = loopers_[RIGHT].GetNextReadPos();
-                loopers_[LEFT].SetReadPos(leftReadPos);
-                loopers_[RIGHT].SetReadPos(rightReadPos);
+                loopers_[LEFT].UpdateReadPos();
+                loopers_[RIGHT].UpdateReadPos();
             }
 
             cf_.SetPos(fclamp(mix_, 0.f, 1.f));
@@ -298,7 +283,7 @@ namespace wreath
                 loopers_[RIGHT].SetSpeedMult(loopers_[LEFT].GetSpeedMult());
                 loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
                 loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
-                loopers_[RIGHT].SetReadPos(loopers_[LEFT].GetReadPos());
+                loopers_[RIGHT].UpdateReadPos(loopers_[LEFT].GetReadPos());
             }
 
             mode_ = mode;

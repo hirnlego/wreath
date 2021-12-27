@@ -379,8 +379,20 @@ namespace wreath
                 {
                     currentMovement += e.asEncoderTurned.increments;
                     currentMovement = fclamp(currentMovement, 0, 3);
-                    looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, static_cast<Movement>(std::abs(currentMovement - 1)));
-                    looper.SetDirection(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, 1 == currentMovement ? Direction::BACKWARDS : Direction::FORWARD);
+                    if (0 == currentMovement)
+                    {
+                        looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, Movement::NORMAL);
+                        looper.SetDirection(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, Direction::FORWARD);
+                    }
+                    else if (1 == currentMovement)
+                    {
+                        looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, Movement::NORMAL);
+                        looper.SetDirection(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, Direction::BACKWARDS);
+                    }
+                    else
+                    {
+                        looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, static_cast<Movement>(currentMovement - 1));
+                    }
                     break;
                 }
                 case Page::MODE:

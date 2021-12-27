@@ -45,27 +45,6 @@ void Looper::ClearBuffer()
     heads_[WRITE].ClearBuffer();
 }
 
-void Looper::SetRate(float rate)
-{
-    heads_[READ].SetRate(rate);
-    rate_ = rate;
-    readSpeed_ = sampleRate_ * rate_; // samples/s.
-    writeSpeed_ = sampleRate_;             // samples/s.
-    sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / rate_);
-}
-
-void Looper::SetMovement(Movement movement)
-{
-    heads_[READ].SetMovement(movement);
-    movement_ = movement;
-}
-
-void Looper::SetDirection(Direction direction)
-{
-    heads_[READ].SetDirection(direction);
-    direction_ = direction;
-}
-
 bool Looper::Buffer(float value)
 {
     bool end = heads_[WRITE].Buffer(value);
@@ -117,6 +96,27 @@ void Looper::SetLoopLength(int32_t length)
     loopEnd_ = heads_[READ].GetLoopEnd();
 }
 
+void Looper::SetRate(float rate)
+{
+    heads_[READ].SetRate(rate);
+    rate_ = rate;
+    readSpeed_ = sampleRate_ * rate_; // samples/s.
+    writeSpeed_ = sampleRate_;             // samples/s.
+    sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / rate_);
+}
+
+void Looper::SetMovement(Movement movement)
+{
+    heads_[READ].SetMovement(movement);
+    movement_ = movement;
+}
+
+void Looper::SetDirection(Direction direction)
+{
+    heads_[READ].SetDirection(direction);
+    direction_ = direction;
+}
+
 float Looper::Read()
 {
     float val = heads_[READ].Read();
@@ -160,6 +160,7 @@ void Looper::UpdateReadPos()
 {
     readPos_ = heads_[READ].UpdatePosition();
     readPosSeconds_ = readPos_ / sampleRate_;
+    /*
     if (readingActive_ && writingActive_)
     {
         if (readSpeed_ != writeSpeed_ || !direction_)
@@ -175,6 +176,7 @@ void Looper::UpdateReadPos()
             }
         }
     }
+    */
 }
 
 void Looper::UpdateWritePos()
@@ -187,13 +189,14 @@ void Looper::ToggleDirection()
     direction_ = heads_[READ].ToggleDirection();
 }
 
-void Looper::ToggleWriting()
-{
-    writingActive_ = heads_[WRITE].ToggleRun();
-}
 void Looper::ToggleReading()
 {
     readingActive_ = heads_[READ].ToggleRun();
+}
+
+void Looper::ToggleWriting()
+{
+    writingActive_ = heads_[WRITE].ToggleRun();
 }
 
 void Looper::CalculateFadeSamples(int32_t pos)

@@ -79,36 +79,43 @@ namespace wreath
                 // Forward direction.
                 if (FORWARD == direction_ && index > loopEnd_)
                 {
-                    index = loopStart_ + (index - loopEnd_) - 1;
                     if (PENDULUM == movement_ && loop_)
                     {
-                        index = loopEnd_ - index;
+                        index = loopEnd_ - (index - loopEnd_);
 
                         return INVERT;
                     }
+                    else
+                    {
+                        index = loopStart_ + (index - loopEnd_) - 1;
 
-                    return loop_ ? LOOP : STOP;
+                        return loop_ ? LOOP : STOP;
+                    }
                 }
                 // Backwards direction.
                 else if (BACKWARDS == direction_ && index < loopStart_)
                 {
-                    index = loopEnd_ - (loopStart_ - index) + 1;
                     if (PENDULUM == movement_ && loop_)
                     {
-                        index = loopStart_ + std::abs(index);
+                        index = loopStart_ + std::abs(loopStart_ - index);
 
                         return INVERT;
                     }
+                    else
+                    {
+                        index = loopEnd_ - std::abs(loopStart_ - index);
 
-                    return loop_ ? LOOP : STOP;
+                        return loop_ ? LOOP : STOP;
+                    }
                 }
             }
             // Handle inverted loop boundaries (end point comes before start point).
             else
             {
+                float frame{bufferSamples_ - 1.f};
                 if (FORWARD == direction_)
                 {
-                    if (index > bufferSamples_ - 1)
+                    if (index > frame)
                     {
                         // Wrap-around.
                         index -= bufferSamples_;
@@ -117,15 +124,20 @@ namespace wreath
                     }
                     else if (index > loopEnd_ && index < loopStart_)
                     {
-                        index = loopStart_;
                         if (PENDULUM == movement_ && loop_)
                         {
-                            index = loopEnd_;
+                            // Max to avoid overflow.
+                            index = std::max(loopEnd_ - (index - loopEnd_), 0.f);
 
                             return INVERT;
                         }
+                        else
+                        {
+                            // Min to avoid overflow.
+                            index = std::min(loopStart_ + (index - loopEnd_), frame);
 
-                        return loop_ ? LOOP : STOP;
+                            return loop_ ? LOOP : STOP;
+                        }
                     }
                 }
                 else
@@ -133,21 +145,26 @@ namespace wreath
                     if (index < 0)
                     {
                         // Wrap-around.
-                        index = (bufferSamples_ - 1) + index;
+                        index = frame - std::abs(index);
 
                         return loop_ ? LOOP : STOP;
                     }
                     else if (index > loopEnd_ && index < loopStart_)
                     {
-                        index = loopEnd_;
                         if (PENDULUM == movement_ && loop_)
                         {
-                            index = loopStart_;
+                            // Min to avoid overflow.
+                            index = std::min(loopStart_ + (loopStart_ - index), frame);
 
                             return INVERT;
                         }
+                        else
+                        {
+                            // Max to avoid overflow.
+                            index = std::max(loopEnd_ - (loopStart_ - index), 0.f);
 
-                        return loop_ ? LOOP : STOP;
+                            return loop_ ? LOOP : STOP;
+                        }
                     }
                 }
             }
@@ -163,55 +180,52 @@ namespace wreath
                 // Forward direction.
                 if (index > loopEnd_)
                 {
-                    index = FORWARD == direction_ ? loopStart_ + (index - loopEnd_) - 1 : 0;
                     if (PENDULUM == movement_)
                     {
-                        index = loopEnd_ - index;
+                        index = loopEnd_ - (index - loopEnd_) - 1;
+                    }
+                    else
+                    {
+                        index = (FORWARD == direction_) ? loopStart_ + (index - loopEnd_) - 1: 0;
                     }
                 }
                 // Backwards direction.
                 else if (index < loopStart_)
                 {
-                    index = BACKWARDS == direction_ ? loopEnd_ - (loopStart_ - index) + 1 : 0;
                     if (PENDULUM == movement_)
                     {
-                        index = loopStart_ + std::abs(index);
+                        index = loopStart_ + std::abs(loopStart_ - index);
+                    }
+                    else
+                    {
+                        index = (BACKWARDS == direction_) ? loopEnd_ - std::abs(loopStart_ - index) : 0;
                     }
                 }
             }
             // Handle inverted loop boundaries (end point comes before start point).
             else
             {
-                if (FORWARD == direction_)
+                int32_t frame{bufferSamples_ - 1};
+                if (index > frame)
                 {
-                    if (index > bufferSamples_ - 1)
-                    {
-                        // Wrap-around.
-                        index -= bufferSamples_;
-                    }
-                    else if (index > loopEnd_ && index < loopStart_)
-                    {
-                        index = loopStart_;
-                        if (PENDULUM == movement_)
-                        {
-                            index = loopEnd_;
-                        }
-                    }
+                    index -= bufferSamples_;
                 }
-                else
+                else if (index < 0)
                 {
-                    if (index < 0)
+                    // Wrap-around.
+                    index = frame - std::abs(index);
+                }
+                else if (index > loopEnd_ && index < loopStart_)
+                {
+                    if (FORWARD == direction_)
                     {
-                        // Wrap-around.
-                        index = (bufferSamples_ - 1) + index;
+                        // Max/min to avoid overflow.
+                        index = (PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_), frame);
                     }
-                    else if (index > loopEnd_ && index < loopStart_)
+                    else
                     {
-                        index = loopEnd_;
-                        if (PENDULUM == movement_)
-                        {
-                            index = loopStart_;
-                        }
+                        // Max/min to avoid overflow.
+                        index = (PENDULUM == movement_) ? std::min(loopStart_ + (loopStart_ - index), frame) : std::max(loopEnd_ - (loopStart_ - index), static_cast<int32_t>(0));
                     }
                 }
             }

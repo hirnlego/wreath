@@ -325,11 +325,25 @@ namespace wreath
         }
         void SetMovement(int channel, Movement movement)
         {
-            loopers_[channel].SetMovement(movement);
+            if (BOTH == channel)
+            {
+                loopers_[LEFT].SetMovement(movement);
+                loopers_[RIGHT].SetMovement(movement);
+            }
+            else{
+                loopers_[channel].SetMovement(movement);
+            }
         }
         void SetDirection(int channel, Direction direction)
         {
-            loopers_[channel].SetDirection(direction);
+            if (BOTH == channel)
+            {
+                loopers_[LEFT].SetDirection(direction);
+                loopers_[RIGHT].SetDirection(direction);
+            }
+            else{
+                loopers_[channel].SetDirection(direction);
+            }
         }
         void SetLoopStart(int channel, int32_t value)
         {

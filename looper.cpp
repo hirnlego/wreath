@@ -160,10 +160,10 @@ void Looper::UpdateReadPos()
 {
     readPos_ = heads_[READ].UpdatePosition();
     readPosSeconds_ = readPos_ / sampleRate_;
-    /*
+
     if (readingActive_ && writingActive_)
     {
-        if (readSpeed_ != writeSpeed_ || !direction_)
+        if (readSpeed_ != writeSpeed_ || !IsGoingForward())
         {
             CalculateHeadsDistance();
         }
@@ -176,7 +176,6 @@ void Looper::UpdateReadPos()
             }
         }
     }
-    */
 }
 
 void Looper::UpdateWritePos()

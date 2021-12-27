@@ -50,6 +50,7 @@ namespace wreath
         int32_t maxBufferSamples_{}; // The whole buffer length in samples
         int32_t bufferSamples_{};    // The written buffer length in samples
 
+        int32_t intIndex_{};
         float index_{};
         float rate_{};
 
@@ -290,12 +291,21 @@ namespace wreath
         }
         */
 
+        // calculate an exponential moving average
+        float calcEMA (float previousAverage, int timePeriod, float newStock)
+        {
+            auto mult = 2.0 / (timePeriod + 1.0);
+            auto rslt = (newStock - previousAverage) * mult + previousAverage;
+            return rslt;
+        }
+
     public:
         Head(Type type): type_{type} {}
         ~Head() {}
 
         void Reset()
         {
+            intIndex_ = 0;
             index_ = 0.f;
             rate_ = 1.f;
             loopStart_ = 0;
@@ -337,8 +347,9 @@ namespace wreath
 
         float UpdatePosition()
         {
-            index_ += (FORWARD == direction_) ? rate_ : -rate_;
+            index_ += rate_ * direction_;
             Action action = WrapIndex(index_);
+            intIndex_ = static_cast<int32_t>(std::round(index_));
             switch (action)
             {
             case STOP:
@@ -359,9 +370,9 @@ namespace wreath
         float Read()
         {
             int32_t phase1 = static_cast<int32_t>(index_);
-            int32_t phase0 = phase1 - 1;
-            int32_t phase2 = phase1 + 1;
-            int32_t phase3 = phase1 + 2;
+            int32_t phase0 = phase1 - 1 * direction_;
+            int32_t phase2 = phase1 + 1 * direction_;
+            int32_t phase3 = phase1 + 2 * direction_;
 
             float y0 = buffer_[WrapIndex(phase0)];
             float y1 = buffer_[WrapIndex(phase1)];
@@ -375,8 +386,7 @@ namespace wreath
 
         void Write(float value)
         {
-            int32_t index{static_cast<int32_t>(index_)};
-            buffer_[WrapIndex(index)] = value;
+            buffer_[WrapIndex(intIndex_)] = value;
         }
 
         void ClearBuffer()
@@ -386,16 +396,15 @@ namespace wreath
 
         bool Buffer(float value)
         {
-            int32_t index{static_cast<int32_t>(index_)};
             // Handle end of buffer.
-            if (index > maxBufferSamples_ - 1)
+            if (intIndex_ > maxBufferSamples_ - 1)
             {
                 return true;
             }
 
-            buffer_[index] = value;
-            bufferSamples_ = index;
-            index_++;
+            buffer_[intIndex_] = value;
+            bufferSamples_ = intIndex_;
+            intIndex_++;
 
             return false;
         }
@@ -409,7 +418,7 @@ namespace wreath
 
         int32_t StopBuffering()
         {
-            index_ = 0;
+            intIndex_ = 0;
             loopLength_ = bufferSamples_;
             loopEnd_ = loopLength_ - 1 ;
             ResetPosition();

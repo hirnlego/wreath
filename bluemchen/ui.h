@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hw.h"
+#include "head.h"
 #include "wreath.h"
 #include "Utility/dsp.h"
 #include <string>
@@ -64,6 +65,7 @@ namespace wreath
         DUAL,
     };
 
+    short currentMovement{};
     Page selectedPage{Page::HOME};
     bool enteredPage{false};
     MenuClickOp clickOp{MenuClickOp::MENU};
@@ -111,7 +113,7 @@ namespace wreath
             if (!enteredPage)
             {
                 float loopLength = looper.GetLoopLengthSeconds(currentLooper);
-                float position = looper.GetPositionSeconds(currentLooper);
+                float position = looper.GetReadPosSeconds(currentLooper);
                 // Write read position and the loop length in seconds.
                 if (loopLength > 1.f)
                 {
@@ -148,15 +150,15 @@ namespace wreath
                 cursor = std::floor(looper.GetReadPos(i) * step);
                 hw.display.DrawRect(cursor, 20 + y, cursor, 21 + y, true, true);
                 // Draw the start position depending on the looper movement.
-                if (Looper::Movement::FORWARD == looper.GetMovement(i))
+                if (Movement::NORMAL == looper.GetMovement(i) && looper.IsGoingForward(i))
                 {
                     cursor = start;
                 }
-                else if (Looper::Movement::BACKWARDS == looper.GetMovement(i))
+                else if (Movement::NORMAL == looper.GetMovement(i) && !looper.IsGoingForward(i))
                 {
                     cursor = end;
                 }
-                else if (Looper::Movement::PENDULUM == looper.GetMovement(i))
+                else if (Movement::PENDULUM == looper.GetMovement(i))
                 {
                     cursor = looper.IsGoingForward(i) ? end : start;
                 }
@@ -233,7 +235,7 @@ namespace wreath
                 break;
             }
             case Page::MOVEMENT:
-                mpaland::sprintf(cstr, "%s%s", cLR, movementNames[static_cast<int>(looper.GetMovement(currentLooper))]);
+                mpaland::sprintf(cstr, "%s%s", cLR, movementNames[currentMovement]);
                 break;
             case Page::MODE:
                 mpaland::sprintf(cstr, "%s", modeNames[static_cast<int>(looper.GetMode())]);
@@ -375,12 +377,10 @@ namespace wreath
                 }
                 case Page::MOVEMENT:
                 {
-                    int currentMovement{looper.GetMovement(currentLooper) + e.asEncoderTurned.increments};
-                    looper.SetMovement(currentLooper, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
-                    if (!looper.IsDualMode())
-                    {
-                        looper.SetMovement(1, static_cast<Looper::Movement>(fclamp(currentMovement, 0, Looper::Movement::LAST_MOVEMENT - 1)));
-                    }
+                    currentMovement += e.asEncoderTurned.increments;
+                    currentMovement = fclamp(currentMovement, 0, 3);
+                    looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, static_cast<Movement>(std::abs(currentMovement - 1)));
+                    looper.SetDirection(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, 1 == currentMovement ? Direction::BACKWARDS : Direction::FORWARD);
                     break;
                 }
                 case Page::MODE:

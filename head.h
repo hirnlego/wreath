@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <algorithm>
+#include <cstring>
 
 namespace wreath
 {
@@ -19,14 +20,21 @@ namespace wreath
         WRITE,
     };
 
+    enum Action
+    {
+        NONE,
+        LOOP,
+        INVERT,
+        STOP,
+    };
+
     enum Movement
     {
         NORMAL,
         PENDULUM,
         DRUNK,
-        LAST_MOVEMENT,
     };
-    
+
     enum Direction
     {
         BACKWARDS = -1,
@@ -63,7 +71,7 @@ namespace wreath
             return (((0.5f * (y3 - y0) + 1.5f * (y1 - y2)) * x + (y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3)) * x + 0.5f * (y2 - y0)) * x + y1;
         }
 
-        float WrapIndex(float index)
+        Action WrapIndex(float &index)
         {
             // Handle normal loop boundaries.
             if (loopEnd_ > loopStart_)
@@ -72,15 +80,99 @@ namespace wreath
                 if (FORWARD == direction_ && index > loopEnd_)
                 {
                     index = loopStart_ + (index - loopEnd_) - 1;
+                    if (PENDULUM == movement_ && loop_)
+                    {
+                        index = loopEnd_ - index;
+
+                        return INVERT;
+                    }
+
+                    return loop_ ? LOOP : STOP;
+                }
+                // Backwards direction.
+                else if (BACKWARDS == direction_ && index < loopStart_)
+                {
+                    index = loopEnd_ - (loopStart_ - index) + 1;
+                    if (PENDULUM == movement_ && loop_)
+                    {
+                        index = loopStart_ + std::abs(index);
+
+                        return INVERT;
+                    }
+
+                    return loop_ ? LOOP : STOP;
+                }
+            }
+            // Handle inverted loop boundaries (end point comes before start point).
+            else
+            {
+                if (FORWARD == direction_)
+                {
+                    if (index > bufferSamples_ - 1)
+                    {
+                        // Wrap-around.
+                        index -= bufferSamples_;
+
+                        return loop_ ? LOOP : STOP;
+                    }
+                    else if (index > loopEnd_ && index < loopStart_)
+                    {
+                        index = loopStart_;
+                        if (PENDULUM == movement_ && loop_)
+                        {
+                            index = loopEnd_;
+
+                            return INVERT;
+                        }
+
+                        return loop_ ? LOOP : STOP;
+                    }
+                }
+                else
+                {
+                    if (index < 0)
+                    {
+                        // Wrap-around.
+                        index = (bufferSamples_ - 1) + index;
+
+                        return loop_ ? LOOP : STOP;
+                    }
+                    else if (index > loopEnd_ && index < loopStart_)
+                    {
+                        index = loopEnd_;
+                        if (PENDULUM == movement_ && loop_)
+                        {
+                            index = loopStart_;
+
+                            return INVERT;
+                        }
+
+                        return loop_ ? LOOP : STOP;
+                    }
+                }
+            }
+
+            return NONE;
+        }
+
+        int32_t WrapIndex(int32_t index)
+        {
+            // Handle normal loop boundaries.
+            if (loopEnd_ > loopStart_)
+            {
+                // Forward direction.
+                if (index > loopEnd_)
+                {
+                    index = FORWARD == direction_ ? loopStart_ + (index - loopEnd_) - 1 : 0;
                     if (PENDULUM == movement_)
                     {
                         index = loopEnd_ - index;
                     }
                 }
                 // Backwards direction.
-                else if (BACKWARDS == direction_ && index < loopStart_)
+                else if (index < loopStart_)
                 {
-                    index = loopEnd_ - (loopStart_ - index) + 1;
+                    index = BACKWARDS == direction_ ? loopEnd_ - (loopStart_ - index) + 1 : 0;
                     if (PENDULUM == movement_)
                     {
                         index = loopStart_ + std::abs(index);
@@ -139,15 +231,54 @@ namespace wreath
             }
         }
 
+        /*
+        float FindMinValPos(float pos)
+        {
+            float min{};
+            float minPos{pos};
+            float value{buffer_[static_cast<int32_t>(std::round(pos))]};
+
+            for (int i = 0; i < 10; i++)
+            {
+                pos = pos + (forward_ ? i : -i);
+                HandlePosBoundaries(pos);
+                float val = buffer_[static_cast<int32_t>(std::round(pos))];
+                if (std::abs(value - val) < min)
+                {
+                    min = val;
+                    minPos = pos;
+                }
+            }
+
+            return minPos;
+        }
+
+        float ZeroCrossingPos(float pos)
+        {
+            int i;
+            bool sign1, sign2;
+
+            for (i = 0; i < kSamplesToFade; i++)
+            {
+                float pos1 = pos + i;
+                HandlePosBoundaries(pos1);
+                sign1 = buffer_[static_cast<int32_t>(std::round(pos))] > 0;
+                float pos2 = pos1 + 1;
+                HandlePosBoundaries(pos2);
+                sign2 = buffer_[static_cast<int32_t>(std::round(pos2))] > 0;
+                if (sign1 != sign2)
+                {
+                    return pos1;
+                }
+            }
+
+            return pos;
+        }
+        */
+
     public:
         Head(Type type): type_{type} {}
         ~Head() {}
-
-        void Init(float *buffer, int32_t maxBufferSamples)
-        {
-            buffer_ = buffer;
-            maxBufferSamples_ = maxBufferSamples;
-        }
 
         void Reset()
         {
@@ -160,6 +291,13 @@ namespace wreath
             loop_ = true;
             movement_ = NORMAL;
             direction_ = FORWARD;
+        }
+
+        void Init(float *buffer, int32_t maxBufferSamples)
+        {
+            buffer_ = buffer;
+            maxBufferSamples_ = maxBufferSamples;
+            Reset();
         }
 
         int32_t SetLoopStart(int32_t start)
@@ -178,19 +316,30 @@ namespace wreath
             return loopLength_;
         }
 
-        void SetRate(float rate)
-        {
-            rate_ = rate;
-        }
+        inline void SetRate(float rate) { rate_ = rate; }
+        inline void SetMovement(Movement movement) { movement_ = movement; }
+        inline void SetDirection(Direction direction) { direction_ = direction; }
+        inline void ResetPosition() { index_ = (FORWARD == direction_ ) ? loopStart_ : loopEnd_; }
 
-        void SetDirection(Direction direction)
+        float UpdatePosition()
         {
-            direction_ = direction;
-        }
+            index_ += (FORWARD == direction_) ? rate_ : -rate_;
+            Action action = WrapIndex(index_);
+            switch (action)
+            {
+            case STOP:
+                run_ = false;
+                break;
 
-        void UpdatePosition()
-        {
-            index_ = WrapIndex(index_ + rate_);
+            case INVERT:
+                ToggleDirection();
+                break;
+
+            default:
+                break;
+            }
+
+            return index_;
         }
 
         float Read()
@@ -212,19 +361,27 @@ namespace wreath
 
         void Write(float value)
         {
+            int32_t index{static_cast<int32_t>(index_)};
+            buffer_[WrapIndex(index)] = value;
+        }
 
+        void ClearBuffer()
+        {
+            memset(buffer_, 0.f, maxBufferSamples_);
         }
 
         bool Buffer(float value)
         {
+            int32_t index{static_cast<int32_t>(index_)};
             // Handle end of buffer.
-            if (index_ > maxBufferSamples_ - 1)
+            if (index > maxBufferSamples_ - 1)
             {
                 return true;
             }
 
-            buffer_[index_++] = value;
-            bufferSamples_ = index_;
+            buffer_[index] = value;
+            bufferSamples_ = index;
+            index_++;
 
             return false;
         }
@@ -246,39 +403,23 @@ namespace wreath
             return bufferSamples_;
         }
 
-        void ResetPosition()
-        {
-            index_ = (FORWARD == direction_ )? loopStart_ : loopEnd_);
-        }
-
-        void ToggleDirection()
+        inline Direction ToggleDirection()
         {
             direction_ = static_cast<Direction>(direction_ * -1);
-        }
 
-        void ToggleRun()
+            return direction_;
+        }
+        inline bool ToggleRun()
         {
             run_ = !run_;
+
+            return run_;
         }
 
-        int32_t GetBufferSamples()
-        {
-            return bufferSamples_;
-        }
-
-        float GetRate()
-        {
-            return rate_;
-        }
-
-        float GetPosition()
-        {
-            return index_;
-        }
-
-        bool IsGoingForward()
-        {
-            return FORWARD == direction_;
-        }
+        inline int32_t GetBufferSamples() { return bufferSamples_; }
+        inline int32_t GetLoopEnd() { return loopEnd_; }
+        inline float GetRate() { return rate_; }
+        inline float GetPosition() { return index_; }
+        bool IsGoingForward() { return FORWARD == direction_; }
     };
 }

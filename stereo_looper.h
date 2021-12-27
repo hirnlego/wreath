@@ -1,7 +1,7 @@
 #pragma once
 
+#include "head.h"
 #include "looper.h"
-//#include "envelope_follower.h"
 #include "Utility/dsp.h"
 #include "Filters/svf.h"
 #include "dev/sdram.h"
@@ -183,13 +183,13 @@ namespace wreath
                 switch (mustSetChannelSpeedMult)
                 {
                 case BOTH:
-                    loopers_[LEFT].SetSpeedMult(nextSpeedMult);
-                    loopers_[RIGHT].SetSpeedMult(nextSpeedMult);
+                    loopers_[LEFT].SetRate(nextSpeedMult);
+                    loopers_[RIGHT].SetRate(nextSpeedMult);
                     mustSetChannelSpeedMult = NONE;
                     break;
                 case LEFT:
                 case RIGHT:
-                    loopers_[mustSetChannelSpeedMult].SetSpeedMult(nextSpeedMult);
+                    loopers_[mustSetChannelSpeedMult].SetRate(nextSpeedMult);
                     mustSetChannelSpeedMult = NONE;
                     break;
 
@@ -199,8 +199,8 @@ namespace wreath
 
                 if (readingActive_)
                 {
-                    leftOut = loopers_[LEFT].Read(loopers_[LEFT].GetReadPos());
-                    rightOut = loopers_[RIGHT].Read(loopers_[RIGHT].GetReadPos());
+                    leftOut = loopers_[LEFT].Read();
+                    rightOut = loopers_[RIGHT].Read();
                 }
 
                 // In cross mode swap the two channels, so what's read in the
@@ -280,10 +280,10 @@ namespace wreath
             if (IsDualMode() && Mode::DUAL != mode)
             {
                 loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
-                loopers_[RIGHT].SetSpeedMult(loopers_[LEFT].GetSpeedMult());
+                loopers_[RIGHT].SetRate(loopers_[LEFT].GetRate());
                 loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
                 loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
-                loopers_[RIGHT].UpdateReadPos(loopers_[LEFT].GetReadPos());
+                loopers_[RIGHT].UpdateReadPos();
             }
 
             mode_ = mode;
@@ -293,15 +293,15 @@ namespace wreath
         inline float GetBufferSeconds(int channel) { return loopers_[channel].GetBufferSeconds(); }
         inline float GetLoopStartSeconds(int channel) { return loopers_[channel].GetLoopStartSeconds(); }
         inline float GetLoopLengthSeconds(int channel) { return loopers_[channel].GetLoopLengthSeconds(); }
-        inline float GetPositionSeconds(int channel) { return loopers_[channel].GetPositionSeconds(); }
+        inline float GetReadPosSeconds(int channel) { return loopers_[channel].GetReadPosSeconds(); }
         inline int32_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
         inline int32_t GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
         inline int32_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
         inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
         inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
         inline float GetNextReadPos(int channel) { return loopers_[channel].GetNextReadPos(); }
-        inline float GetSpeedMult(int channel) { return loopers_[channel].GetSpeedMult(); }
-        inline Looper::Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
+        inline float GetRate(int channel) { return loopers_[channel].GetRate(); }
+        inline Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
         inline bool IsGoingForward(int channel) { return loopers_[channel].IsGoingForward(); }
 
         inline bool IsStartingUp() { return State::INIT == state_; }
@@ -323,16 +323,20 @@ namespace wreath
             loopers_[LEFT].SetReading(active);
             loopers_[RIGHT].SetReading(active);
         }
-        void SetMovement(int channel, Looper::Movement movement)
+        void SetMovement(int channel, Movement movement)
         {
             loopers_[channel].SetMovement(movement);
+        }
+        void SetDirection(int channel, Direction direction)
+        {
+            loopers_[channel].SetDirection(direction);
         }
         void SetLoopStart(int channel, int32_t value)
         {
             mustSetChannelLoopStart = channel;
             nextLoopStart = value;
         }
-        void SetSpeedMult(int channel, float multiplier)
+        void SetRate(int channel, float multiplier)
         {
             mustSetChannelSpeedMult = channel;
             nextSpeedMult = multiplier;

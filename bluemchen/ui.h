@@ -70,8 +70,25 @@ namespace wreath
     bool enteredPage{false};
     MenuClickOp clickOp{MenuClickOp::MENU};
     bool buttonPressed{false};
-    int currentLooper{0};
+    short currentLooper{0};
     UiEventQueue eventQueue;
+
+    static short MovementToMenu(short channel)
+    {
+        short movement{looper.GetMovement(channel)};
+
+        return movement == 0 ? movement + !looper.IsGoingForward(channel) : movement + 1;
+    }
+
+    static void MenuToMovement(short movement)
+    {
+        Movement m = (movement < 2) ? Movement::NORMAL : static_cast<Movement>(movement - 1);
+        looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, m);
+        if (movement < 2)
+        {
+            looper.SetDirection(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, static_cast<Direction>(movement * -2 + 1));
+        }
+    }
 
     inline static void UpdateOled()
     {
@@ -235,7 +252,7 @@ namespace wreath
                 break;
             }
             case Page::MOVEMENT:
-                mpaland::sprintf(cstr, "%s%s", cLR, movementNames[currentMovement]);
+                mpaland::sprintf(cstr, "%s%s", cLR, movementNames[MovementToMenu(currentLooper)]);
                 break;
             case Page::MODE:
                 mpaland::sprintf(cstr, "%s", modeNames[static_cast<int>(looper.GetMode())]);
@@ -377,22 +394,8 @@ namespace wreath
                 }
                 case Page::MOVEMENT:
                 {
-                    currentMovement += e.asEncoderTurned.increments;
-                    currentMovement = fclamp(currentMovement, 0, 3);
-                    if (0 == currentMovement)
-                    {
-                        looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, Movement::NORMAL);
-                        looper.SetDirection(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, Direction::FORWARD);
-                    }
-                    else if (1 == currentMovement)
-                    {
-                        looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, Movement::NORMAL);
-                        looper.SetDirection(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, Direction::BACKWARDS);
-                    }
-                    else
-                    {
-                        looper.SetMovement(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, static_cast<Movement>(currentMovement - 1));
-                    }
+                    Movement movement = static_cast<Movement>(fclamp(MovementToMenu(currentLooper) + e.asEncoderTurned.increments, 0, 3));
+                    MenuToMovement(movement);
                     break;
                 }
                 case Page::MODE:

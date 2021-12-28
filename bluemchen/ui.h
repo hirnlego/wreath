@@ -297,6 +297,11 @@ namespace wreath
             }
             else if (clickOp == MenuClickOp::CLEAR)
             {
+                // Unfreeze if frozen.
+                if (looper.IsFrozen())
+                {
+                    looper.ToggleFreeze();
+                }
                 // Clear the buffer.
                 looper.mustClearBuffer = true;
                 clickOp = MenuClickOp::MENU;

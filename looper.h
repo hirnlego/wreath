@@ -8,6 +8,7 @@ namespace wreath
 {
     using namespace daisysp;
 
+    constexpr int kSamplesToFade{240}; // Note: 240 samples is 5ms @ 48KHz.
 
     class Looper
     {

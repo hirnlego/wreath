@@ -12,7 +12,6 @@
 namespace wreath
 {
     constexpr int kMinLoopLengthSamples{48};
-    constexpr int kSamplesToFade{240}; // Note: 240 samples is 5ms @ 48KHz.
 
     enum Type
     {
@@ -60,6 +59,7 @@ namespace wreath
 
         int fadeIndex_{};
         int fadeSamples_{};
+        bool fading_{};
 
         bool run_{};
         bool loop_{};
@@ -292,11 +292,11 @@ namespace wreath
         */
 
         // calculate an exponential moving average
-        float calcEMA (float previousAverage, int timePeriod, float newStock)
+        float Average(float oldValue, float newValue, int timePeriod)
         {
             auto mult = 2.0 / (timePeriod + 1.0);
-            auto rslt = (newStock - previousAverage) * mult + previousAverage;
-            return rslt;
+
+            return (newValue - oldValue) * mult + oldValue;
         }
 
     public:
@@ -367,6 +367,28 @@ namespace wreath
             return index_;
         }
 
+        float fastAvg{};
+        float slowAvg{};
+        float prevDifference{};
+        float threshold{0.1f};
+        float oldValue{};
+
+        void Fade(int samples)
+        {
+            fadeIndex_ = 0;
+            fadeSamples_ = samples;
+            fading_ = true;
+
+            fastAvg = 0.f;
+            slowAvg = 0.f;
+            prevDifference = 0.f;
+        }
+
+        float ExpAvg(float sample, float avg, float w)
+        {
+            return w * sample + (1 - w) * avg;
+        }
+
         float Read()
         {
             int32_t phase1 = static_cast<int32_t>(index_);
@@ -381,7 +403,35 @@ namespace wreath
 
             float x = index_ - phase1;
 
-            return Hermite(x, y0, y1, y2, y3);
+            float newValue = Hermite(x, y0, y1, y2, y3);
+
+            if (fading_)
+            {
+                float val = newValue + 10;
+                fastAvg = ExpAvg(val, fastAvg, 0.25);
+                slowAvg = ExpAvg(val, slowAvg, 0.0625);
+                float difference = std::abs(fastAvg - slowAvg);
+                bool isEdge = prevDifference < threshold && difference >= threshold;
+                newValue = val - 10;
+                if (isEdge)
+                {
+                    // When an edge is detected we could interpolate each of the
+                    // following samples with two before and two after.
+                    newValue = oldValue;
+                }
+                prevDifference = difference;
+                oldValue = newValue;
+                //newValue = val - difference - 10;
+                //float oldValue = buffer_[WrapIndex(intIndex_ - 1 * direction_)];
+                //newValue = Average(oldValue, newValue, fadeIndex_);
+                fadeIndex_++;
+                if (fadeIndex_ > fadeSamples_)
+                {
+                    fading_ = false;
+                }
+            }
+
+            return newValue;
         }
 
         void Write(float value)

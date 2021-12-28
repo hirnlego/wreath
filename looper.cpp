@@ -22,7 +22,8 @@ void Looper::Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples)
 
 void Looper::Reset()
 {
-    ClearBuffer();
+    heads_[READ].Reset();
+    heads_[WRITE].Reset();
     bufferSamples_ = 0;
     bufferSeconds_ = 0.f;
     loopStart_ = 0;
@@ -124,6 +125,13 @@ float Looper::Read()
     // Fade the value if needed.
     if (mustFade_ != -1)
     {
+        fadeIndex_++;
+        if (fadeIndex_ > fadeSamples_)
+        {
+            crossPointFound_ = false;
+            mustFade_ = Fade::NONE;
+        }
+        /*
         cf_.SetPos(fadeIndex_ * (1.f / fadeSamples_));
         float fadeValues[2][2]{{val, 0.f}, {0.f, val}};
         val = cf_.Process(fadeValues[mustFade_][0], fadeValues[mustFade_][1]);
@@ -138,7 +146,7 @@ float Looper::Read()
             {
                 fadeIndex_ = 0;
                 mustFade_ = Fade::IN;
-                val = 0;
+                val = 0.f;
             }
             else
             {
@@ -146,6 +154,7 @@ float Looper::Read()
                 mustFade_ = Fade::NONE;
             }
         }
+        */
     }
 
     return val;
@@ -200,17 +209,20 @@ void Looper::ToggleWriting()
 
 void Looper::CalculateFadeSamples(int32_t pos)
 {
+    fadeSamples_ = kSamplesToFade;
+
+    /* TODO?
     if (loopLength_ < kSamplesToFade)
     {
         fadeSamples_ = 0;
     }
 
-    else if (direction_ && pos + kSamplesToFade > loopEnd_)
+    else if (IsGoingForward() && pos + kSamplesToFade > loopEnd_)
     {
         fadeSamples_ = loopEnd_ - static_cast<int>(pos);
     }
 
-    else if (direction_ && pos - kSamplesToFade < loopStart_)
+    else if (IsGoingForward() && pos - kSamplesToFade < loopStart_)
     {
         fadeSamples_ = static_cast<int>(pos);
     }
@@ -219,6 +231,7 @@ void Looper::CalculateFadeSamples(int32_t pos)
     {
         fadeSamples_ = kSamplesToFade;
     }
+    */
 }
 
 void Looper::CalculateHeadsDistance()
@@ -226,13 +239,13 @@ void Looper::CalculateHeadsDistance()
     // forward, rp > wp, ws > rs = rp - wp
     // backwards, rp > wp, ws > rs = rp - wp
     // backwards, rp > wp, rs > ws = rp - wp
-    if (readPos_ > writePos_ && ((direction_ && writeSpeed_ > readSpeed_) || (!direction_ && readPos_ > writePos_)))
+    if (readPos_ > writePos_ && ((IsGoingForward() && writeSpeed_ > readSpeed_) || (!IsGoingForward() && readPos_ > writePos_)))
     {
         headsDistance_ = readPos_ - writePos_;
     }
 
     // forward, rp > wp, rs > ws = b - rp + wp
-    else if (direction_ && readPos_ > writePos_)
+    else if (IsGoingForward() && readPos_ > writePos_)
     {
         headsDistance_ = bufferSamples_ - readPos_ + writePos_;
     }
@@ -240,13 +253,13 @@ void Looper::CalculateHeadsDistance()
     // forward, wp > rp, ws > rs = b - wp + rp
     // backwards, wp > rp, ws > rs = b - wp + rp
     // backwards, wp > rp, rs > ws = b - wp + rp
-    else if ((direction_ && writePos_ > readPos_ && writeSpeed_ > readSpeed_) || (!direction_ && writePos_ > readPos_))
+    else if ((IsGoingForward() && writePos_ > readPos_ && writeSpeed_ > readSpeed_) || (!IsGoingForward() && writePos_ > readPos_))
     {
         headsDistance_ = bufferSamples_ - writePos_ + readPos_;
     }
 
     // forward, wp > rp, rs > ws = wp - rp
-    else if (direction_ && readSpeed_ > writeSpeed_)
+    else if (IsGoingForward() && readSpeed_ > writeSpeed_)
     {
         headsDistance_ = writePos_ - readPos_;
     }
@@ -266,11 +279,11 @@ void Looper::HandleFade()
     // When the two heads are going at different speeds, we must calculate
     // the point in which the two will cross each other so we can set up a
     // fading accordingly.
-    if ((readSpeed_ != writeSpeed_ || !direction_) && headsDistance_ > 0 && headsDistance_ <= fadeSamples_ * 2 && !crossPointFound_ && writingActive_)
+    if ((readSpeed_ != writeSpeed_ || !IsGoingForward()) && headsDistance_ > 0 && headsDistance_ <= fadeSamples_ * 2 && !crossPointFound_ && writingActive_)
     {
         float deltaTime{};
         float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
-        if (!direction_)
+        if (!IsGoingForward())
         {
             relSpeed = writeSpeed_ + readSpeed_;
         }
@@ -299,8 +312,8 @@ void Looper::HandleFade()
     // - we're going forward and are right at the beginning of the loop;
     // - we're going backwards and are right at the end of the loop;
     // - we're going backwards, or at a different speed, and the two heads have just met (note that at this point the write position already stepped forward, so we must check against crossPoint + 1).
-    if ((direction_ && writePos_ == loopStart_) ||
-        (!direction_ && writePos_ == loopEnd_))
+    if ((IsGoingForward() && writePos_ == loopStart_) ||
+        (!IsGoingForward() && writePos_ == loopEnd_))
     {
         //fadePos_ = writePos_;
         //fadeIndex_ = 0;
@@ -313,6 +326,7 @@ void Looper::HandleFade()
     // - we're going backwards, or at a different speed, and the two heads are about to meet.
     else if ((crossPointFound_ && (writePos_ == crossPoint - fadeSamples_)))
     {
+        heads_[READ].Fade(fadeSamples_);
         fadeIndex_ = 0;
         mustFade_ = Fade::OUT;
     }
@@ -326,11 +340,11 @@ void Looper::HandleFade()
 int32_t Looper::GetRandomPosition()
 {
     int32_t pos{loopStart_ + rand() % (loopLength_ - 1)};
-    if (direction_ && pos > loopEnd_)
+    if (IsGoingForward() && pos > loopEnd_)
     {
         pos = loopEnd_;
     }
-    else if (!direction_ && pos < loopStart_)
+    else if (!IsGoingForward() && pos < loopStart_)
     {
         pos = loopStart_;
     }

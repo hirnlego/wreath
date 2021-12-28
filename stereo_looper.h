@@ -15,7 +15,8 @@ namespace wreath
     constexpr int32_t kSampleRate{48000};
     constexpr int kBufferSeconds{150};                   // 2:30 minutes max
     const float kMinSamplesForTone{kSampleRate * 0.03f}; // 30ms
-    const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
+    //const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
+    const int32_t kBufferSamples{48000};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightBuffer_[kBufferSamples];
@@ -55,6 +56,8 @@ namespace wreath
             sampleRate_ = sampleRate;
             loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSamples);
             loopers_[RIGHT].Init(sampleRate_, rightBuffer_, kBufferSamples);
+            loopers_[LEFT].SetDirection(Direction::BACKWARDS);
+            loopers_[RIGHT].SetDirection(Direction::BACKWARDS);
             state_ = State::INIT;
             cf_.Init(CROSSFADE_CPOW);
             feedbackFilter_.Init(sampleRate_);

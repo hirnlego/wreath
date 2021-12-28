@@ -389,6 +389,17 @@ namespace wreath
             return w * sample + (1 - w) * avg;
         }
 
+        bool Edge(float value)
+        {
+            fastAvg = ExpAvg(value, fastAvg, 0.25);
+            slowAvg = ExpAvg(value, slowAvg, 0.0625);
+            float difference = std::abs(fastAvg - slowAvg);
+            bool edge = prevDifference < threshold && difference >= threshold;
+            prevDifference = difference;
+
+            return edge;
+        }
+
         float Read()
         {
             int32_t phase1 = static_cast<int32_t>(index_);
@@ -407,23 +418,16 @@ namespace wreath
 
             if (fading_)
             {
-                float val = newValue + 10;
-                fastAvg = ExpAvg(val, fastAvg, 0.25);
-                slowAvg = ExpAvg(val, slowAvg, 0.0625);
-                float difference = std::abs(fastAvg - slowAvg);
-                bool isEdge = prevDifference < threshold && difference >= threshold;
-                newValue = val - 10;
-                if (isEdge)
+                if (Edge(newValue))
                 {
-                    // When an edge is detected we could interpolate each of the
-                    // following samples with two before and two after.
-                    newValue = oldValue;
+                    // Switch-and-ramp
+                    // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
+                    // When an edge is detected we get the sample before the edge 
+                    // and fade it for a few samples to compensate.
+                    // TODO
                 }
-                prevDifference = difference;
                 oldValue = newValue;
-                //newValue = val - difference - 10;
-                //float oldValue = buffer_[WrapIndex(intIndex_ - 1 * direction_)];
-                //newValue = Average(oldValue, newValue, fadeIndex_);
+
                 fadeIndex_++;
                 if (fadeIndex_ > fadeSamples_)
                 {

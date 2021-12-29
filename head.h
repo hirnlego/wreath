@@ -12,6 +12,7 @@
 namespace wreath
 {
     constexpr int kMinLoopLengthSamples{48};
+    constexpr int kSamplesToFade{240}; // Note: 240 samples is 5ms @ 48KHz.
 
     enum Type
     {
@@ -343,25 +344,40 @@ namespace wreath
         inline void SetRate(float rate) { rate_ = rate; }
         inline void SetMovement(Movement movement) { movement_ = movement; }
         inline void SetDirection(Direction direction) { direction_ = direction; }
-        inline void ResetPosition() { index_ = (FORWARD == direction_ ) ? loopStart_ : loopEnd_; }
+        inline void ResetPosition()
+        {
+            index_ = (FORWARD == direction_ ) ? loopStart_ : loopEnd_;
+            // Fade when resetting position.
+            //Fade();
+        }
 
         float UpdatePosition()
         {
             index_ += rate_ * direction_;
             Action action = WrapIndex(index_);
             intIndex_ = static_cast<int32_t>(std::round(index_));
-            switch (action)
+            if (READ == type_)
             {
-            case STOP:
-                run_ = false;
-                break;
+                switch (action)
+                {
+                case STOP:
+                    run_ = false;
+                    break;
 
-            case INVERT:
-                ToggleDirection();
-                break;
+                case INVERT:
+                    ToggleDirection();
+                    // Fade when changing direction.
+                    //Fade();
+                    break;
 
-            default:
-                break;
+                case LOOP:
+                    // Fade when looping.
+                    //Fade();
+                    break;
+
+                default:
+                    break;
+                }
             }
 
             return index_;
@@ -371,12 +387,14 @@ namespace wreath
         float slowAvg{};
         float prevDifference{};
         float threshold{0.1f};
+        float newValue{};
         float oldValue{};
+        bool sr{};
 
-        void Fade(int samples)
+        void Fade()
         {
             fadeIndex_ = 0;
-            fadeSamples_ = samples;
+            fadeSamples_ = kSamplesToFade;
             fading_ = true;
 
             fastAvg = 0.f;
@@ -403,36 +421,35 @@ namespace wreath
         float Read()
         {
             int32_t phase1 = static_cast<int32_t>(index_);
-            int32_t phase0 = phase1 - 1 * direction_;
-            int32_t phase2 = phase1 + 1 * direction_;
-            int32_t phase3 = phase1 + 2 * direction_;
 
-            float y0 = buffer_[WrapIndex(phase0)];
             float y1 = buffer_[WrapIndex(phase1)];
-            float y2 = buffer_[WrapIndex(phase2)];
-            float y3 = buffer_[WrapIndex(phase3)];
-
-            float x = index_ - phase1;
-
-            float newValue = Hermite(x, y0, y1, y2, y3);
 
             if (fading_)
             {
-                if (Edge(newValue))
+                if (std::abs(y1 - oldValue) > 0.25f)
                 {
-                    // Switch-and-ramp
-                    // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
-                    // When an edge is detected we get the sample before the edge 
-                    // and fade it for a few samples to compensate.
-                    // TODO
+                    newValue = newValue;
                 }
-                oldValue = newValue;
-
+                newValue = oldValue;
                 fadeIndex_++;
                 if (fadeIndex_ > fadeSamples_)
                 {
                     fading_ = false;
                 }
+            }
+            else {
+                int32_t phase0 = phase1 - 1 * direction_;
+                int32_t phase2 = phase1 + 1 * direction_;
+                int32_t phase3 = phase1 + 2 * direction_;
+
+                float y0 = buffer_[WrapIndex(phase0)];
+                float y2 = buffer_[WrapIndex(phase2)];
+                float y3 = buffer_[WrapIndex(phase3)];
+
+                float x = index_ - phase1;
+
+                oldValue = newValue;
+                newValue = Hermite(x, y0, y1, y2, y3);
             }
 
             return newValue;
@@ -497,6 +514,7 @@ namespace wreath
         inline int32_t GetLoopEnd() { return loopEnd_; }
         inline float GetRate() { return rate_; }
         inline float GetPosition() { return index_; }
+        inline int32_t GetIntPosition() { return intIndex_; }
         bool IsGoingForward() { return FORWARD == direction_; }
     };
 }

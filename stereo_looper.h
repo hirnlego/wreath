@@ -186,13 +186,13 @@ namespace wreath
                 switch (mustSetChannelSpeedMult)
                 {
                 case BOTH:
-                    loopers_[LEFT].SetRate(nextSpeedMult);
-                    loopers_[RIGHT].SetRate(nextSpeedMult);
+                    loopers_[LEFT].SetReadRate(nextSpeedMult);
+                    loopers_[RIGHT].SetReadRate(nextSpeedMult);
                     mustSetChannelSpeedMult = NONE;
                     break;
                 case LEFT:
                 case RIGHT:
-                    loopers_[mustSetChannelSpeedMult].SetRate(nextSpeedMult);
+                    loopers_[mustSetChannelSpeedMult].SetReadRate(nextSpeedMult);
                     mustSetChannelSpeedMult = NONE;
                     break;
 
@@ -283,7 +283,7 @@ namespace wreath
             if (IsDualMode() && Mode::DUAL != mode)
             {
                 loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
-                loopers_[RIGHT].SetRate(loopers_[LEFT].GetRate());
+                loopers_[RIGHT].SetReadRate(loopers_[LEFT].GetReadRate());
                 loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
                 loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
                 loopers_[RIGHT].UpdateReadPos();
@@ -303,7 +303,7 @@ namespace wreath
         inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
         inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
         inline float GetNextReadPos(int channel) { return loopers_[channel].GetNextReadPos(); }
-        inline float GetRate(int channel) { return loopers_[channel].GetRate(); }
+        inline float GetReadRate(int channel) { return loopers_[channel].GetReadRate(); }
         inline Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
         inline bool IsGoingForward(int channel) { return loopers_[channel].IsGoingForward(); }
 
@@ -353,7 +353,7 @@ namespace wreath
             mustSetChannelLoopStart = channel;
             nextLoopStart = value;
         }
-        void SetRate(int channel, float multiplier)
+        void SetReadRate(int channel, float multiplier)
         {
             mustSetChannelSpeedMult = channel;
             nextSpeedMult = multiplier;

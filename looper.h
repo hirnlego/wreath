@@ -8,8 +8,6 @@ namespace wreath
 {
     using namespace daisysp;
 
-    constexpr int kSamplesToFade{240}; // Note: 240 samples is 5ms @ 48KHz.
-
     class Looper
     {
 
@@ -28,7 +26,7 @@ namespace wreath
         void Reset();
         void ClearBuffer();
         void StopBuffering();
-        void SetRate(float rate);
+        void SetReadRate(float rate);
         void SetLoopLength(int32_t length);
         void SetMovement(Movement movement);
         bool Buffer(float value);
@@ -62,7 +60,7 @@ namespace wreath
 
         inline int32_t GetWritePos() { return writePos_; }
 
-        inline float GetRate() { return rate_; }
+        inline float GetReadRate() { return readRate_; }
         inline int32_t GetSampleRateSpeed() { return sampleRateSpeed_; }
 
         inline Movement GetMovement() { return movement_; }
@@ -92,7 +90,8 @@ namespace wreath
         float fadePos_{};           // Fade position
         float loopStartSeconds_{};  // Start of the loop in seconds
         float loopLengthSeconds_{}; // Length of the loop in seconds
-        float rate_{};         // Speed multiplier
+        float readRate_{};         // Speed multiplier
+        float writeRate_{};         // Speed multiplier
         float readSpeed_{};         // Actual read speed
         float writeSpeed_{};        // Actual write speed
         float headsDistance_{};     // Distance in samples between the reading and writing heads

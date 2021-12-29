@@ -223,7 +223,7 @@ namespace wreath
                 mpaland::sprintf(cstr, "x%.2f", looper.GetGain());
                 break;
             case Page::SPEED:
-                mpaland::sprintf(cstr, "%s%.2fx", cLR, looper.GetRate(currentLooper));
+                mpaland::sprintf(cstr, "%s%.2fx", cLR, looper.GetReadRate(currentLooper));
                 break;
             case Page::START:
             {
@@ -372,11 +372,11 @@ namespace wreath
                 }
                 case Page::SPEED:
                 {
-                    float currentSpeedMult{looper.GetRate(currentLooper)};
+                    float currentSpeedMult{looper.GetReadRate(currentLooper)};
                     float steps{static_cast<float>(e.asEncoderTurned.increments)};
                     steps *= ((currentSpeedMult < 5.f) || (steps < 0 && currentSpeedMult - 5.f <= kMinSpeedMult)) ? kMinSpeedMult : 5.f;
                     currentSpeedMult = fclamp(currentSpeedMult + steps, kMinSpeedMult, kMaxSpeedMult);
-                    looper.SetRate(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, currentSpeedMult);
+                    looper.SetReadRate(looper.IsDualMode() ? currentLooper : StereoLooper::BOTH, currentSpeedMult);
                     break;
                 }
                 case Page::START:

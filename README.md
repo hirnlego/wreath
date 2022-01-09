@@ -20,3 +20,4 @@ TODO
 - link loopers (eg. play in series)
 - stutter (stops and goes, repeats), drag, jitter
 - more play heads
+- parameters transitions / Markov chain

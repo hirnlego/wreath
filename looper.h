@@ -67,7 +67,8 @@ namespace wreath
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
         inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
 
-        inline void SetReading(bool active) { readingActive_ = active; };
+        inline void SetReading(bool active) { readingActive_ = active; }
+        inline void SetReadPosition(float position) { readPos_ = position; }
 
         float temp{};
 

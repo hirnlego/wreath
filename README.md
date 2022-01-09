@@ -12,10 +12,13 @@ BUGS
 
 TODO
 
-- modulation matrix
+- one-shot/looping
+- loop envelopes
+- loop length < 100 ms = grain
+- grains rhythms
+- CV modulation matrix
 - sample rate reduction
 - mimeo: when clocked, there should be a way to clock the looper, speed is a divisor/multiplier
-- clocked, envelope
 - extend initial buffer
 - link loopers (eg. play in series)
 - stutter (stops and goes, repeats), drag, jitter

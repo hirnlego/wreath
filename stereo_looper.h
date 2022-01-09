@@ -56,8 +56,6 @@ namespace wreath
             sampleRate_ = sampleRate;
             loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSamples);
             loopers_[RIGHT].Init(sampleRate_, rightBuffer_, kBufferSamples);
-            loopers_[LEFT].SetDirection(Direction::BACKWARDS);
-            loopers_[RIGHT].SetDirection(Direction::BACKWARDS);
             state_ = State::INIT;
             cf_.Init(CROSSFADE_CPOW);
             feedbackFilter_.Init(sampleRate_);

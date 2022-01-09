@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 
 namespace wreath
 {
@@ -89,7 +90,7 @@ namespace wreath
                     }
                     else
                     {
-                        index = loopStart_ + (index - loopEnd_) - 1;
+                        index = (loopStart_ + (index - loopEnd_));
 
                         return loop_ ? LOOP : STOP;
                     }
@@ -99,13 +100,13 @@ namespace wreath
                 {
                     if (PENDULUM == movement_ && loop_)
                     {
-                        index = loopStart_ + std::abs(loopStart_ - index);
+                        index = loopStart_ + (loopStart_ - index);
 
                         return INVERT;
                     }
                     else
                     {
-                        index = loopEnd_ - std::abs(loopStart_ - index);
+                        index = (loopEnd_ - (loopStart_ - std::abs(index))) + 1;
 
                         return loop_ ? LOOP : STOP;
                     }
@@ -136,7 +137,7 @@ namespace wreath
                         else
                         {
                             // Min to avoid overflow.
-                            index = std::min(loopStart_ + (index - loopEnd_), frame);
+                            index = std::min(loopStart_ + (index - loopEnd_) - 1, frame);
 
                             return loop_ ? LOOP : STOP;
                         }
@@ -163,7 +164,7 @@ namespace wreath
                         else
                         {
                             // Max to avoid overflow.
-                            index = std::max(loopEnd_ - (loopStart_ - index), 0.f);
+                            index = std::max(loopEnd_ - (loopStart_ - index) + 1, 0.f);
 
                             return loop_ ? LOOP : STOP;
                         }
@@ -184,11 +185,11 @@ namespace wreath
                 {
                     if (PENDULUM == movement_)
                     {
-                        index = loopEnd_ - (index - loopEnd_) - 1;
+                        index = loopEnd_ - (index - loopEnd_);
                     }
                     else
                     {
-                        index = (FORWARD == direction_) ? loopStart_ + (index - loopEnd_) - 1: 0;
+                        index = (FORWARD == direction_) ? (loopStart_ + (index - loopEnd_)) - 1: 0;
                     }
                 }
                 // Backwards direction.
@@ -200,7 +201,7 @@ namespace wreath
                     }
                     else
                     {
-                        index = (BACKWARDS == direction_) ? loopEnd_ - std::abs(loopStart_ - index) : 0;
+                        index = (BACKWARDS == direction_) ? (loopEnd_ - std::abs(loopStart_ - index)) + 1 : 0;
                     }
                 }
             }
@@ -222,12 +223,12 @@ namespace wreath
                     if (FORWARD == direction_)
                     {
                         // Max/min to avoid overflow.
-                        index = (PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_), frame);
+                        index = (PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_) - 1, frame);
                     }
                     else
                     {
                         // Max/min to avoid overflow.
-                        index = (PENDULUM == movement_) ? std::min(loopStart_ + (loopStart_ - index), frame) : std::max(loopEnd_ - (loopStart_ - index), static_cast<int32_t>(0));
+                        index = (PENDULUM == movement_) ? std::min(loopStart_ + (loopStart_ - index), frame) : std::max(loopEnd_ - (loopStart_ - index) + 1, static_cast<int32_t>(0));
                     }
                 }
             }
@@ -344,18 +345,23 @@ namespace wreath
         inline void SetRate(float rate) { rate_ = rate; }
         inline void SetMovement(Movement movement) { movement_ = movement; }
         inline void SetDirection(Direction direction) { direction_ = direction; }
+        inline float SetIndex(float index)
+        {
+            index_ = index;
+            intIndex_ = static_cast<int32_t>(std::round(index_));
+        }
         inline void ResetPosition()
         {
-            index_ = (FORWARD == direction_ ) ? loopStart_ : loopEnd_;
+            SetIndex(FORWARD == direction_  ? loopStart_ : loopEnd_);
             // Fade when resetting position.
             //Fade();
         }
-
         float UpdatePosition()
         {
-            index_ += rate_ * direction_;
-            Action action = WrapIndex(index_);
-            intIndex_ = static_cast<int32_t>(std::round(index_));
+            float index = index_ + rate_ * direction_;
+            Action action = WrapIndex(index);
+            SetIndex(index);
+
             if (READ == type_)
             {
                 switch (action)
@@ -467,14 +473,15 @@ namespace wreath
 
         bool Buffer(float value)
         {
+            buffer_[intIndex_] = value;
+            bufferSamples_ = intIndex_;
+
             // Handle end of buffer.
-            if (intIndex_ > maxBufferSamples_ - 1)
+            if (bufferSamples_ > maxBufferSamples_ - 1)
             {
                 return true;
             }
 
-            buffer_[intIndex_] = value;
-            bufferSamples_ = intIndex_;
             intIndex_++;
 
             return false;

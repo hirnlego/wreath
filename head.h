@@ -90,7 +90,7 @@ namespace wreath
                     }
                     else
                     {
-                        index = (loopStart_ + (index - loopEnd_));
+                        index = (loopStart_ + (index - loopEnd_)) - rate_;
 
                         return loop_ ? LOOP : STOP;
                     }
@@ -106,7 +106,7 @@ namespace wreath
                     }
                     else
                     {
-                        index = (loopEnd_ - (loopStart_ - std::abs(index))) + 1;
+                        index = (loopEnd_ - std::abs(loopStart_ - index)) + rate_;
 
                         return loop_ ? LOOP : STOP;
                     }
@@ -115,13 +115,13 @@ namespace wreath
             // Handle inverted loop boundaries (end point comes before start point).
             else
             {
-                float frame{bufferSamples_ - 1.f};
+                float frame = bufferSamples_ - rate_;
                 if (FORWARD == direction_)
                 {
                     if (index > frame)
                     {
                         // Wrap-around.
-                        index -= bufferSamples_;
+                        index = (index - frame) - rate_;
 
                         return loop_ ? LOOP : STOP;
                     }
@@ -137,7 +137,7 @@ namespace wreath
                         else
                         {
                             // Min to avoid overflow.
-                            index = std::min(loopStart_ + (index - loopEnd_) - 1, frame);
+                            index = std::min(loopStart_ + (index - loopEnd_) - rate_, frame);
 
                             return loop_ ? LOOP : STOP;
                         }
@@ -148,7 +148,7 @@ namespace wreath
                     if (index < 0)
                     {
                         // Wrap-around.
-                        index = frame - std::abs(index);
+                        index = (frame - std::abs(index)) + rate_;
 
                         return loop_ ? LOOP : STOP;
                     }
@@ -177,6 +177,8 @@ namespace wreath
 
         int32_t WrapIndex(int32_t index)
         {
+            int32_t rate = static_cast<int32_t>(std::round(rate_));
+
             // Handle normal loop boundaries.
             if (loopEnd_ > loopStart_)
             {
@@ -189,7 +191,7 @@ namespace wreath
                     }
                     else
                     {
-                        index = (FORWARD == direction_) ? (loopStart_ + (index - loopEnd_)) - 1: 0;
+                        index = (FORWARD == direction_) ? (loopStart_ + (index - loopEnd_)) - rate: 0;
                     }
                 }
                 // Backwards direction.
@@ -201,29 +203,29 @@ namespace wreath
                     }
                     else
                     {
-                        index = (BACKWARDS == direction_) ? (loopEnd_ - std::abs(loopStart_ - index)) + 1 : 0;
+                        index = (BACKWARDS == direction_) ? (loopEnd_ - std::abs(loopStart_ - index)) + rate : 0;
                     }
                 }
             }
             // Handle inverted loop boundaries (end point comes before start point).
             else
             {
-                int32_t frame{bufferSamples_ - 1};
+                int32_t frame{bufferSamples_ - rate};
                 if (index > frame)
                 {
-                    index -= bufferSamples_;
+                    index = (index - frame) - rate;
                 }
                 else if (index < 0)
                 {
                     // Wrap-around.
-                    index = frame - std::abs(index);
+                    index = (frame - std::abs(index)) + rate;
                 }
                 else if (index > loopEnd_ && index < loopStart_)
                 {
                     if (FORWARD == direction_)
                     {
                         // Max/min to avoid overflow.
-                        index = (PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_) - 1, frame);
+                        index = (PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_) - rate, frame);
                     }
                     else
                     {
@@ -345,10 +347,27 @@ namespace wreath
         inline void SetRate(float rate) { rate_ = rate; }
         inline void SetMovement(Movement movement) { movement_ = movement; }
         inline void SetDirection(Direction direction) { direction_ = direction; }
-        inline float SetIndex(float index)
+        inline void SetIndex(float index)
         {
             index_ = index;
-            intIndex_ = static_cast<int32_t>(std::round(index_));
+            // Handle constraining intIndex_ correctly depending on the loop's
+            // start and end points.
+            if (loopEnd_ < loopStart_ && BACKWARDS == direction_ && index_ < loopEnd_ + 1)
+            {
+                // Round between 0 and loop end when the loop is inverted.
+                intIndex_ = std::min(static_cast<int32_t>(std::max(std::round(index_), 0.f)), loopEnd_);
+            }
+            else if (loopEnd_ < loopStart_ && BACKWARDS == direction_ && index_ < loopStart_)
+            {
+                // Round between loop start and buffer length - 1 when the loop
+                // is inverted.
+                intIndex_ = std::min(std::max(static_cast<int32_t>(std::round(index_)), loopStart_), bufferSamples_ - 1);
+            }
+            else
+            {
+                // Round between 0 and buffer length - 1 in every other cases.
+                intIndex_ = std::min(static_cast<int32_t>(std::max(std::round(index_), 0.f)), bufferSamples_ - 1);
+            }
         }
         inline void ResetPosition()
         {

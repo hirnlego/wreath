@@ -1,4 +1,4 @@
 #!/bin/sh
 
-g++ -o test test.cpp
-./test
+g++ -o tests tests.cpp
+./tests

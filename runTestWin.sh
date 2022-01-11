@@ -1,4 +1,4 @@
 #!/bin/sh
 
-g++ -o tests tests.cpp
+g++ -I../DaisyExamples/DaisySP/Source tests.cpp looper.cpp -o tests
 ./tests

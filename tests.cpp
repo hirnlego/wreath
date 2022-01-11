@@ -1,4 +1,5 @@
 #include "head.h"
+#include "looper.h"
 #include <cstdlib>
 #include <iostream>
 #include <cassert>
@@ -6,17 +7,43 @@
 
 using namespace wreath;
 
+const double pi() { return std::atan(1) * 4; }
+
+constexpr int32_t bufferSamples = 100;
+
+float buffer[48000];
+Looper looper;
+
 bool Compare (float a, float b)
 {
     return std::fabs(a - b) <= ( (std::fabs(a) < std::fabs(b) ? std::fabs(b) : std::fabs(a)) * std::numeric_limits<float>::epsilon());
 }
 
-int main()
+float Sine(float f, int32_t t)
 {
-    float buffer[48000];
-    Head head{Type::READ};
-    head.Init(buffer, 48000);
-    head.InitBuffer(48000);
+    return std::sin(2 * pi() * f * t);
+}
+
+void Buffer(bool broken)
+{
+    float f = 1.f / bufferSamples;
+    for (size_t i = 0; i < bufferSamples; i++)
+    {
+        float value = Sine(f, i);
+        if (broken && i > bufferSamples / 2.f)
+        {
+            value = Sine(f, i + 0.25f);
+        }
+        std::cout << i << ": " << value << "\n";
+        looper.Buffer(value);
+    }
+    std::cout << "\n";
+    looper.StopBuffering();
+}
+
+void TestBoundaries()
+{
+    Buffer(false);
 
     struct Scenario
     {
@@ -31,7 +58,7 @@ int main()
         int32_t intResult{};
     };
 
-    Scenario scenarios[] =
+    static Scenario scenarios[] =
     {
         { "1a - Regular, 1x speed, normal, forward, start", 100, 0, 0, 1.f, NORMAL, FORWARD, 1, 1 },
         { "1b - Regular, 1x speed, normal, forward, end", 100, 0, 99, 1.f, NORMAL, FORWARD, 0, 0 },
@@ -64,36 +91,86 @@ int main()
         { "6b - Inverted, 3.6x speed, normal, forward, end loop", 10000, 40000, 1999, 3.6f, NORMAL, FORWARD, 40002.6f, 40002 },
         { "6c - Inverted, 3.6x speed, normal, backwards, start buffer", 10000, 40000, 0, 3.6f, NORMAL, BACKWARDS, 47996.4f, 47996 },
         { "6d - Inverted, 3.6x speed, normal, backwards, start loop", 10000, 40000, 40000, 3.6f, NORMAL, BACKWARDS, 1996.4f, 1996 },
+
+        { "7a - Regular, 49.7x speed, normal, forward, start", 100, 0, 0, 49.7f, NORMAL, FORWARD, 49.7f, 49 },
+        { "7b - Regular, 49.7x speed, normal, forward, almost end", 100, 0, 99.4f, 49.7f, NORMAL, FORWARD, 49.1f, 49 },
+        { "7c - Regular, 49.7x speed, normal, backwards, end", 100, 0, 99, 49.7f, NORMAL, BACKWARDS, 49.3, 49 },
+        { "7d - Regular, 49.7x speed, normal, backwards, almost start", 100, 0, 11.2f, 49.7f, NORMAL, BACKWARDS, 61.5f, 61 },
+
+        { "8a - Regular, 1x speed, pendulum, forward, start", 100, 0, 0, 1, PENDULUM, BACKWARDS, 1, 1 },
+        { "8b - Regular, 1x speed, pendulum, forward, end", 100, 0, 99, 1, PENDULUM, FORWARD, 98, 98 },
     };
 
     std::cout << "\n";
 
     for (Scenario scenario : scenarios)
     {
+        looper.Reset();
         std::cout << "Scenario " << scenario.desc << "\n";
-        head.SetLoopLength(scenario.loopLength);
-        std::cout << "Loop length: " << scenario.loopLength << "\n";
-        head.SetLoopStart(scenario.loopStart);
+        looper.SetLoopStart(scenario.loopStart);
         std::cout << "Loop start: " << scenario.loopStart << "\n";
-        std::cout << "Loop end: " << head.GetLoopEnd() << "\n";
-        head.SetRate(scenario.rate);
+        looper.SetLoopLength(scenario.loopLength);
+        std::cout << "Loop length: " << scenario.loopLength << "\n";
+        std::cout << "Loop end: " << looper.GetLoopEnd() << "\n";
+        looper.SetReadRate(scenario.rate);
         std::cout << "Rate: " << scenario.rate << "\n";
-        head.SetMovement(scenario.movement);
+        looper.SetMovement(scenario.movement);
         std::cout << "Movement: " << scenario.movement << "\n";
-        head.SetDirection(scenario.direction);
+        looper.SetDirection(scenario.direction);
         std::cout << "Direction: " << scenario.direction << "\n";
         float index = scenario.index;
-        head.SetIndex(index);
+        looper.SetReadPosition(index);
         std::cout << "Current index: " << index << "\n";
-        index = head.UpdatePosition();
+        looper.UpdateReadPos();
+        index = looper.GetReadPos();
         std::cout << "Next index (float): " << index << " (expected " << scenario.result << ")\n";
-        int32_t intIndex = head.GetIntPosition();
+        int32_t intIndex = static_cast<int32_t>(std::floor(index));
         std::cout << "Next index (int): " << intIndex << " (expected " << scenario.intResult << ")\n";
         std::cout << "\n";
         //assert(Compare(index, scenario.result));
         assert(Compare(intIndex, scenario.intResult));
     }
+}
 
+void TestRead()
+{
+    Buffer(false);
+
+    float index = bufferSamples - 1;
+
+    looper.SetReadPosition(index);
+    float value = looper.Read();
+    std::cout << "Value at " << index << ": " << value << "\n";
+}
+
+void TestFade()
+{
+    Buffer(false);
+
+    looper.ToggleDirection();
+    looper.Restart();
+
+    float pValue{};
+    for (size_t i = 0; i < bufferSamples; i++)
+    {
+        float rValue = looper.Read();
+        float wValue = rValue * 0.5f + Sine(1.7345f, i) * 0.5f;
+        looper.Write(wValue);
+        std::cout << "Value at " << i << ": " << wValue << " (from " << pValue << ")\n";
+        pValue = wValue;
+        looper.UpdateWritePos();
+        looper.UpdateReadPos();
+    }
+
+}
+
+int main()
+{
+    looper.Init(48000, buffer, 48000);
+
+    //TestBoundaries();
+    //TestRead();
+    TestFade();
 
     return 0;
 }

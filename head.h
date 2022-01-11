@@ -179,8 +179,6 @@ namespace wreath
 
         int32_t WrapIndex(int32_t index)
         {
-            int32_t rate = static_cast<int32_t>(std::round(rate_));
-
             // Handle normal loop boundaries.
             if (loopEnd_ > loopStart_)
             {
@@ -193,7 +191,7 @@ namespace wreath
                     }
                     else
                     {
-                        index = (FORWARD == direction_) ? (loopStart_ + (index - loopEnd_)) - rate: 0;
+                        index = (FORWARD == direction_) ? (loopStart_ + (index - loopEnd_)) - 1: 0;
                     }
                 }
                 // Backwards direction.
@@ -201,33 +199,33 @@ namespace wreath
                 {
                     if (PENDULUM == movement_)
                     {
-                        index = loopStart_ + std::abs(loopStart_ - index);
+                        index = loopStart_ + (loopStart_ - index);
                     }
                     else
                     {
-                        index = (BACKWARDS == direction_) ? (loopEnd_ - std::abs(loopStart_ - index)) + rate : 0;
+                        index = (BACKWARDS == direction_) ? (loopEnd_ - std::abs(loopStart_ - index)) + 1 : 0;
                     }
                 }
             }
             // Handle inverted loop boundaries (end point comes before start point).
             else
             {
-                int32_t frame{bufferSamples_ - rate};
+                int32_t frame{bufferSamples_ - 1};
                 if (index > frame)
                 {
-                    index = (index - frame) - rate;
+                    index = (index - frame) - 1;
                 }
                 else if (index < 0)
                 {
                     // Wrap-around.
-                    index = (frame - std::abs(index)) + rate;
+                    index = (frame - std::abs(index)) + 1;
                 }
                 else if (index > loopEnd_ && index < loopStart_)
                 {
                     if (FORWARD == direction_)
                     {
                         // Max/min to avoid overflow.
-                        index = (PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_) - rate, frame);
+                        index = (PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_) - 1, frame);
                     }
                     else
                     {
@@ -396,7 +394,7 @@ namespace wreath
         float fastAvg{};
         float slowAvg{};
         float prevDifference{};
-        float threshold{0.1f};
+        float threshold{0.05f};
         float newValue{};
         float oldValue{};
         bool sr{};
@@ -420,7 +418,7 @@ namespace wreath
         bool Edge(float value)
         {
             fastAvg = ExpAvg(value, fastAvg, 0.25);
-            slowAvg = ExpAvg(value, slowAvg, 0.0625);
+            slowAvg = ExpAvg(value, slowAvg, 0.001);
             float difference = std::abs(fastAvg - slowAvg);
             bool edge = prevDifference < threshold && difference >= threshold;
             prevDifference = difference;
@@ -430,13 +428,11 @@ namespace wreath
 
         float Read()
         {
-            int32_t phase1 = static_cast<int32_t>(index_);
-
-            float y1 = buffer_[WrapIndex(phase1)];
+            newValue = ReadAt(index_);
 
             if (fading_)
             {
-                if (std::abs(y1 - oldValue) > 0.25f)
+                if (std::abs(newValue - oldValue) > 0.25f)
                 {
                     newValue = newValue;
                 }
@@ -447,22 +443,40 @@ namespace wreath
                     fading_ = false;
                 }
             }
-            else {
-                int32_t phase0 = phase1 - 1 * direction_;
-                int32_t phase2 = phase1 + 1 * direction_;
-                int32_t phase3 = phase1 + 2 * direction_;
+            else if (rate_ > 1.f)
+            {
+                int32_t phase0 = intIndex_ - 1 * direction_;
+                int32_t phase2 = intIndex_ + 1 * direction_;
+                int32_t phase3 = intIndex_ + 2 * direction_;
 
                 float y0 = buffer_[WrapIndex(phase0)];
                 float y2 = buffer_[WrapIndex(phase2)];
                 float y3 = buffer_[WrapIndex(phase3)];
 
-                float x = index_ - phase1;
+                float x = index_ - intIndex_;
 
                 oldValue = newValue;
-                newValue = Hermite(x, y0, y1, y2, y3);
+                newValue = Hermite(x, y0, newValue, y2, y3);
             }
 
             return newValue;
+        }
+
+        float ReadAt(float index)
+        {
+            int32_t intPos = static_cast<int32_t>(std::floor(index));
+            float value = buffer_[intPos];
+            float frac = index - intPos;
+
+            // Interpolate value only it the index has a fractional part.
+            if (frac > std::numeric_limits<float>::epsilon())
+            {
+                float value2 = buffer_[WrapIndex(intPos + direction_)];
+
+                return value + (value2 - value) * frac;
+            }
+
+            return value;
         }
 
         void Write(float value)
@@ -478,7 +492,6 @@ namespace wreath
         bool Buffer(float value)
         {
             buffer_[intIndex_] = value;
-            bufferSamples_ = intIndex_;
 
             // Handle end of buffer.
             if (bufferSamples_ > maxBufferSamples_ - 1)
@@ -487,6 +500,7 @@ namespace wreath
             }
 
             intIndex_++;
+            bufferSamples_ = intIndex_;
 
             return false;
         }

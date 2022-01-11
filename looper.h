@@ -68,7 +68,11 @@ namespace wreath
         inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
 
         inline void SetReading(bool active) { readingActive_ = active; }
-        inline void SetReadPosition(float position) { readPos_ = position; }
+        void SetReadPosition(float position)
+        {
+            heads_[READ].SetIndex(position);
+            readPos_ = position;
+        }
 
         float temp{};
 

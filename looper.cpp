@@ -67,9 +67,9 @@ void Looper::StopBuffering()
 
 
     // DEBUG
-    direction_ = heads_[READ].ToggleDirection();
-    heads_[READ].ResetPosition();
-    CalculateHeadsDistance();
+    //direction_ = heads_[READ].ToggleDirection();
+    //heads_[READ].ResetPosition();
+    //CalculateHeadsDistance();
 }
 
 void Looper::Restart()

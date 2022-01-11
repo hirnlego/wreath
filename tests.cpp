@@ -9,7 +9,7 @@ using namespace wreath;
 
 const double pi() { return std::atan(1) * 4; }
 
-constexpr int32_t bufferSamples = 100;
+constexpr int32_t bufferSamples = 10000;
 
 float buffer[48000];
 Looper looper;
@@ -147,19 +147,38 @@ void TestFade()
 {
     Buffer(false);
 
-    looper.ToggleDirection();
+    looper.SetReadRate(0.5f);
+    //looper.ToggleDirection();
     looper.Restart();
+    bool needsCrossPoint = true;
 
     float pValue{};
-    for (size_t i = 0; i < bufferSamples; i++)
+    int32_t pDist = looper.CalculateHeadsDistance();
+    int32_t i{};
+    while (true)
     {
         float rValue = looper.Read();
         float wValue = rValue * 0.5f + Sine(1.7345f, i) * 0.5f;
         looper.Write(wValue);
-        std::cout << "Value at " << i << ": " << wValue << " (from " << pValue << ")\n";
+        //std::cout << "Value at " << i << ": " << wValue << " (from " << pValue << ")\n";
+        int32_t dist = looper.CalculateHeadsDistance();
+        std::cout << "Distance at position " << i << ": " << dist << "\n";
+        if (needsCrossPoint)
+        {
+            int32_t cp = looper.CalculateCrossPoint();
+            std::cout << "Cross point: " << cp << "\n";
+            if (i == cp)
+            {
+                std::cout << "Heads crossed at " << i << "\n";
+            }
+        }
         pValue = wValue;
+        pDist = dist;
         looper.UpdateWritePos();
         looper.UpdateReadPos();
+
+        i++;
+        i %= bufferSamples;
     }
 
 }

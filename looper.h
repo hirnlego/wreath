@@ -75,11 +75,12 @@ namespace wreath
         }
 
         float temp{};
+        int32_t CalculateHeadsDistance();
+        int32_t CalculateCrossPoint();
 
     private:
         void CalculateDeltaTime();
         void WrapPos(int32_t &pos);
-        void CalculateHeadsDistance();
         void HandleFade();
         void CalculateFadeSamples(int32_t pos);
         void UpdateLoopEnd();
@@ -99,7 +100,7 @@ namespace wreath
         float writeRate_{};         // Speed multiplier
         float readSpeed_{};         // Actual read speed
         float writeSpeed_{};        // Actual write speed
-        float headsDistance_{};     // Distance in samples between the reading and writing heads
+        int32_t headsDistance_{};     // Distance in samples between the reading and writing heads
         int32_t bufferSamples_{};    // The written buffer length in samples
         int32_t writePos_{};         // The write position
         int32_t loopStart_{};        // Loop start position

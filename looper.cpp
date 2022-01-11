@@ -262,10 +262,11 @@ void Looper::CalculateFadeSamples(int32_t pos)
     */
 }
 
-void Looper::CalculateHeadsDistance()
+int32_t Looper::CalculateHeadsDistance()
 {
     previousHd = headsDistance_;
 
+    // This is the floor of the float position.
     int32_t intReadPos = heads_[READ].GetIntPosition();
 
     // forward, rp > wp, ws > rs = rp - wp
@@ -345,6 +346,36 @@ void Looper::CalculateHeadsDistance()
     }
     converging = previousHd > headsDistance_;
     */
+
+   return headsDistance_;
+}
+
+int32_t Looper::CalculateCrossPoint()
+{
+    int32_t crossPoint{};
+    float deltaTime{};
+    float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
+    if (!IsGoingForward())
+    {
+        relSpeed = writeSpeed_ + readSpeed_;
+    }
+    deltaTime = headsDistance_ / relSpeed;
+    crossPoint = writePos_ + (writeSpeed_ * deltaTime);
+    // Wrap the crossing point if it's outside of the buffer.
+    if (crossPoint >= bufferSamples_)
+    {
+        int32_t r = crossPoint % loopLength_;
+        if (loopStart_ + r > bufferSamples_)
+        {
+            crossPoint = r - (bufferSamples_ - loopStart_);
+        }
+        else
+        {
+            crossPoint = loopStart_ + r;
+        }
+    }
+
+    return crossPoint;
 }
 
 // Handle read fade.

@@ -9,7 +9,7 @@ using namespace wreath;
 
 const double pi() { return std::atan(1) * 4; }
 
-constexpr int32_t bufferSamples = 10000;
+constexpr int32_t bufferSamples = 100;
 
 float buffer[48000];
 Looper looper;
@@ -151,27 +151,37 @@ void TestFade()
     //looper.ToggleDirection();
     looper.Restart();
     bool needsCrossPoint = true;
+    bool crossPointFound = false;
+    bool startup = true;
 
     float pValue{};
     int32_t pDist = looper.CalculateHeadsDistance();
     int32_t i{};
+    int32_t cp{};
     while (true)
     {
-        float rValue = looper.Read();
-        float wValue = rValue * 0.5f + Sine(1.7345f, i) * 0.5f;
-        looper.Write(wValue);
-        //std::cout << "Value at " << i << ": " << wValue << " (from " << pValue << ")\n";
-        int32_t dist = looper.CalculateHeadsDistance();
-        std::cout << "Distance at position " << i << ": " << dist << "\n";
-        if (needsCrossPoint)
+        if (needsCrossPoint && !startup)
         {
-            int32_t cp = looper.CalculateCrossPoint();
-            std::cout << "Cross point: " << cp << "\n";
+            if (!crossPointFound)
+            {
+                cp = looper.CalculateCrossPoint();
+                std::cout << "Cross point: " << cp << "\n";
+                crossPointFound = true;
+            }
             if (i == cp)
             {
                 std::cout << "Heads crossed at " << i << "\n";
+                crossPointFound = false;
+                exit(0);
             }
         }
+
+        float rValue = looper.Read();
+        float wValue = rValue * 0.5f + Sine(1.7345f, i) * 0.5f;
+        looper.Write(wValue);
+        std::cout << "Value at " << i << ": " << wValue << " (from " << pValue << ")\n";
+        int32_t dist = looper.CalculateHeadsDistance();
+        std::cout << "Distance at position " << i << ": " << dist << "\n";
         pValue = wValue;
         pDist = dist;
         looper.UpdateWritePos();
@@ -179,6 +189,7 @@ void TestFade()
 
         i++;
         i %= bufferSamples;
+        startup = false;
     }
 
 }

@@ -302,29 +302,6 @@ int32_t Looper::CalculateHeadsDistance()
         headsDistance_ = 0.f;
     }
 
-    int32_t crossPoint{};
-    float deltaTime{};
-    float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
-    if (!IsGoingForward())
-    {
-        relSpeed = writeSpeed_ + readSpeed_;
-    }
-    deltaTime = headsDistance_ / relSpeed;
-    crossPoint = writePos_ + (writeSpeed_ * deltaTime);
-    // Wrap the crossing point if it's outside of the buffer.
-    if (crossPoint >= bufferSamples_)
-    {
-        int32_t r = crossPoint % loopLength_;
-        if (loopStart_ + r > bufferSamples_)
-        {
-            crossPoint = r - (bufferSamples_ - loopStart_);
-        }
-        else
-        {
-            crossPoint = loopStart_ + r;
-        }
-    }
-
     bool areConverging = previousHd > headsDistance_;
     if (areConverging && headsDistance_ == 1)
     {
@@ -352,6 +329,8 @@ int32_t Looper::CalculateHeadsDistance()
 
 int32_t Looper::CalculateCrossPoint()
 {
+    CalculateHeadsDistance();
+
     int32_t crossPoint{};
     float deltaTime{};
     float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};

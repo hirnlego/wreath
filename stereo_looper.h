@@ -204,6 +204,7 @@ namespace wreath
                     rightOut = loopers_[RIGHT].Read();
                 }
 
+                /*
                 // In cross mode swap the two channels, so what's read in the
                 // left buffer is written in the right one and vice-versa.
                 if (IsCrossMode())
@@ -218,6 +219,7 @@ namespace wreath
                         rightOut = temp;
                     }
                 }
+                */
 
                 if (writingActive_)
                 {
@@ -236,8 +238,8 @@ namespace wreath
                         }
                     }
                     float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
-                    loopers_[LEFT].Write(SoftLimit(leftDry * dryLevel + leftWet));
-                    loopers_[RIGHT].Write(SoftLimit(rightDry * dryLevel + rightWet));
+                    loopers_[LEFT].Write(leftDry * dryLevel, leftWet);
+                    loopers_[RIGHT].Write(rightDry * dryLevel, rightWet);
                 }
 
                 loopers_[LEFT].UpdateWritePos();
@@ -267,6 +269,9 @@ namespace wreath
 
                 loopers_[LEFT].UpdateReadPos();
                 loopers_[RIGHT].UpdateReadPos();
+
+                loopers_[LEFT].HandleFade();
+                loopers_[RIGHT].HandleFade();
             }
 
             cf_.SetPos(fclamp(mix_, 0.f, 1.f));
@@ -382,8 +387,6 @@ namespace wreath
 
         int mustSetChannelSpeedMult{NONE};
         float nextSpeedMult{};
-
-        inline float temp() { return loopers_[LEFT].temp; }
 
     private:
         Looper loopers_[2];

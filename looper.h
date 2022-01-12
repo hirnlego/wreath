@@ -15,13 +15,6 @@ namespace wreath
         Looper() {}
         ~Looper() {}
 
-        enum Fade
-        {
-            NONE = -1,
-            OUT,
-            IN,
-        };
-
         void Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples);
         void Reset();
         void ClearBuffer();
@@ -30,10 +23,12 @@ namespace wreath
         void SetLoopLength(int32_t length);
         void SetMovement(Movement movement);
         bool Buffer(float value);
+        void SetReadPosition(float position);
         float Read();
-        void Write(float value);
+        void Write(float dry, float wet);
         void UpdateReadPos();
         void UpdateWritePos();
+        bool HandleFade();
         void Restart();
         void SetLoopStart(int32_t pos);
         int32_t GetRandomPosition();
@@ -64,29 +59,25 @@ namespace wreath
         inline int32_t GetSampleRateSpeed() { return sampleRateSpeed_; }
 
         inline Movement GetMovement() { return movement_; }
+        inline Direction GetDirection() { return direction_; }
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
         inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
 
         inline void SetReading(bool active) { readingActive_ = active; }
-        void SetReadPosition(float position)
-        {
-            heads_[READ].SetIndex(position);
-            readPos_ = position;
-        }
 
-        float temp{};
-        int32_t CalculateHeadsDistance();
-        int32_t CalculateCrossPoint();
+        inline int32_t GetCrossPoint() { return crossPoint_; }
+        inline bool CrossPointFound() { return crossPointFound_; }
 
     private:
         void CalculateDeltaTime();
         void WrapPos(int32_t &pos);
-        void HandleFade();
         void CalculateFadeSamples(int32_t pos);
         void UpdateLoopEnd();
         bool HandlePosBoundaries(float &pos);
         float FindMinValPos(float pos);
         float ZeroCrossingPos(float pos);
+        void CalculateHeadsDistance();
+        void CalculateCrossPoint();
 
         float *buffer_{};           // The buffer
         float bufferSeconds_{};     // Written buffer length in seconds
@@ -100,21 +91,22 @@ namespace wreath
         float writeRate_{};         // Speed multiplier
         float readSpeed_{};         // Actual read speed
         float writeSpeed_{};        // Actual write speed
-        int32_t headsDistance_{};     // Distance in samples between the reading and writing heads
         int32_t bufferSamples_{};    // The written buffer length in samples
         int32_t writePos_{};         // The write position
         int32_t loopStart_{};        // Loop start position
         int32_t loopEnd_{};          // Loop end position
         int32_t loopLength_{};       // Length of the loop in samples
-        int fadeIndex_{};           // Counter used for fades
+        int32_t headsDistance_{};
+        float fadeIndex_{};           // Counter used for fades
         int fadeSamples_{};
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};
+        int32_t crossPoint_{};
         bool crossPointFound_{};
         bool readingActive_{true};
         bool writingActive_{true};
         int32_t sampleRateSpeed_{};
-        Fade mustFade_{Fade::NONE};
+        bool mustFade_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

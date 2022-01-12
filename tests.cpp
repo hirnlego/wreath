@@ -147,45 +147,37 @@ void TestFade()
 {
     Buffer(false);
 
-    looper.SetReadRate(0.5f);
-    //looper.ToggleDirection();
+    looper.SetReadRate(1.f);
+    looper.ToggleDirection();
     looper.Restart();
     bool needsCrossPoint = true;
     bool crossPointFound = false;
     bool startup = true;
 
     float pValue{};
-    int32_t pDist = looper.CalculateHeadsDistance();
     int32_t i{};
     int32_t cp{};
     while (true)
     {
-        if (needsCrossPoint && !startup)
+        if (looper.CrossPointFound())
         {
-            if (!crossPointFound)
-            {
-                cp = looper.CalculateCrossPoint();
-                std::cout << "Cross point: " << cp << "\n";
-                crossPointFound = true;
-            }
-            if (i == cp)
-            {
-                std::cout << "Heads crossed at " << i << "\n";
-                crossPointFound = false;
-                exit(0);
-            }
+            cp = looper.GetCrossPoint();
+            std::cout << "Cross point: " << cp << "\n";
         }
 
         float rValue = looper.Read();
         float wValue = rValue * 0.5f + Sine(1.7345f, i) * 0.5f;
         looper.Write(wValue);
         std::cout << "Value at " << i << ": " << wValue << " (from " << pValue << ")\n";
-        int32_t dist = looper.CalculateHeadsDistance();
-        std::cout << "Distance at position " << i << ": " << dist << "\n";
         pValue = wValue;
-        pDist = dist;
+
         looper.UpdateWritePos();
         looper.UpdateReadPos();
+        if (looper.HandleFade())
+        {
+            std::cout << "Fading at " << cp << "\n";
+            exit(0);
+        }
 
         i++;
         i %= bufferSamples;

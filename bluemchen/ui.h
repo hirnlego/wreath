@@ -187,9 +187,6 @@ namespace wreath
                 // Draw the write position.
                 cursor = std::floor(looper.GetWritePos(i) * step);
                 hw.display.DrawRect(cursor, 23 + y, cursor, 23 + y, true, true);
-
-                cursor = std::floor(looper.temp() * step);
-                hw.display.DrawRect(cursor, 24 + y, cursor, 24 + y, true, true);
             }
 
             /*

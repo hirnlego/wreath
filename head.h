@@ -428,14 +428,8 @@ namespace wreath
 
         float Read()
         {
-            newValue = ReadAt(index_);
-
             if (fading_)
             {
-                if (std::abs(newValue - oldValue) > 0.25f)
-                {
-                    newValue = newValue;
-                }
                 newValue = oldValue;
                 fadeIndex_++;
                 if (fadeIndex_ > fadeSamples_)
@@ -443,20 +437,24 @@ namespace wreath
                     fading_ = false;
                 }
             }
-            else if (rate_ > 1.f)
+            else
             {
-                int32_t phase0 = intIndex_ - 1 * direction_;
-                int32_t phase2 = intIndex_ + 1 * direction_;
-                int32_t phase3 = intIndex_ + 2 * direction_;
-
-                float y0 = buffer_[WrapIndex(phase0)];
-                float y2 = buffer_[WrapIndex(phase2)];
-                float y3 = buffer_[WrapIndex(phase3)];
-
-                float x = index_ - intIndex_;
-
                 oldValue = newValue;
-                newValue = Hermite(x, y0, newValue, y2, y3);
+                newValue = ReadAt(index_);
+                if (rate_ > 1.f)
+                {
+                    int32_t phase0 = intIndex_ - 1 * direction_;
+                    int32_t phase2 = intIndex_ + 1 * direction_;
+                    int32_t phase3 = intIndex_ + 2 * direction_;
+
+                    float y0 = buffer_[WrapIndex(phase0)];
+                    float y2 = buffer_[WrapIndex(phase2)];
+                    float y3 = buffer_[WrapIndex(phase3)];
+
+                    float x = index_ - intIndex_;
+
+                    newValue = Hermite(x, y0, newValue, y2, y3);
+                }
             }
 
             return newValue;

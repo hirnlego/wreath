@@ -13,7 +13,7 @@
 namespace wreath
 {
     constexpr int kMinLoopLengthSamples{48};
-    constexpr int kSamplesToFade{240}; // Note: 240 samples is 5ms @ 48KHz.
+    constexpr int kSamplesToFade{2400}; // Note: 240 samples is 5ms @ 48KHz.
 
     enum Type
     {
@@ -250,59 +250,6 @@ namespace wreath
             }
         }
 
-        /*
-        float FindMinValPos(float pos)
-        {
-            float min{};
-            float minPos{pos};
-            float value{buffer_[static_cast<int32_t>(std::round(pos))]};
-
-            for (int i = 0; i < 10; i++)
-            {
-                pos = pos + (forward_ ? i : -i);
-                HandlePosBoundaries(pos);
-                float val = buffer_[static_cast<int32_t>(std::round(pos))];
-                if (std::abs(value - val) < min)
-                {
-                    min = val;
-                    minPos = pos;
-                }
-            }
-
-            return minPos;
-        }
-
-        float ZeroCrossingPos(float pos)
-        {
-            int i;
-            bool sign1, sign2;
-
-            for (i = 0; i < kSamplesToFade; i++)
-            {
-                float pos1 = pos + i;
-                HandlePosBoundaries(pos1);
-                sign1 = buffer_[static_cast<int32_t>(std::round(pos))] > 0;
-                float pos2 = pos1 + 1;
-                HandlePosBoundaries(pos2);
-                sign2 = buffer_[static_cast<int32_t>(std::round(pos2))] > 0;
-                if (sign1 != sign2)
-                {
-                    return pos1;
-                }
-            }
-
-            return pos;
-        }
-        */
-
-        // calculate an exponential moving average
-        float Average(float oldValue, float newValue, int timePeriod)
-        {
-            auto mult = 2.0 / (timePeriod + 1.0);
-
-            return (newValue - oldValue) * mult + oldValue;
-        }
-
     public:
         Head(Type type): type_{type} {}
         ~Head() {}
@@ -391,73 +338,25 @@ namespace wreath
             return index_;
         }
 
-        float fastAvg{};
-        float slowAvg{};
-        float prevDifference{};
-        float threshold{0.05f};
-        float newValue{};
-        float oldValue{};
-        bool sr{};
-
-        void Fade()
-        {
-            fadeIndex_ = 0;
-            fadeSamples_ = kSamplesToFade;
-            fading_ = true;
-
-            fastAvg = 0.f;
-            slowAvg = 0.f;
-            prevDifference = 0.f;
-        }
-
-        float ExpAvg(float sample, float avg, float w)
-        {
-            return w * sample + (1 - w) * avg;
-        }
-
-        bool Edge(float value)
-        {
-            fastAvg = ExpAvg(value, fastAvg, 0.25);
-            slowAvg = ExpAvg(value, slowAvg, 0.001);
-            float difference = std::abs(fastAvg - slowAvg);
-            bool edge = prevDifference < threshold && difference >= threshold;
-            prevDifference = difference;
-
-            return edge;
-        }
-
         float Read()
         {
-            if (fading_)
+            float value = ReadAt(index_);
+            if (rate_ > 1.f)
             {
-                newValue = oldValue;
-                fadeIndex_++;
-                if (fadeIndex_ > fadeSamples_)
-                {
-                    fading_ = false;
-                }
-            }
-            else
-            {
-                oldValue = newValue;
-                newValue = ReadAt(index_);
-                if (rate_ > 1.f)
-                {
-                    int32_t phase0 = intIndex_ - 1 * direction_;
-                    int32_t phase2 = intIndex_ + 1 * direction_;
-                    int32_t phase3 = intIndex_ + 2 * direction_;
+                int32_t phase0 = intIndex_ - 1 * direction_;
+                int32_t phase2 = intIndex_ + 1 * direction_;
+                int32_t phase3 = intIndex_ + 2 * direction_;
 
-                    float y0 = buffer_[WrapIndex(phase0)];
-                    float y2 = buffer_[WrapIndex(phase2)];
-                    float y3 = buffer_[WrapIndex(phase3)];
+                float y0 = buffer_[WrapIndex(phase0)];
+                float y2 = buffer_[WrapIndex(phase2)];
+                float y3 = buffer_[WrapIndex(phase3)];
 
-                    float x = index_ - intIndex_;
+                float x = index_ - intIndex_;
 
-                    newValue = Hermite(x, y0, newValue, y2, y3);
-                }
+                value = Hermite(x, y0, value, y2, y3);
             }
 
-            return newValue;
+            return value;
         }
 
         float ReadAt(float index)

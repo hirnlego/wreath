@@ -198,6 +198,9 @@ namespace wreath
                     break;
                 }
 
+                loopers_[LEFT].HandleFade();
+                loopers_[RIGHT].HandleFade();
+
                 if (readingActive_)
                 {
                     leftOut = loopers_[LEFT].Read();
@@ -269,9 +272,6 @@ namespace wreath
 
                 loopers_[LEFT].UpdateReadPos();
                 loopers_[RIGHT].UpdateReadPos();
-
-                loopers_[LEFT].HandleFade();
-                loopers_[RIGHT].HandleFade();
             }
 
             cf_.SetPos(fclamp(mix_, 0.f, 1.f));

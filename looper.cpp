@@ -46,11 +46,14 @@ void Looper::ClearBuffer()
 {
     heads_[WRITE].ClearBuffer();
 }
-float prevWet{};
+float prevValue{};
+float currentValue{};
 bool Looper::Buffer(float value)
 {
-    bool end = heads_[WRITE].Buffer(value * fadeIndex_);
-    prevWet = value;
+    //bool end = heads_[WRITE].Buffer(value * fadeIndex_);
+    bool end = heads_[WRITE].Buffer(value);
+    currentValue = value;
+    prevValue = value;
     bufferSamples_ = heads_[WRITE].GetBufferSamples();
     bufferSeconds_ = bufferSamples_ / static_cast<float>(sampleRate_);
     if (fadeIndex_ < 1.f)
@@ -144,24 +147,25 @@ void Looper::SetReadPosition(float position)
 float Looper::Read()
 {
     float value = heads_[READ].Read();
-
+    return value;
     if (mustFade_)
     {
-        //bool equal = std::fabs(value - prevWet) <= ( (std::fabs(value) < std::fabs(prevWet) ? std::fabs(prevWet) : std::fabs(value)) * 0.005f);
-        bool equal = std::fabs(std::max(value, prevWet) - std::min(value, prevWet)) <= 0.001f;
-        if (!equal)
+        //bool equal = std::fabs(value - prevValue) <= ( (std::fabs(value) < std::fabs(prevValue) ? std::fabs(prevValue) : std::fabs(value)) * 0.005f);
+        bool aPos = value > 0;
+        bool bPos = prevValue > 0;
+        bool equal = std::fabs(std::max(value, prevValue) - std::min(value, prevValue)) <= 0.001f && aPos == bPos;
+        if (equal)
         {
-           // mustFade_ = false;
-            value = prevWet;
+           //mustFade_ = false;
         }
-        else
-        {
-                    prevWet = value;
-        }
+        float delta = std::fabs(std::max(value, prevValue) - std::min(value, prevValue));
+        delta *= bPos ? 1 : -1;
+        value += prevValue * (1.f - (fadeIndex_ / kSamplesToFade));
     }
     else
     {
-        prevWet = value;
+        prevValue = currentValue;
+        currentValue = value;
     }
 
     return value;
@@ -172,7 +176,7 @@ void Looper::Write(float dry, float wet)
     float value{};
     if (mustFade_)
     {
-        value = dry;// + prevWet;
+        value = dry;// + prevValue;
         fadeIndex_ += readRate_;
         if (fadeIndex_ > kSamplesToFade)
         {
@@ -183,7 +187,7 @@ void Looper::Write(float dry, float wet)
     else
     {
        value = dry;
-       //prevWet = wet;
+       //prevValue = wet;
     }
     //heads_[WRITE].Write(value);
 }

@@ -25,7 +25,7 @@ namespace wreath
         bool Buffer(float value);
         void SetReadPosition(float position);
         float Read();
-        void Write(float dry, float wet);
+        void Write(float value, float bufferedValue);
         void UpdateReadPos();
         void UpdateWritePos();
         bool HandleFade();
@@ -69,13 +69,6 @@ namespace wreath
         inline bool CrossPointFound() { return crossPointFound_; }
 
     private:
-        void CalculateDeltaTime();
-        void WrapPos(int32_t &pos);
-        void CalculateFadeSamples(int32_t pos);
-        void UpdateLoopEnd();
-        bool HandlePosBoundaries(float &pos);
-        float FindMinValPos(float pos);
-        float ZeroCrossingPos(float pos);
         void CalculateHeadsDistance();
         void CalculateCrossPoint();
 
@@ -107,6 +100,8 @@ namespace wreath
         bool writingActive_{true};
         int32_t sampleRateSpeed_{};
         bool mustFade_{};
+        bool mustStopWriting_{};
+        bool first_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

@@ -16,7 +16,7 @@ void Looper::Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples)
     sampleRate_ = sampleRate;
     heads_[READ].Init(buffer, maxBufferSamples);
     heads_[WRITE].Init(buffer, maxBufferSamples);
-    cf_.Init(CROSSFADE_CPOW);
+    cf_.Init(CROSSFADE_LIN);
     Reset();
 }
 
@@ -46,20 +46,12 @@ void Looper::ClearBuffer()
 {
     heads_[WRITE].ClearBuffer();
 }
-float prevValue{};
-float currentValue{};
+
 bool Looper::Buffer(float value)
 {
-    //bool end = heads_[WRITE].Buffer(value * fadeIndex_);
     bool end = heads_[WRITE].Buffer(value);
-    currentValue = value;
-    prevValue = value;
     bufferSamples_ = heads_[WRITE].GetBufferSamples();
     bufferSeconds_ = bufferSamples_ / static_cast<float>(sampleRate_);
-    if (fadeIndex_ < 1.f)
-    {
-        fadeIndex_ += (1.f / kSamplesToFade);
-    }
 
     return end;
 }
@@ -72,7 +64,8 @@ void Looper::StopBuffering()
     loopEnd_ = bufferSamples_ - 1 ;
     loopLength_ = bufferSamples_;
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
-
+    mustStopWriting_ = true;
+    first_ = true;
 
     // DEBUG
     //direction_ = heads_[READ].ToggleDirection();
@@ -147,49 +140,55 @@ void Looper::SetReadPosition(float position)
 float Looper::Read()
 {
     float value = heads_[READ].Read();
-    return value;
-    if (mustFade_)
+    static float prevValue{};
+
+    if (!mustStopWriting_ && mustFade_)
     {
-        //bool equal = std::fabs(value - prevValue) <= ( (std::fabs(value) < std::fabs(prevValue) ? std::fabs(prevValue) : std::fabs(value)) * 0.005f);
-        bool aPos = value > 0;
-        bool bPos = prevValue > 0;
-        bool equal = std::fabs(std::max(value, prevValue) - std::min(value, prevValue)) <= 0.001f && aPos == bPos;
-        if (equal)
+        cf_.SetPos(fadeIndex_ * (1.f / kSamplesToFade));
+        if (fadeIndex_ < kSamplesToFade - 1)
         {
-           //mustFade_ = false;
+            float delta = prevValue - value;
+            float zero = 0.f;
+            value += cf_.Process(delta, zero);
+            fadeIndex_ += readRate_;
         }
-        float delta = std::fabs(std::max(value, prevValue) - std::min(value, prevValue));
-        delta *= bPos ? 1 : -1;
-        value += prevValue * (1.f - (fadeIndex_ / kSamplesToFade));
-    }
-    else
-    {
-        prevValue = currentValue;
-        currentValue = value;
-    }
-
-    return value;
-}
-
-void Looper::Write(float dry, float wet)
-{
-    float value{};
-    if (mustFade_)
-    {
-        value = dry;// + prevValue;
-        fadeIndex_ += readRate_;
-        if (fadeIndex_ > kSamplesToFade)
-        {
+        else {
             mustFade_ = false;
             crossPointFound_ = false;
         }
     }
     else
     {
-       value = dry;
-       //prevValue = wet;
+        prevValue = value;
     }
-    //heads_[WRITE].Write(value);
+
+    return value;
+}
+
+void Looper::Write(float value, float bufferedValue)
+{
+    if (mustStopWriting_)
+    {
+        cf_.SetPos(fadeIndex_ * (1.f / kSamplesToFade));
+        if (fadeIndex_ < kSamplesToFade - 1)
+        {
+            value = cf_.Process(value, bufferedValue);
+            fadeIndex_ += readRate_;
+        }
+        else {
+            mustStopWriting_ = false;
+            if (!first_)
+            {
+                // Stop writing.
+                writingActive_ = heads_[WRITE].ToggleRun();
+            }
+            first_ = false;
+        }
+    }
+    if (writingActive_)
+    {
+        heads_[WRITE].Write(value);
+    }
 }
 
 void Looper::UpdateReadPos()
@@ -218,33 +217,16 @@ void Looper::ToggleReading()
 
 void Looper::ToggleWriting()
 {
-    writingActive_ = heads_[WRITE].ToggleRun();
-}
-
-/*
-void Looper::CalculateFadeSamples(int32_t pos)
-{
-    if (loopLength_ < kSamplesToFade)
+    if (writingActive_)
     {
-        fadeSamples_ = 0;
+        mustStopWriting_ = true;
+        fadeIndex_ = 0;
     }
-
-    else if (IsGoingForward() && pos + kSamplesToFade > loopEnd_)
-    {
-        fadeSamples_ = loopEnd_ - static_cast<int>(pos);
-    }
-
-    else if (IsGoingForward() && pos - kSamplesToFade < loopStart_)
-    {
-        fadeSamples_ = static_cast<int>(pos);
-    }
-
     else
     {
-        fadeSamples_ = kSamplesToFade;
+        writingActive_ = heads_[WRITE].ToggleRun();
     }
 }
-*/
 
 void Looper::CalculateHeadsDistance()
 {
@@ -339,8 +321,8 @@ bool Looper::HandleFade()
         }
         else if (writePos_ == 0)
         {
-            mustFade_ = true;
-            fadeIndex_ = 0;
+            //mustFade_ = true;
+            //fadeIndex_ = 0;
 
             return true;
         }

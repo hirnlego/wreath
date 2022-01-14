@@ -13,7 +13,7 @@
 namespace wreath
 {
     constexpr int kMinLoopLengthSamples{48};
-    constexpr int kSamplesToFade{2400}; // Note: 240 samples is 5ms @ 48KHz.
+    constexpr int kSamplesToFade{1200}; // Note: 480 samples is 10ms @ 48KHz.
 
     enum Type
     {
@@ -341,6 +341,7 @@ namespace wreath
         float Read()
         {
             float value = ReadAt(index_);
+            /*
             if (rate_ > 1.f)
             {
                 int32_t phase0 = intIndex_ - 1 * direction_;
@@ -355,6 +356,7 @@ namespace wreath
 
                 value = Hermite(x, y0, value, y2, y3);
             }
+            */
 
             return value;
         }

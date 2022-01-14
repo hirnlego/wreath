@@ -224,8 +224,8 @@ namespace wreath
                 }
                 */
 
-                if (writingActive_)
-                {
+                //if (writingActive_)
+                //{
                     float leftWet{};
                     float rightWet{};
                     if (readingActive_)
@@ -241,9 +241,9 @@ namespace wreath
                         }
                     }
                     float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
-                    loopers_[LEFT].Write(leftDry * dryLevel, leftWet);
-                    loopers_[RIGHT].Write(rightDry * dryLevel, rightWet);
-                }
+                    loopers_[LEFT].Write(SoftClip(leftDry * dryLevel + leftWet), leftOut);
+                    loopers_[RIGHT].Write(SoftClip(rightDry * dryLevel + rightWet), rightOut);
+                //}
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();

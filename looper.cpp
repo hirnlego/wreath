@@ -64,8 +64,6 @@ void Looper::StopBuffering()
     loopEnd_ = bufferSamples_ - 1 ;
     loopLength_ = bufferSamples_;
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
-    mustStopWriting_ = true;
-    first_ = true;
 
     // DEBUG
     //direction_ = heads_[READ].ToggleDirection();
@@ -89,8 +87,6 @@ void Looper::SetLoopStart(int32_t pos)
     heads_[WRITE].SetLoopStart(pos);
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
-    crossPointFound_ = false;
-    mustFade_ = false;
 };
 
 void Looper::SetLoopEnd(int32_t pos)
@@ -104,8 +100,7 @@ void Looper::SetLoopLength(int32_t length)
     heads_[WRITE].SetLoopLength(length);
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
-    crossPointFound_ = false;
-    mustFade_ = false;
+    mustFadeOut_ = true;
 }
 
 void Looper::SetReadRate(float rate)
@@ -115,8 +110,6 @@ void Looper::SetReadRate(float rate)
     readSpeed_ = sampleRate_ * readRate_; // samples/s.
     writeSpeed_ = sampleRate_ * writeRate_;             // samples/s.
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
-    crossPointFound_ = false;
-    mustFade_ = false;
 }
 
 void Looper::SetMovement(Movement movement)
@@ -142,10 +135,11 @@ float Looper::Read()
     float value = heads_[READ].Read();
     static float prevValue{};
 
-    if (!mustStopWriting_ && mustFade_)
+    if (mustFade_)
     {
-        cf_.SetPos(fadeIndex_ * (1.f / kSamplesToFade));
-        if (fadeIndex_ < kSamplesToFade - 1)
+        int32_t samplesToFade = heads_[READ].SamplesToFade();
+        cf_.SetPos(fadeIndex_ * (1.f / samplesToFade));
+        if (fadeIndex_ < samplesToFade - 1)
         {
             float delta = prevValue - value;
             float zero = 0.f;
@@ -167,22 +161,39 @@ float Looper::Read()
 
 void Looper::Write(float value, float bufferedValue)
 {
-    if (mustStopWriting_)
+    int32_t samplesToFade = heads_[WRITE].SamplesToFade();
+    // Handle when the write head must gradually start writing.
+    if (mustFadeIn_)
     {
-        cf_.SetPos(fadeIndex_ * (1.f / kSamplesToFade));
-        if (fadeIndex_ < kSamplesToFade - 1)
+        // Actually start writing.
+        heads_[WRITE].Run();
+        writingActive_ = true;
+        cf_.SetPos(fadeIndex_ * (1.f / samplesToFade));
+        if (fadeIndex_ < samplesToFade - 1)
+        {
+            value = cf_.Process(bufferedValue, value);
+            fadeIndex_ += readRate_;
+        }
+        else
+        {
+            mustFadeIn_ = false;
+        }
+    }
+    // Handle when the write head must gradually stop writing.
+    else if (fadeOut_)
+    {
+        cf_.SetPos(fadeIndex_ * (1.f / samplesToFade));
+        if (fadeIndex_ < samplesToFade - 1)
         {
             value = cf_.Process(value, bufferedValue);
             fadeIndex_ += readRate_;
         }
-        else {
-            mustStopWriting_ = false;
-            if (!first_)
-            {
-                // Stop writing.
-                writingActive_ = heads_[WRITE].ToggleRun();
-            }
-            first_ = false;
+        else
+        {
+            fadeOut_ = false;
+            // Actually stop writing.
+            heads_[WRITE].Stop();
+            writingActive_ = false;
         }
     }
     if (writingActive_)
@@ -219,12 +230,13 @@ void Looper::ToggleWriting()
 {
     if (writingActive_)
     {
-        mustStopWriting_ = true;
+        fadeOut_ = true;
         fadeIndex_ = 0;
     }
     else
     {
-        writingActive_ = heads_[WRITE].ToggleRun();
+        mustFadeIn_ = true;
+        fadeIndex_ = 0;
     }
 }
 
@@ -295,34 +307,48 @@ void Looper::CalculateCrossPoint()
 
 bool Looper::HandleFade()
 {
-    if (readingActive_ && writingActive_)
+    if (loopLength_ < kMinLoopLengthForFade)
+    {
+        return false;
+    }
+
+    if (readingActive_)
     {
         if (readSpeed_ != writeSpeed_ || !IsGoingForward())
         {
             CalculateHeadsDistance();
-            if (!mustFade_)
+            if (!mustFade_ && !mustFadeIn_)
             {
                 // Handle reaching the cross point.
                 if (crossPointFound_ && writePos_ == crossPoint_)
                 {
                     crossPointFound_ = false;
                     mustFade_ = true;
+                    mustFadeIn_ = true;
                     fadeIndex_ = 0;
-                    //heads_[READ].Fade();
 
                     return true;
                 }
                 // Calculate the cross point.
-                else if (!crossPointFound_ && headsDistance_ <= kSamplesToFade)
+                else if (!crossPointFound_ && headsDistance_ <= heads_[WRITE].SamplesToFade())
                 {
                     CalculateCrossPoint();
                 }
             }
         }
-        else if (writePos_ == 0)
+        else if (mustFadeOut_ && writePos_ == 0)
         {
-            //mustFade_ = true;
-            //fadeIndex_ = 0;
+            mustFadeOut_ = false;
+            //fadeOut_ = true;
+            mustFadeIn_ = true;
+            fadeIndex_ = 0;
+
+            return true;
+        }
+        else if (!writingActive_ && heads_[READ].GetIntPosition() == loopStart_)
+        {
+            mustFade_ = true;
+            fadeIndex_ = 0;
 
             return true;
         }

@@ -100,8 +100,9 @@ namespace wreath
         bool writingActive_{true};
         int32_t sampleRateSpeed_{};
         bool mustFade_{};
-        bool mustStopWriting_{};
-        bool first_{};
+        bool mustFadeOut_{};
+        bool mustFadeIn_{};
+        bool fadeOut_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

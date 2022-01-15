@@ -12,8 +12,9 @@
 
 namespace wreath
 {
-    constexpr int kMinLoopLengthSamples{48};
-    constexpr int kSamplesToFade{1200}; // Note: 480 samples is 10ms @ 48KHz.
+    constexpr int32_t kMinLoopLengthSamples{48};
+    constexpr int32_t kMinLoopLengthForFade{4800};
+    constexpr int32_t kSamplesToFade{1200};
 
     enum Type
     {
@@ -291,6 +292,11 @@ namespace wreath
             return loopLength_;
         }
 
+        int32_t SamplesToFade()
+        {
+            return std::min(kSamplesToFade, loopLength_ / 2);
+        }
+
         inline void SetRate(float rate) { rate_ = rate; }
         inline void SetMovement(Movement movement) { movement_ = movement; }
         inline void SetDirection(Direction direction) { direction_ = direction; }
@@ -316,7 +322,7 @@ namespace wreath
                 switch (action)
                 {
                 case STOP:
-                    run_ = false;
+                    Stop();
                     break;
 
                 case INVERT:
@@ -426,6 +432,14 @@ namespace wreath
             direction_ = static_cast<Direction>(direction_ * -1);
 
             return direction_;
+        }
+        inline void Run()
+        {
+            run_ = true;
+        }
+        inline void Stop()
+        {
+            run_ = false;
         }
         inline bool ToggleRun()
         {

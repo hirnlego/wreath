@@ -19,6 +19,7 @@ namespace wreath
         void SetReadRate(float rate);
         void SetLoopLength(int32_t length);
         void SetMovement(Movement movement);
+        void SetLooping(bool looping);
         bool Buffer(float value);
         void SetReadPosition(float position);
         float Read();
@@ -94,6 +95,7 @@ namespace wreath
         bool readingActive_{true};
         bool writingActive_{true};
         int32_t sampleRateSpeed_{};
+        bool looping_{true};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

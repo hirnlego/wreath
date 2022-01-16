@@ -202,11 +202,11 @@ namespace wreath
                 loopers_[LEFT].HandleFade();
                 loopers_[RIGHT].HandleFade();
 
-                if (readingActive_)
-                {
-                    leftOut = loopers_[LEFT].Read();
-                    rightOut = loopers_[RIGHT].Read();
-                }
+                leftOut = loopers_[LEFT].Read();
+                rightOut = loopers_[RIGHT].Read();
+
+                loopers_[LEFT].UpdateReadPos();
+                loopers_[RIGHT].UpdateReadPos();
 
                 /*
                 // In cross mode swap the two channels, so what's read in the
@@ -225,19 +225,14 @@ namespace wreath
                 }
                 */
 
-                float leftWet{};
-                float rightWet{};
-                if (readingActive_)
+                float leftWet = leftOut * feedback_;
+                float rightWet = rightOut * feedback_;
+                if (filterValue_ >= 20.f)
                 {
-                    leftWet = leftOut * feedback_;
-                    rightWet = rightOut * feedback_;
-                    if (filterValue_ >= 20.f)
-                    {
-                        feedbackFilter_.Process(leftDry);
-                        leftWet = SoftLimit(leftWet + feedbackFilter_.Band());
-                        feedbackFilter_.Process(rightDry);
-                        rightWet = SoftLimit(rightWet + feedbackFilter_.Band());
-                    }
+                    feedbackFilter_.Process(leftDry);
+                    leftWet = SoftLimit(leftWet + feedbackFilter_.Band());
+                    feedbackFilter_.Process(rightDry);
+                    rightWet = SoftLimit(rightWet + feedbackFilter_.Band());
                 }
                 float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
                 loopers_[LEFT].Write(SoftClip(leftDry * dryLevel + leftWet), leftOut);
@@ -267,9 +262,6 @@ namespace wreath
                         }
                     }
                 }
-
-                loopers_[LEFT].UpdateReadPos();
-                loopers_[RIGHT].UpdateReadPos();
             }
 
             cf_.SetPos(fclamp(mix_, 0.f, 1.f));

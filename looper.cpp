@@ -38,6 +38,9 @@ void Looper::Reset()
     direction_ = Direction::FORWARD;
     writeRate_ = 1.f;
     SetReadRate(1.f);
+
+    // Testing...
+    SetLooping(false);
 }
 
 void Looper::ClearBuffer()
@@ -131,6 +134,12 @@ void Looper::SetReadPosition(float position)
     readPos_ = position;
 }
 
+void Looper::SetLooping(bool looping)
+{
+    heads_[READ].SetLooping(looping);
+    looping_ = looping;
+}
+
 void Looper::SetUpFade(Fade fade)
 {
     switch (fade)
@@ -167,6 +176,13 @@ void Looper::UpdateWritePos()
 {
     heads_[WRITE].UpdatePosition();
     writePos_ = heads_[WRITE].GetIntPosition();
+
+    // Testing...
+    // Restart the reading head each time the writing one restarts.
+    if (!looping_ && writePos_ == loopStart_)
+    {
+        heads_[READ].Run(true);
+    }
 }
 
 void Looper::ToggleDirection()
@@ -261,13 +277,15 @@ bool Looper::HandleFade()
 
     if (readingActive_)
     {
+        int32_t intReadPos = heads_[READ].GetIntPosition();
+
         // Handle when reading and writing speeds differ or we're going
         // backwards.
         if (readSpeed_ != writeSpeed_ || !IsGoingForward())
         {
             CalculateHeadsDistance();
             // Handle reaching the cross point.
-            if (crossPointFound_ && writePos_ == crossPoint_)
+            if (crossPointFound_ && intReadPos == crossPoint_)
             {
                 crossPointFound_ = false;
                 SetUpFade(Fade::SMOOTH);
@@ -275,14 +293,14 @@ bool Looper::HandleFade()
                 return true;
             }
             // Calculate the cross point.
-            else if (!crossPointFound_ && headsDistance_ <= heads_[WRITE].SamplesToFade())
+            else if (!crossPointFound_ && headsDistance_ <= heads_[READ].SamplesToFade())
             {
                 CalculateCrossPoint();
             }
         }
-        else if (heads_[READ].GetIntPosition() == loopEnd_)
+        else if (intReadPos == loopEnd_)
         {
-            SetUpFade(Fade::SMOOTH);
+            //SetUpFade(Fade::SMOOTH);
 
             return true;
         }

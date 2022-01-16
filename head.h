@@ -16,6 +16,14 @@ namespace wreath
     constexpr int32_t kMinLoopLengthForFade{4800};
     constexpr int32_t kSamplesToFade{1200};
 
+    enum Fade
+    {
+        NO_FADE,
+        SMOOTH,
+        IN,
+        OUT,
+    };
+
     enum Type
     {
         READ,
@@ -24,7 +32,7 @@ namespace wreath
 
     enum Action
     {
-        NONE,
+        NO_ACTION,
         LOOP,
         INVERT,
         STOP,
@@ -55,37 +63,34 @@ namespace wreath
         int32_t intIndex_{};
         float index_{};
         float rate_{};
+        float fadeIndex_{};
 
         int32_t loopStart_{};
         int32_t loopEnd_{};
         int32_t loopLength_{};
-
-        int fadeIndex_{};
-        int fadeSamples_{};
-        bool fading_{};
 
         bool run_{};
         bool loop_{};
 
         Movement movement_{};
         Direction direction_{};
+        Fade mustFade_{};
 
-        static inline float Hermite(float x, float y0, float y1, float y2, float y3)
-        {
-            return (((0.5f * (y3 - y0) + 1.5f * (y1 - y2)) * x + (y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3)) * x + 0.5f * (y2 - y0)) * x + y1;
-        }
+        float snapshotValue_{};
+        float fastAvg{};
+        float slowAvg{};
+        float prevDifference{};
+        float currentValue{};
 
         Action HandleLoopAction()
         {
-            float index{};
-
             // Handle normal loop boundaries.
             if (loopEnd_ > loopStart_)
             {
                 // Forward direction.
-                if (FORWARD == direction_ && intIndex_ > loopEnd_)
+                if (Direction::FORWARD == direction_ && intIndex_ > loopEnd_)
                 {
-                    if (PENDULUM == movement_ && loop_)
+                    if (Movement::PENDULUM == movement_ && loop_)
                     {
                         SetIndex(loopEnd_ - (index_ - loopEnd_));
 
@@ -99,19 +104,19 @@ namespace wreath
                     }
                 }
                 // Backwards direction.
-                else if (BACKWARDS == direction_ && intIndex_ < loopStart_)
+                else if (Direction::BACKWARDS == direction_ && intIndex_ < loopStart_)
                 {
-                    if (PENDULUM == movement_ && loop_)
+                    if (Movement::PENDULUM == movement_ && loop_)
                     {
                         SetIndex(loopStart_ + (loopStart_ - index_));
 
-                        return INVERT;
+                        return Action::INVERT;
                     }
                     else
                     {
                         SetIndex((loopEnd_ - std::abs(loopStart_ - index_)) + 1);
 
-                        return loop_ ? LOOP : STOP;
+                        return loop_ ? Action::LOOP : Action::STOP;
                     }
                 }
             }
@@ -119,30 +124,30 @@ namespace wreath
             else
             {
                 float frame = bufferSamples_ - 1;
-                if (FORWARD == direction_)
+                if (Direction::FORWARD == direction_)
                 {
                     if (intIndex_ > frame)
                     {
                         // Wrap-around.
                         SetIndex((index_ - frame) - 1);
 
-                        return loop_ ? LOOP : STOP;
+                        return loop_ ? Action::LOOP : Action::STOP;
                     }
                     else if (intIndex_ > loopEnd_ && intIndex_ < loopStart_)
                     {
-                        if (PENDULUM == movement_ && loop_)
+                        if (Movement::PENDULUM == movement_ && loop_)
                         {
                             // Max to avoid overflow.
                             SetIndex(std::max(loopEnd_ - (index_ - loopEnd_), 0.f));
 
-                            return INVERT;
+                            return Action::INVERT;
                         }
                         else
                         {
                             // Min to avoid overflow.
                             SetIndex(std::min(loopStart_ + (index_ - loopEnd_) - 1, frame));
 
-                            return loop_ ? LOOP : STOP;
+                            return loop_ ? Action::LOOP : Action::STOP;
                         }
                     }
                 }
@@ -153,29 +158,29 @@ namespace wreath
                         // Wrap-around.
                         SetIndex((frame - std::abs(index_)) + 1);
 
-                        return loop_ ? LOOP : STOP;
+                        return loop_ ? Action::LOOP : Action::STOP;
                     }
                     else if (intIndex_ > loopEnd_ && intIndex_ < loopStart_)
                     {
-                        if (PENDULUM == movement_ && loop_)
+                        if (Movement::PENDULUM == movement_ && loop_)
                         {
                             // Min to avoid overflow.
                             SetIndex(std::min(loopStart_ + (loopStart_ - index_), frame));
 
-                            return INVERT;
+                            return Action::INVERT;
                         }
                         else
                         {
                             // Max to avoid overflow.
                             SetIndex(std::max(loopEnd_ - (loopStart_ - index_) + 1, 0.f));
 
-                            return loop_ ? LOOP : STOP;
+                            return loop_ ? Action::LOOP : Action::STOP;
                         }
                     }
                 }
             }
 
-            return NONE;
+            return Action::NO_ACTION;
         }
 
         int32_t WrapIndex(int32_t index)
@@ -186,19 +191,19 @@ namespace wreath
                 // Forward direction.
                 if (index > loopEnd_)
                 {
-                    if (PENDULUM == movement_)
+                    if (Movement::PENDULUM == movement_)
                     {
                         index = loopEnd_ - (index - loopEnd_);
                     }
                     else
                     {
-                        index = (FORWARD == direction_) ? (loopStart_ + (index - loopEnd_)) - 1: 0;
+                        index = (FORWARD == direction_) ? (loopStart_ + (index - loopEnd_)) - 1 : 0;
                     }
                 }
                 // Backwards direction.
                 else if (index < loopStart_)
                 {
-                    if (PENDULUM == movement_)
+                    if (Movement::PENDULUM == movement_)
                     {
                         index = loopStart_ + (loopStart_ - index);
                     }
@@ -226,12 +231,12 @@ namespace wreath
                     if (FORWARD == direction_)
                     {
                         // Max/min to avoid overflow.
-                        index = (PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_) - 1, frame);
+                        index = (Movement::PENDULUM == movement_) ? std::max(loopEnd_ - (index - loopEnd_), static_cast<int32_t>(0)) : std::min(loopStart_ + (index - loopEnd_) - 1, frame);
                     }
                     else
                     {
                         // Max/min to avoid overflow.
-                        index = (PENDULUM == movement_) ? std::min(loopStart_ + (loopStart_ - index), frame) : std::max(loopEnd_ - (loopStart_ - index) + 1, static_cast<int32_t>(0));
+                        index = (Movement::PENDULUM == movement_) ? std::min(loopStart_ + (loopStart_ - index), frame) : std::max(loopEnd_ - (loopStart_ - index) + 1, static_cast<int32_t>(0));
                     }
                 }
             }
@@ -252,7 +257,7 @@ namespace wreath
         }
 
     public:
-        Head(Type type): type_{type} {}
+        Head(Type type) : type_{type} {}
         ~Head() {}
 
         void Reset()
@@ -294,7 +299,7 @@ namespace wreath
 
         int32_t SamplesToFade()
         {
-            return std::min(kSamplesToFade, loopLength_ / 2);
+            return std::min(kSamplesToFade, loopLength_);
         }
 
         inline void SetRate(float rate) { rate_ = rate; }
@@ -307,9 +312,7 @@ namespace wreath
         }
         inline void ResetPosition()
         {
-            SetIndex(FORWARD == direction_  ? loopStart_ : loopEnd_);
-            // Fade when resetting position.
-            //Fade();
+            SetIndex(FORWARD == direction_ ? loopStart_ : loopEnd_);
         }
         float UpdatePosition()
         {
@@ -327,13 +330,9 @@ namespace wreath
 
                 case INVERT:
                     ToggleDirection();
-                    // Fade when changing direction.
-                    //Fade();
                     break;
 
                 case LOOP:
-                    // Fade when looping.
-                    //Fade();
                     break;
 
                 default:
@@ -344,27 +343,57 @@ namespace wreath
             return index_;
         }
 
+        float ExpAvg(float sample, float avg, float w)
+        {
+            return w * sample + (1 - w) * avg;
+        }
+
+        bool Edge(float threshold)
+        {
+            fastAvg = ExpAvg(currentValue, fastAvg, 0.25);
+            slowAvg = ExpAvg(currentValue, slowAvg, 0.0625);
+            float difference = std::abs(fastAvg - slowAvg);
+            bool edge = prevDifference < threshold && difference >= threshold;
+            prevDifference = difference;
+
+            return edge;
+        }
+
+        bool IsFading()
+        {
+            return Fade::NO_FADE != mustFade_;
+        }
+
+        void SetUpFade(Fade fade)
+        {
+            snapshotValue_ = ReadAt(index_);
+            mustFade_ = fade;
+            fadeIndex_ = 0;
+        }
+
         float Read()
         {
-            float value = ReadAt(index_);
-            /*
-            if (rate_ > 1.f)
+            currentValue = ReadAt(index_);
+
+            // Apply switch-and-ramp technique to smooth the read value.
+            // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
+            if (Fade::SMOOTH == mustFade_)
             {
-                int32_t phase0 = intIndex_ - 1 * direction_;
-                int32_t phase2 = intIndex_ + 1 * direction_;
-                int32_t phase3 = intIndex_ + 2 * direction_;
-
-                float y0 = buffer_[WrapIndex(phase0)];
-                float y2 = buffer_[WrapIndex(phase2)];
-                float y3 = buffer_[WrapIndex(phase3)];
-
-                float x = index_ - intIndex_;
-
-                value = Hermite(x, y0, value, y2, y3);
+                int32_t samplesToFade = SamplesToFade();
+                float pos = fadeIndex_ * (1.f / samplesToFade);
+                if (fadeIndex_ < samplesToFade - 1)
+                {
+                    float delta = snapshotValue_ - currentValue;
+                    currentValue += delta * (1.0f - pos);
+                    fadeIndex_ += rate_;
+                }
+                else
+                {
+                    mustFade_ = Fade::NO_FADE;
+                }
             }
-            */
 
-            return value;
+            return currentValue;
         }
 
         float ReadAt(float index)
@@ -386,7 +415,47 @@ namespace wreath
 
         void Write(float value)
         {
-            buffer_[WrapIndex(intIndex_)] = value;
+            currentValue = ReadAt(index_);
+            int32_t samplesToFade = SamplesToFade();
+
+            // Gradually start writing, fading from the buffered value to the input
+            // signal.
+            if (Fade::IN == mustFade_)
+            {
+                // Actually start writing.
+                Run();
+                float pos = fadeIndex_ * (1.f / samplesToFade);
+                if (fadeIndex_ < samplesToFade - 1)
+                {
+                    value = currentValue * (1.0f - pos) + (value * pos);
+                    fadeIndex_ += rate_;
+                }
+                else
+                {
+                    mustFade_ = Fade::NO_FADE;
+                }
+            }
+            // Gradually stop writing, fading from the input signal to the buffered
+            // value.
+            else if (Fade::OUT == mustFade_)
+            {
+                float pos = fadeIndex_ * (1.f / samplesToFade);
+                if (fadeIndex_ < samplesToFade - 1)
+                {
+                    value = value * (1.0f - pos) + (currentValue * pos);
+                    fadeIndex_ += rate_;
+                }
+                else
+                {
+                    mustFade_ = Fade::NO_FADE;
+                    // Actually stop writing.
+                    Stop();
+                }
+            }
+            if (run_)
+            {
+                buffer_[WrapIndex(intIndex_)] = value;
+            }
         }
 
         void ClearBuffer()
@@ -414,14 +483,14 @@ namespace wreath
         {
             bufferSamples_ = bufferSamples;
             loopLength_ = bufferSamples_;
-            loopEnd_ = loopLength_ - 1 ;
+            loopEnd_ = loopLength_ - 1;
         }
 
         int32_t StopBuffering()
         {
             intIndex_ = 0;
             loopLength_ = bufferSamples_;
-            loopEnd_ = loopLength_ - 1 ;
+            loopEnd_ = loopLength_ - 1;
             ResetPosition();
 
             return bufferSamples_;

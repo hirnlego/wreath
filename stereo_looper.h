@@ -4,6 +4,7 @@
 #include "looper.h"
 #include "Utility/dsp.h"
 #include "Filters/svf.h"
+#include "Dynamics/crossfade.h"
 #include "dev/sdram.h"
 #include <cmath>
 #include <stddef.h>
@@ -13,10 +14,10 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150};                   // 2:30 minutes max
+    //constexpr int kBufferSeconds{150};                   // 2:30 minutes max
+    constexpr int kBufferSeconds{1};                   // 2:30 minutes max
     const float kMinSamplesForTone{kSampleRate * 0.03f}; // 30ms
-    //const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
-    const int32_t kBufferSamples{48000};
+    const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightBuffer_[kBufferSamples];
@@ -224,26 +225,23 @@ namespace wreath
                 }
                 */
 
-                //if (writingActive_)
-                //{
-                    float leftWet{};
-                    float rightWet{};
-                    if (readingActive_)
+                float leftWet{};
+                float rightWet{};
+                if (readingActive_)
+                {
+                    leftWet = leftOut * feedback_;
+                    rightWet = rightOut * feedback_;
+                    if (filterValue_ >= 20.f)
                     {
-                        leftWet = leftOut * feedback_;
-                        rightWet = rightOut * feedback_;
-                        if (filterValue_ >= 20.f)
-                        {
-                            feedbackFilter_.Process(leftDry);
-                            leftWet = SoftLimit(leftWet + feedbackFilter_.Band());
-                            feedbackFilter_.Process(rightDry);
-                            rightWet = SoftLimit(rightWet + feedbackFilter_.Band());
-                        }
+                        feedbackFilter_.Process(leftDry);
+                        leftWet = SoftLimit(leftWet + feedbackFilter_.Band());
+                        feedbackFilter_.Process(rightDry);
+                        rightWet = SoftLimit(rightWet + feedbackFilter_.Band());
                     }
-                    float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
-                    loopers_[LEFT].Write(SoftClip(leftDry * dryLevel + leftWet), leftOut);
-                    loopers_[RIGHT].Write(SoftClip(rightDry * dryLevel + rightWet), rightOut);
-                //}
+                }
+                float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
+                loopers_[LEFT].Write(SoftClip(leftDry * dryLevel + leftWet), leftOut);
+                loopers_[RIGHT].Write(SoftClip(rightDry * dryLevel + rightWet), rightOut);
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();

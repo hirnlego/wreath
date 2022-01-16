@@ -1,13 +1,10 @@
 #pragma once
 
 #include "head.h"
-#include "Dynamics/crossfade.h"
 #include <stdint.h>
 
 namespace wreath
 {
-    using namespace daisysp;
-
     class Looper
     {
 
@@ -71,13 +68,13 @@ namespace wreath
     private:
         void CalculateHeadsDistance();
         void CalculateCrossPoint();
+        void SetUpFade(Fade fade);
 
         float *buffer_{};           // The buffer
         float bufferSeconds_{};     // Written buffer length in seconds
         float readPos_{};           // The read position
         float readPosSeconds_{};    // Read position in seconds
         float nextReadPos_{};       // Next read position
-        float fadePos_{};           // Fade position
         float loopStartSeconds_{};  // Start of the loop in seconds
         float loopLengthSeconds_{}; // Length of the loop in seconds
         float readRate_{};         // Speed multiplier
@@ -90,8 +87,6 @@ namespace wreath
         int32_t loopEnd_{};          // Loop end position
         int32_t loopLength_{};       // Length of the loop in samples
         int32_t headsDistance_{};
-        float fadeIndex_{};           // Counter used for fades
-        int fadeSamples_{};
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};
         int32_t crossPoint_{};
@@ -99,14 +94,9 @@ namespace wreath
         bool readingActive_{true};
         bool writingActive_{true};
         int32_t sampleRateSpeed_{};
-        bool mustFade_{};
-        bool mustFadeOut_{};
-        bool mustFadeIn_{};
-        bool fadeOut_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 
         Movement movement_{}; // The current movement type of the looper
-        CrossFade cf_;        // Crossfade used for fading in/out of the read value
     };
 } // namespace wreath

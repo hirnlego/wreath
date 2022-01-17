@@ -1,15 +1,10 @@
 #pragma once
 
-#include "Dynamics/crossfade.h"
-#include <stddef.h>
+#include "head.h"
+#include <stdint.h>
 
 namespace wreath
 {
-    using namespace daisysp;
-
-    constexpr int kMinLoopLengthSamples{48};
-    constexpr int kSamplesToFade{240}; // Note: 240 samples is 5ms @ 48KHz.
-
     class Looper
     {
 
@@ -17,113 +12,93 @@ namespace wreath
         Looper() {}
         ~Looper() {}
 
-        enum Movement
-        {
-            FORWARD,
-            BACKWARDS,
-            PENDULUM,
-            DRUNK,
-            LAST_MOVEMENT,
-        };
-
-        enum Fade
-        {
-            NONE = -1,
-            IN,
-            OUT,
-        };
-
-        void Init(size_t sampleRate, float *mem, size_t maxBufferSamples);
+        void Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples);
         void Reset();
         void ClearBuffer();
         void StopBuffering();
-        void SetSpeedMult(float speed);
-        // looplength_ = loopEnd_ + (bufferSamples_ - loopStart_) + 1
-        void SetLoopLength(size_t length);
+        void SetReadRate(float rate);
+        void SetLoopLength(int32_t length);
         void SetMovement(Movement movement);
+        void SetLooping(bool looping);
         bool Buffer(float value);
-        float Read(float pos);
-        void SetWritePos(size_t pos);
+        void SetReadPosition(float position);
+        float Read();
+        void Write(float value, float bufferedValue);
+        void UpdateReadPos();
+        void UpdateWritePos();
+        bool HandleFade();
         void Restart();
-        void SetReadPos(float pos);
-        void SetLoopStart(size_t pos);
-        size_t GetRandomPosition();
+        void SetLoopStart(int32_t pos);
+        int32_t GetRandomPosition();
+        void SetLoopEnd(int32_t pos);
+        void SetDirection(Direction direction);
+        void ToggleDirection();
+        void ToggleWriting();
+        void ToggleReading();
 
-        inline size_t GetBufferSamples() { return bufferSamples_; }
-        inline size_t GetLoopStart() { return loopStart_; }
-        inline size_t GetLoopEnd() { return loopEnd_; }
-        inline size_t GetLoopLength() { return loopLength_; }
-        inline float GetLoopStartSeconds() { return loopStartSeconds_; }
-        inline float GetLoopLengthSeconds() { return loopLengthSeconds_; }
+        inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }
-        inline float GetPositionSeconds() { return readPosSeconds_; }
+
+        inline int32_t GetLoopStart() { return loopStart_; }
+        inline float GetLoopStartSeconds() { return loopStartSeconds_; }
+
+        inline int32_t GetLoopEnd() { return loopEnd_; }
+
+        inline int32_t GetLoopLength() { return loopLength_; }
+        inline float GetLoopLengthSeconds() { return loopLengthSeconds_; }
+
         inline float GetReadPos() { return readPos_; }
-        inline float GetWritePos() { return writePos_; }
+        inline float GetReadPosSeconds() { return readPosSeconds_; }
         inline float GetNextReadPos() { return nextReadPos_; }
-        inline float GetSpeedMult() { return speedMult_; }
-        inline size_t GetSampleRateSpeed() { return sampleRateSpeed_; }
+
+        inline int32_t GetWritePos() { return writePos_; }
+
+        inline float GetReadRate() { return readRate_; }
+        inline int32_t GetSampleRateSpeed() { return sampleRateSpeed_; }
+
         inline Movement GetMovement() { return movement_; }
-        inline bool IsForwardMovement() { return Movement::FORWARD == movement_; }
-        inline bool IsBackwardsMovement() { return Movement::BACKWARDS == movement_; }
-        inline bool IsPendulumMovement() { return Movement::PENDULUM == movement_; }
+        inline Direction GetDirection() { return direction_; }
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
-        inline bool IsGoingForward() { return forward_; }
-        inline void Write(float value) { buffer_[writePos_] = value; }
-        bool SetNextReadPos(float pos)
-        {
-            nextReadPos_ = pos;
+        inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
 
-            return HandlePosBoundaries(nextReadPos_, true);
-        };
-        inline void SetLoopEnd(size_t pos) { loopEnd_ = pos; };
-        inline void SetForward(bool forward) { forward_ = forward; };
-        inline void ToggleDirection() { forward_ = !forward_; };
-        inline void ToggleWriting() { writingActive_ = !writingActive_; };
-        inline void ToggleReading() { readingActive_ = !readingActive_; };
-        inline void SetReading(bool active) { readingActive_ = active; };
+        inline void SetReading(bool active) { readingActive_ = active; }
 
-        float temp{};
+        inline int32_t GetCrossPoint() { return crossPoint_; }
+        inline bool CrossPointFound() { return crossPointFound_; }
 
     private:
-        void SetReadPosAtStart();
-        void SetReadPosAtEnd();
-        void CalculateDeltaTime();
-        void WrapPos(size_t &pos);
         void CalculateHeadsDistance();
-        void HandleFade();
-        void CalculateFadeSamples(size_t pos);
-        void UpdateLoopEnd();
-        bool HandlePosBoundaries(float &pos, bool isReadPos);
+        void CalculateCrossPoint();
+        void SetUpFade(Fade fade);
 
         float *buffer_{};           // The buffer
         float bufferSeconds_{};     // Written buffer length in seconds
         float readPos_{};           // The read position
         float readPosSeconds_{};    // Read position in seconds
         float nextReadPos_{};       // Next read position
-        float fadePos_{};           // Fade position
         float loopStartSeconds_{};  // Start of the loop in seconds
         float loopLengthSeconds_{}; // Length of the loop in seconds
-        float speedMult_{};         // Speed multiplier
+        float readRate_{};         // Speed multiplier
+        float writeRate_{};         // Speed multiplier
         float readSpeed_{};         // Actual read speed
         float writeSpeed_{};        // Actual write speed
-        float headsDistance_{};     // Distance in samples between the reading and writing heads
-        size_t maxBufferSamples_{}; // The whole buffer length in samples
-        size_t bufferSamples_{};    // The written buffer length in samples
-        size_t writePos_{};         // The write position
-        size_t loopStart_{};        // Loop start position
-        size_t loopEnd_{};          // Loop end position
-        size_t loopLength_{};       // Length of the loop in samples
-        int fadeIndex_{};           // Counter used for fades
-        int fadeSamples_{};
-        size_t sampleRate_{}; // The sample rate
-        bool forward_{};      // True if the direction is forward
+        int32_t bufferSamples_{};    // The written buffer length in samples
+        int32_t writePos_{};         // The write position
+        int32_t loopStart_{};        // Loop start position
+        int32_t loopEnd_{};          // Loop end position
+        int32_t loopLength_{};       // Length of the loop in samples
+        int32_t headsDistance_{};
+        int32_t sampleRate_{}; // The sample rate
+        Direction direction_{};
+        int32_t crossPoint_{};
         bool crossPointFound_{};
         bool readingActive_{true};
         bool writingActive_{true};
-        size_t sampleRateSpeed_{};
-        Fade mustFade_{Fade::NONE};
+        int32_t sampleRateSpeed_{};
+        bool looping_{true};
+
+        Head heads_[2]{{Type::READ}, {Type::WRITE}};
 
         Movement movement_{}; // The current movement type of the looper
-        CrossFade cf_;        // Crossfade used for fading in/out of the read value
     };
 } // namespace wreath

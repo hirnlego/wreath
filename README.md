@@ -7,18 +7,20 @@ BUGS
 1) clicks when going backwards or at a speed different than the write one
 2) in pendulum sometimes a flanger-like effect is produced (check feedback and (1))
 3) when modifying the loop start point while frozen, if the start point "pushes" the read position smearing occurs
-4) no dry sound during buffering
-5) clearing buffer keeps too long
-6) after clearing buffer dry/wet doesn't work (feedback does?)
 7) fade is broken when frozen across the boundary
+9) strange behaviour when speed < 1 (the feedback disappears)
 
 TODO
 
-- modulation matrix
+- one-shot/looping
+- loop envelopes
+- loop length < 100 ms = grain
+- grains rhythms
+- CV modulation matrix
 - sample rate reduction
 - mimeo: when clocked, there should be a way to clock the looper, speed is a divisor/multiplier
-- clocked, envelope
 - extend initial buffer
 - link loopers (eg. play in series)
 - stutter (stops and goes, repeats), drag, jitter
 - more play heads
+- parameters transitions / Markov chain

@@ -1,6 +1,5 @@
 #include "looper.h"
 #include "Utility/dsp.h"
-#include <cstring>
 
 using namespace wreath;
 using namespace daisysp;
@@ -9,531 +8,323 @@ using namespace daisysp;
  * @brief Initializes the looper.
  *
  * @param sampleRate
- * @param mem
+ * @param buffer
  * @param maxBufferSamples
  */
-void Looper::Init(size_t sampleRate, float *mem, size_t maxBufferSamples)
+void Looper::Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples)
 {
     sampleRate_ = sampleRate;
-    buffer_ = mem;
-    maxBufferSamples_ = maxBufferSamples;
+    heads_[READ].Init(buffer, maxBufferSamples);
+    heads_[WRITE].Init(buffer, maxBufferSamples);
     Reset();
-
-    movement_ = Movement::FORWARD;
-    forward_ = Movement::FORWARD == movement_;
-
-    cf_.Init(CROSSFADE_CPOW);
 }
 
-/**
- * @brief Sets the speed multiplier, clamping its value just in case.
- *
- * @param multiplier
- */
-void Looper::SetSpeedMult(float multiplier)
-{
-    speedMult_ = multiplier;
-    readSpeed_ = sampleRate_ * speedMult_; // samples/s.
-    writeSpeed_ = sampleRate_;             // samples/s.
-    sampleRateSpeed_ = static_cast<size_t>(sampleRate_ / speedMult_);
-}
-
-/**
- * @brief Sets the movement type.
- *
- * @param movement
- */
-void Looper::SetMovement(Movement movement)
-{
-    if (Movement::FORWARD == movement && !forward_)
-    {
-        forward_ = true;
-    }
-    else if (Movement::BACKWARDS == movement && forward_)
-    {
-        forward_ = false;
-    }
-
-    movement_ = movement;
-}
-
-/**
- * @brief Clears the buffer.
- */
-void Looper::ClearBuffer()
-{
-    //std::fill(&buffer_[0], &buffer_[maxBufferSamples_ - 1], 0.f);
-    memset(buffer_, 0.f, maxBufferSamples_);
-}
-
-/**
- * @brief Resets the looper.
- */
 void Looper::Reset()
 {
-    ClearBuffer();
+    heads_[READ].Reset();
+    heads_[WRITE].Reset();
     bufferSamples_ = 0;
     bufferSeconds_ = 0.f;
     loopStart_ = 0;
+    loopStartSeconds_ = 0.f;
     loopEnd_ = 0;
     loopLength_ = 0;
-    loopStartSeconds_ = 0.f;
     loopLengthSeconds_ = 0.f;
     readPos_ = 0.f;
     readPosSeconds_ = 0.f;
     nextReadPos_ = 0.f;
-    fadeIndex_ = 0;
-    fadePos_ = 0;
     writePos_ = 0;
-    SetSpeedMult(1.f);
+    movement_ = Movement::NORMAL;
+    direction_ = Direction::FORWARD;
+    writeRate_ = 1.f;
+    SetReadRate(1.f);
+
+    // Testing...
+    SetLooping(false);
+}
+
+void Looper::ClearBuffer()
+{
+    heads_[WRITE].ClearBuffer();
 }
 
 bool Looper::Buffer(float value)
 {
-    // Handle end of buffer.
-    if (writePos_ > maxBufferSamples_ - 1)
-    {
-        return true;
-    }
-
-    Write(value);
-    writePos_++;
-    bufferSamples_ = writePos_;
+    bool end = heads_[WRITE].Buffer(value);
+    bufferSamples_ = heads_[WRITE].GetBufferSamples();
     bufferSeconds_ = bufferSamples_ / static_cast<float>(sampleRate_);
 
-    return false;
+    return end;
+}
+
+void Looper::StopBuffering()
+{
+    heads_[READ].InitBuffer(heads_[WRITE].StopBuffering());
+    loopStart_ = 0;
+    loopStartSeconds_ = 0.f;
+    loopEnd_ = bufferSamples_ - 1 ;
+    loopLength_ = bufferSamples_;
+    loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
+
+    // DEBUG
+    //direction_ = heads_[READ].ToggleDirection();
+    //heads_[READ].ResetPosition();
 }
 
 void Looper::Restart()
 {
-    forward_ ? SetReadPosAtStart() : SetReadPosAtEnd();
-    writePos_ = 0;
+    heads_[READ].ResetPosition();
+    heads_[WRITE].ResetPosition();
+    // Invert direction when in pendulum.
+    if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
+    {
+        direction_ = heads_[READ].ToggleDirection();
+    }
+    crossPointFound_ = false;
 }
 
-/**
- * @brief Stops the buffering.
- */
-void Looper::StopBuffering()
+void Looper::SetLoopStart(int32_t pos)
 {
-    loopStart_ = 0;
-    loopStartSeconds_ = 0.f;
-    writePos_ = 0;
-    SetLoopLength(bufferSamples_);
-    SetReadPos(forward_ ? loopStart_ : loopEnd_);
-}
-
-void Looper::SetLoopStart(size_t pos)
-{
-    loopStart_ = fclamp(pos, 0, bufferSamples_ - 1);
+    loopStart_ = heads_[READ].SetLoopStart(pos);
+    heads_[WRITE].SetLoopStart(pos);
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
-    UpdateLoopEnd();
+    loopEnd_ = heads_[READ].GetLoopEnd();
+    crossPointFound_ = false;
 };
 
-void Looper::UpdateLoopEnd()
+void Looper::SetLoopEnd(int32_t pos)
 {
-    if (loopStart_ + loopLength_ > bufferSamples_)
-    {
-        loopEnd_ = (loopStart_ + loopLength_) - bufferSamples_ - 1;
-    }
-    else
-    {
-        loopEnd_ = loopStart_ + loopLength_ - 1;
-    }
+    loopEnd_ = pos;
 }
 
-/**
- * @brief Sets the loop length.
- *
- * @param length
- */
-void Looper::SetLoopLength(size_t length)
+void Looper::SetLoopLength(int32_t length)
 {
-    loopLength_ = fclamp(length, kMinLoopLengthSamples, bufferSamples_);
+    loopLength_ = heads_[READ].SetLoopLength(length);
+    //heads_[WRITE].SetLoopLength(length);
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
-    UpdateLoopEnd();
+    loopEnd_ = heads_[READ].GetLoopEnd();
+    crossPointFound_ = false;
 }
 
-/**
- * @brief Returns the number of samples to fade given the provided read
- *        position in the buffer.
- *
- * @param pos
- */
-void Looper::CalculateFadeSamples(size_t pos)
+void Looper::SetReadRate(float rate)
 {
-    fadeSamples_ = kSamplesToFade;
-    /*
-    if (loopLength_ < kSamplesToFade)
-    {
-        fadeSamples_ = 0;
-    }
-
-    else if (forward_ && pos + kSamplesToFade > loopEnd_)
-    {
-        fadeSamples_ = loopEnd_ - static_cast<int>(pos);
-    }
-
-    else if (forward_ && pos - kSamplesToFade < loopStart_)
-    {
-        fadeSamples_ = static_cast<int>(pos);
-    }
-
-    else
-    {
-        fadeSamples_ = kSamplesToFade;
-    }
-    */
+    heads_[READ].SetRate(rate);
+    readRate_ = rate;
+    readSpeed_ = sampleRate_ * readRate_; // samples/s.
+    writeSpeed_ = sampleRate_ * writeRate_;             // samples/s.
+    sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
+    crossPointFound_ = false;
 }
 
-/**
- * @brief Reads from a specified point in the delay line using linear
- *        interpolation. Also applies a fade in and out at the beginning and end
- *        of the loop.
- *
- * @param pos
- * @return float
- */
-float Looper::Read(float pos)
+void Looper::SetMovement(Movement movement)
 {
-    // 1) get the value at position.
-
-    // Integer position.
-    size_t intPos{static_cast<size_t>(std::round(pos))};
-    // Value at the integer position.
-    float val{buffer_[intPos]};
-    // Position decimal part.
-    float frac{pos - intPos};
-    // If the position is not an integer number we need to interpolate the value.
-    if (frac != 0.f)
-    {
-        // Value at the position after or before, depending on the direction
-        // we're going.
-        float val2{buffer_[static_cast<size_t>(fclamp(intPos + (forward_ ? 1 : -1), 0, bufferSamples_ - 1))]};
-        // Interpolated value.
-        val = val + (val2 - val) * frac;
-    }
-
-    // 2) fade the value if needed.
-    if (mustFade_ != -1)
-    {
-        // The number of samples we need to fade.
-        cf_.SetPos(fadeIndex_ * (1.f / fadeSamples_));
-        float fadeValues[2][2]{{0.f, 1.f}, {1.f, 0.f}};
-        val *= cf_.Process(fadeValues[mustFade_][0], fadeValues[mustFade_][1]);
-        fadeIndex_ += 1;
-        // End and reset the fade when done.
-        if (fadeIndex_ > fadeSamples_)
-        {
-            fadeIndex_ = 0;
-            cf_.SetPos(0.f);
-            // After a fade out there's always a fade in.
-            if (Fade::OUT == mustFade_)
-            {
-                fadeIndex_ = 0;
-                fadePos_ = writePos_;
-                mustFade_ = Fade::IN;
-            }
-            else
-            {
-                crossPointFound_ = false;
-                mustFade_ = Fade::NONE;
-            }
-        }
-    }
-
-    return val;
+    heads_[READ].SetMovement(movement);
+    movement_ = movement;
 }
 
-/**
- * @brief
- *
- * @param pos
- */
-void Looper::SetWritePos(size_t pos)
+void Looper::SetDirection(Direction direction)
 {
-    writePos_ = (pos > loopEnd_) ? loopStart_ + (pos - loopEnd_) : pos;
+    heads_[READ].SetDirection(direction);
+    direction_ = direction;
 }
 
-/**
- * @brief Updates the given position depending on the loop boundaries and the
- *        current movement type. Returns true if the position has been altered.
- *
- * @param pos
- * @param isReadPos
- * @return true
- * @return false
- */
-bool Looper::HandlePosBoundaries(float &pos, bool isReadPos)
+void Looper::SetReadPosition(float position)
 {
-    // Handle normal loop boundaries.
-    if (loopEnd_ > loopStart_)
+    heads_[READ].SetIndex(position);
+    readPos_ = position;
+}
+
+void Looper::SetLooping(bool looping)
+{
+    heads_[READ].SetLooping(looping);
+    looping_ = looping;
+}
+
+void Looper::SetUpFade(Fade fade)
+{
+    switch (fade)
     {
-        // Forward direction.
-        if (forward_ && pos > loopEnd_)
-        {
-            pos = loopStart_ + (pos - loopEnd_);
-            // Invert direction when in pendulum.
-            if (Movement::PENDULUM == movement_)
-            {
-                // Switch direction only if we're handling the read position.
-                if (isReadPos)
-                {
-                    forward_ = !forward_;
-                }
-                pos = loopEnd_;
-            }
-
-            return true;
-        }
-        // Backwards direction.
-        else if (!forward_ && pos < loopStart_)
-        {
-            pos = loopEnd_ - (loopStart_ - pos);
-            // Invert direction when in pendulum.
-            if (Movement::PENDULUM == movement_)
-            {
-                // Switch direction only if we're handling the read position.
-                if (isReadPos)
-                {
-                    forward_ = !forward_;
-                }
-                pos = loopStart_;
-            }
-            return true;
-        }
+    case Fade::SMOOTH:
+        heads_[READ].SetUpFade(fade);
+        break;
+    case Fade::IN:
+    case Fade::OUT:
+        heads_[WRITE].SetUpFade(fade);
+        break;
+    default:
+        break;
     }
-    // Handle inverted loop boundaries (end point comes before start point).
-    else
+}
+
+float Looper::Read()
+{
+    return heads_[READ].Read();
+}
+
+void Looper::Write(float value, float bufferedValue)
+{
+    heads_[WRITE].Write(value);
+}
+
+void Looper::UpdateReadPos()
+{
+    readPos_ = heads_[READ].UpdatePosition();
+    readPosSeconds_ = readPos_ / sampleRate_;
+}
+
+void Looper::UpdateWritePos()
+{
+    heads_[WRITE].UpdatePosition();
+    writePos_ = heads_[WRITE].GetIntPosition();
+
+    // Testing...
+    // Restart the reading head each time the writing one restarts.
+    if (!looping_ && writePos_ == loopStart_)
     {
-        if (forward_)
-        {
-            if (pos > bufferSamples_ - 1)
-            {
-                // Wrap-around.
-                pos = pos - bufferSamples_;
-
-                return true;
-            }
-            else if (pos > loopEnd_ && pos < loopStart_)
-            {
-                pos = loopStart_;
-                // Invert direction when in pendulum.
-                if (Movement::PENDULUM == movement_)
-                {
-                    // Switch direction only if we're handling the read position.
-                    if (isReadPos)
-                    {
-                        forward_ = !forward_;
-                    }
-                    pos = loopEnd_;
-                }
-
-                return true;
-            }
-        }
-        else
-        {
-            if (pos < 0)
-            {
-                // Wrap-around.
-                pos = (bufferSamples_ - 1) + pos;
-
-                return true;
-            }
-            else if (pos > loopEnd_ && pos < loopStart_)
-            {
-                pos = loopEnd_;
-                // Invert direction when in pendulum.
-                if (Movement::PENDULUM == movement_)
-                {
-                    // Switch direction only if we're handling the read position.
-                    if (isReadPos)
-                    {
-                        forward_ = !forward_;
-                    }
-                    pos = loopStart_;
-                }
-
-                return true;
-            }
-        }
+        heads_[READ].Run(true);
     }
+}
 
-    return false;
+void Looper::ToggleDirection()
+{
+    direction_ = heads_[READ].ToggleDirection();
+}
+
+void Looper::ToggleReading()
+{
+    readingActive_ = heads_[READ].ToggleRun();
+}
+
+void Looper::ToggleWriting()
+{
+    writingActive_ ? SetUpFade(Fade::OUT) : SetUpFade(Fade::IN);
+    writingActive_ = !writingActive_;
 }
 
 void Looper::CalculateHeadsDistance()
 {
+    // This is the floor of the float position.
+    int32_t intReadPos = heads_[READ].GetIntPosition();
+
     // forward, rp > wp, ws > rs = rp - wp
     // backwards, rp > wp, ws > rs = rp - wp
     // backwards, rp > wp, rs > ws = rp - wp
-    if (readPos_ > writePos_ && ((forward_ && writeSpeed_ > readSpeed_) || (!forward_ && readPos_ > writePos_)))
+    if (intReadPos > writePos_ && ((IsGoingForward() && writeSpeed_ > readSpeed_) || (!IsGoingForward() && intReadPos > writePos_)))
     {
-        headsDistance_ = readPos_ - writePos_;
+        headsDistance_ = intReadPos - writePos_;
     }
 
     // forward, rp > wp, rs > ws = b - rp + wp
-    else if (forward_ && readPos_ > writePos_)
+    else if (IsGoingForward() && intReadPos > writePos_)
     {
-        headsDistance_ = bufferSamples_ - readPos_ + writePos_;
+        headsDistance_ = bufferSamples_ - intReadPos + writePos_;
     }
 
     // forward, wp > rp, ws > rs = b - wp + rp
     // backwards, wp > rp, ws > rs = b - wp + rp
     // backwards, wp > rp, rs > ws = b - wp + rp
-    else if ((forward_ && writePos_ > readPos_ && writeSpeed_ > readSpeed_) || (!forward_ && writePos_ > readPos_))
+    else if ((IsGoingForward() && writePos_ > intReadPos && writeSpeed_ > readSpeed_) || (!IsGoingForward() && writePos_ > intReadPos))
     {
-        headsDistance_ = bufferSamples_ - writePos_ + readPos_;
+        headsDistance_ = bufferSamples_ - writePos_ + intReadPos;
     }
 
     // forward, wp > rp, rs > ws = wp - rp
-    else if (forward_ && readSpeed_ > writeSpeed_)
+    else if (IsGoingForward() && readSpeed_ > writeSpeed_)
     {
-        headsDistance_ = writePos_ - readPos_;
+        headsDistance_ = writePos_ - intReadPos;
     }
 
     else
     {
-        headsDistance_ = 0.f;
-    }
-
-    if (headsDistance_ <= fadeSamples_ * 2)
-    {
-        headsDistance_ = headsDistance_;
+        headsDistance_ = 0;
     }
 }
 
-// Handle read fade.
-void Looper::HandleFade()
+void Looper::CalculateCrossPoint()
 {
-    size_t intPos{static_cast<size_t>(std::round(readPos_))};
-    static size_t crossPoint{};
-
-    // When the two heads are going at different speeds, we must calculate
-    // the point in which the two will cross each other so we can set up a
-    // fading accordingly.
-    if ((readSpeed_ != writeSpeed_ || !forward_) && headsDistance_ > 0 && headsDistance_ <= fadeSamples_ * 2 && !crossPointFound_ && writingActive_)
+    float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
+    if (!IsGoingForward())
     {
-        float deltaTime{};
-        float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
-        if (!forward_)
+        relSpeed = writeSpeed_ + readSpeed_;
+    }
+
+    float deltaTime = headsDistance_ / relSpeed;
+    crossPoint_ = writePos_ + (writeSpeed_ * deltaTime) - 2 * direction_;
+    // Wrap the crossing point if it's outside of the buffer.
+    if (crossPoint_ >= bufferSamples_)
+    {
+        int32_t r = crossPoint_ % loopLength_;
+        if (loopStart_ + r > bufferSamples_)
         {
-            relSpeed = writeSpeed_ + readSpeed_;
+            crossPoint_ = r - (bufferSamples_ - loopStart_);
         }
-        deltaTime = headsDistance_ / relSpeed;
-        crossPoint = writePos_ + (writeSpeed_ * deltaTime);
-        // Wrap the meeting point if it's outside of the buffer.
-        if (crossPoint >= bufferSamples_)
+        else
         {
-            size_t r = crossPoint % loopLength_;
-            if (loopStart_ + r > bufferSamples_)
-            {
-                crossPoint = r - (bufferSamples_ - loopStart_);
-            }
-            else
-            {
-                crossPoint = loopStart_ + r;
-            }
+            crossPoint_ = loopStart_ + r;
         }
-        temp = crossPoint;
-        crossPointFound_ = true;
-        fadeSamples_ = headsDistance_;
     }
-
-    // Set up a fade in if:
-    // - we're going forward and are right at the beginning of the loop;
-    // - we're going backwards and are right at the end of the loop;
-    // - we're going backwards, or at a different speed, and the two heads have just met (note that at this point the write position already stepped forward, so we must check against crossPoint + 1).
-    if ((forward_ && intPos == loopStart_) ||
-        (!forward_ && intPos == loopEnd_))
-    {
-        //fadePos_ = writePos_;
-        //fadeIndex_ = 0;
-        //mustFade_ = Fade::IN;
-    }
-
-    // Set up a fade out if:
-    // - we're going forward and are almost at the end of the loop;
-    // - we're going backwards and are almost at the beginning of the loop;
-    // - we're going backwards, or at a different speed, and the two heads are about to meet.
-    else if ((crossPointFound_ && (writePos_ == crossPoint - fadeSamples_)))
-    {
-        fadePos_ = writePos_;
-        fadeIndex_ = 0;
-        mustFade_ = Fade::OUT;
-    }
+    crossPointFound_ = true;
 }
 
-/**
- * @brief Sets the read position. Also, sets a fade in/out if needed.
- *
- * @param pos
- */
-void Looper::SetReadPos(float pos)
+bool Looper::HandleFade()
 {
-    readPos_ = pos;
-    readPosSeconds_ = readPos_ / sampleRate_;
+    bool fading = heads_[READ].IsFading() || heads_[WRITE].IsFading();
+
+    if (fading)
+    {
+        return false;
+    }
+
     if (readingActive_)
     {
-        if (readSpeed_ != writeSpeed_ || !forward_)
+        int32_t intReadPos = heads_[READ].GetIntPosition();
+
+        // Handle when reading and writing speeds differ or we're going
+        // backwards.
+        if (readSpeed_ != writeSpeed_ || !IsGoingForward())
         {
             CalculateHeadsDistance();
-        }
-        if (mustFade_ == Fade::NONE)
-        {
-            CalculateFadeSamples(static_cast<size_t>(std::round(pos)));
-            if (fadeSamples_ > 0)
+            // Handle reaching the cross point.
+            if (crossPointFound_ && intReadPos == crossPoint_)
             {
-                HandleFade();
+                crossPointFound_ = false;
+                SetUpFade(Fade::SMOOTH);
+
+                return true;
+            }
+            // Calculate the cross point.
+            else if (!crossPointFound_ && headsDistance_ <= heads_[READ].SamplesToFade())
+            {
+                CalculateCrossPoint();
             }
         }
+        else if (intReadPos == loopEnd_)
+        {
+            //SetUpFade(Fade::SMOOTH);
+
+            return true;
+        }
     }
+
+    return false;
 }
 
 /**
  * @brief Returns a random position within the loop.
  *
- * @return size_t
+ * @return int32_t
  */
-size_t Looper::GetRandomPosition()
+int32_t Looper::GetRandomPosition()
 {
-    size_t pos{loopStart_ + rand() % (loopLength_ - 1)};
-    if (forward_ && pos > loopEnd_)
+    int32_t pos{loopStart_ + rand() % (loopLength_ - 1)};
+    if (IsGoingForward() && pos > loopEnd_)
     {
         pos = loopEnd_;
     }
-    else if (!forward_ && pos < loopStart_)
+    else if (!IsGoingForward() && pos < loopStart_)
     {
         pos = loopStart_;
     }
 
     return pos;
-}
-
-/**
- * @brief Sets the read position at the beginning of the loop.
- */
-void Looper::SetReadPosAtStart()
-{
-    SetReadPos(loopStart_);
-    // Invert direction when in pendulum.
-    if (Movement::PENDULUM == movement_)
-    {
-        forward_ = !forward_;
-        SetReadPos(loopEnd_);
-    }
-}
-
-/**
- * @brief Sets the read position at the end of the loop.
- */
-void Looper::SetReadPosAtEnd()
-{
-    SetReadPos(loopEnd_);
-    // Invert direction when in pendulum.
-    if (Movement::PENDULUM == movement_)
-    {
-        forward_ = !forward_;
-        SetReadPos(loopStart_);
-    }
 }

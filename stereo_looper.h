@@ -1,9 +1,10 @@
 #pragma once
 
+#include "head.h"
 #include "looper.h"
-#include "envelope_follower.h"
 #include "Utility/dsp.h"
 #include "Filters/svf.h"
+#include "Dynamics/crossfade.h"
 #include "dev/sdram.h"
 #include <cmath>
 #include <stddef.h>
@@ -12,10 +13,11 @@ namespace wreath
 {
     using namespace daisysp;
 
-    constexpr size_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150};                   // 2:30 minutes max
+    constexpr int32_t kSampleRate{48000};
+    //constexpr int kBufferSeconds{150};                   // 2:30 minutes max
+    constexpr int kBufferSeconds{1};                   // 2:30 minutes max
     const float kMinSamplesForTone{kSampleRate * 0.03f}; // 30ms
-    const size_t kBufferSamples{kSampleRate * kBufferSeconds};
+    const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightBuffer_[kBufferSamples];
@@ -30,6 +32,8 @@ namespace wreath
         {
             LEFT,
             RIGHT,
+            NONE,
+            BOTH,
         };
 
         enum State
@@ -48,7 +52,7 @@ namespace wreath
             LAST_MODE,
         };
 
-        void Init(size_t sampleRate)
+        void Init(int32_t sampleRate)
         {
             sampleRate_ = sampleRate;
             loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSamples);
@@ -77,7 +81,6 @@ namespace wreath
                 mustClearBuffer = false;
                 loopers_[LEFT].ClearBuffer();
                 loopers_[RIGHT].ClearBuffer();
-                state_ = State::BUFFERING;
             }
 
             if (mustResetLooper)
@@ -99,7 +102,7 @@ namespace wreath
             // Wait a few samples to avoid potential clicking on module's startup.
             if (IsStartingUp())
             {
-                static size_t fadeIndex{0};
+                static int32_t fadeIndex{0};
                 if (fadeIndex > sampleRate_)
                 {
                     fadeIndex = 0;
@@ -108,6 +111,7 @@ namespace wreath
                 fadeIndex++;
             }
 
+            // Update parameters.
             fonepole(feedback_, nextFeedback, 0.01f);
             fonepole(gain_, nextGain, 0.01f);
             fonepole(mix_, nextMix, 0.01f);
@@ -139,16 +143,72 @@ namespace wreath
                 // point.
                 if (mustRestart)
                 {
+                    mustRestart = false;
                     loopers_[LEFT].Restart();
                     loopers_[RIGHT].Restart();
                 }
 
-                if (readingActive_)
+                switch (mustSetChannelLoopStart)
                 {
-                    leftOut = loopers_[LEFT].Read(loopers_[LEFT].GetReadPos());
-                    rightOut = loopers_[RIGHT].Read(loopers_[RIGHT].GetReadPos());
+                case BOTH:
+                    loopers_[LEFT].SetLoopStart(nextLoopStart);
+                    loopers_[RIGHT].SetLoopStart(nextLoopStart);
+                    mustSetChannelLoopStart = NONE;
+                    break;
+                case LEFT:
+                case RIGHT:
+                    loopers_[mustSetChannelLoopStart].SetLoopStart(nextLoopStart);
+                    mustSetChannelLoopStart = NONE;
+                    break;
+
+                default:
+                    break;
                 }
 
+                switch (mustSetChannelLoopLength)
+                {
+                case BOTH:
+                    loopers_[LEFT].SetLoopLength(nextLoopLength);
+                    loopers_[RIGHT].SetLoopLength(nextLoopLength);
+                    mustSetChannelLoopLength = NONE;
+                    break;
+                case LEFT:
+                case RIGHT:
+                    loopers_[mustSetChannelLoopLength].SetLoopLength(nextLoopLength);
+                    mustSetChannelLoopLength = NONE;
+                    break;
+
+                default:
+                    break;
+                }
+
+                switch (mustSetChannelSpeedMult)
+                {
+                case BOTH:
+                    loopers_[LEFT].SetReadRate(nextSpeedMult);
+                    loopers_[RIGHT].SetReadRate(nextSpeedMult);
+                    mustSetChannelSpeedMult = NONE;
+                    break;
+                case LEFT:
+                case RIGHT:
+                    loopers_[mustSetChannelSpeedMult].SetReadRate(nextSpeedMult);
+                    mustSetChannelSpeedMult = NONE;
+                    break;
+
+                default:
+                    break;
+                }
+
+                loopers_[LEFT].HandleFade();
+                loopers_[RIGHT].HandleFade();
+
+                leftOut = loopers_[LEFT].Read();
+                rightOut = loopers_[RIGHT].Read();
+
+                loopers_[LEFT].UpdateReadPos();
+                loopers_[RIGHT].UpdateReadPos();
+
+                /*
                 // In cross mode swap the two channels, so what's read in the
                 // left buffer is written in the right one and vice-versa.
                 if (IsCrossMode())
@@ -163,75 +223,45 @@ namespace wreath
                         rightOut = temp;
                     }
                 }
+                */
 
-                if (writingActive_)
+                float leftWet = leftOut * feedback_;
+                float rightWet = rightOut * feedback_;
+                if (filterValue_ >= 20.f)
                 {
-                    float leftWet{};
-                    float rightWet{};
-                    if (readingActive_)
+                    feedbackFilter_.Process(leftDry);
+                    leftWet = SoftLimit(leftWet + feedbackFilter_.Band());
+                    feedbackFilter_.Process(rightDry);
+                    rightWet = SoftLimit(rightWet + feedbackFilter_.Band());
+                }
+                float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
+                loopers_[LEFT].Write(SoftClip(leftDry * dryLevel + leftWet), leftOut);
+                loopers_[RIGHT].Write(SoftClip(rightDry * dryLevel + rightWet), rightOut);
+
+                loopers_[LEFT].UpdateWritePos();
+                loopers_[RIGHT].UpdateWritePos();
+
+                if (!hasCvRestart)
+                {
+                    // When drunk there's a small probability of changing direction.
+                    bool toggleDir{rand() % loopers_[LEFT].GetSampleRateSpeed() == 1};
+                    if (loopers_[LEFT].IsDrunkMovement())
                     {
-                        leftWet = leftOut * feedback_;
-                        rightWet = rightOut * feedback_;
-                        if (filterValue_ >= 20.f)
+                        if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
                         {
-                            feedbackFilter_.Process(leftDry);
-                            float lf = feedbackFilter_.Band();
-                            feedbackFilter_.Process(rightDry);
-                            float rf = feedbackFilter_.Band();
-                            leftWet = SoftClip(leftWet + lf * (feedback_ - filterEnvelope_.GetEnv(lf)));
-                            rightWet = SoftClip(rightWet + rf * (feedback_ - filterEnvelope_.GetEnv(rf)));
+                            loopers_[LEFT].ToggleDirection();
+                            hasChangedLeft_ = true;
                         }
                     }
-                    float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
-                    loopers_[LEFT].Write(SoftLimit(leftDry * dryLevel + leftWet));
-                    loopers_[RIGHT].Write(SoftLimit(rightDry * dryLevel + rightWet));
-                }
-
-                size_t leftWritePos{loopers_[LEFT].GetWritePos()};
-                size_t rightWritePos{loopers_[RIGHT].GetWritePos()};
-
-                // Always write forward at original speed.
-                leftWritePos += 1;
-                rightWritePos += 1;
-                loopers_[LEFT].SetWritePos(leftWritePos);
-                loopers_[RIGHT].SetWritePos(rightWritePos);
-
-                float leftReadPos{loopers_[LEFT].GetReadPos()};
-                float rightReadPos{loopers_[RIGHT].GetReadPos()};
-
-                float leftSpeedMult{loopers_[LEFT].GetSpeedMult()};
-                float rightSpeedMult{loopers_[RIGHT].GetSpeedMult()};
-
-                // When drunk there's a small probability of changing direction.
-                bool toggleDir{rand() % loopers_[LEFT].GetSampleRateSpeed() == 1};
-                if (loopers_[LEFT].IsDrunkMovement())
-                {
-                    if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
+                    if (loopers_[RIGHT].IsDrunkMovement())
                     {
-                        loopers_[LEFT].ToggleDirection();
-                        hasChangedLeft_ = true;
+                        if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
+                        {
+                            loopers_[RIGHT].ToggleDirection();
+                            hasChangedRight_ = true;
+                        }
                     }
                 }
-                if (loopers_[RIGHT].IsDrunkMovement())
-                {
-                    if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
-                    {
-                        loopers_[RIGHT].ToggleDirection();
-                        hasChangedRight_ = true;
-                    }
-                }
-
-                // Otherwise, move the reading position normally.
-                hasChangedLeft_ = loopers_[LEFT].SetNextReadPos(loopers_[LEFT].IsGoingForward() ? loopers_[LEFT].GetReadPos() + leftSpeedMult : loopers_[LEFT].GetReadPos() - leftSpeedMult);
-                hasChangedRight_ = loopers_[RIGHT].SetNextReadPos(loopers_[RIGHT].IsGoingForward() ? loopers_[RIGHT].GetReadPos() + rightSpeedMult : loopers_[RIGHT].GetReadPos() - rightSpeedMult);
-
-                // Move smoothly to the next position.
-                //fonepole(leftReadPos, loopers_[LEFT].GetNextReadPos(), leftCoeff);
-                //fonepole(rightReadPos, loopers_[RIGHT].GetNextReadPos(), rightCoeff);
-                leftReadPos = loopers_[LEFT].GetNextReadPos();
-                rightReadPos = loopers_[RIGHT].GetNextReadPos();
-                loopers_[LEFT].SetReadPos(leftReadPos);
-                loopers_[RIGHT].SetReadPos(rightReadPos);
             }
 
             cf_.SetPos(fclamp(mix_, 0.f, 1.f));
@@ -246,27 +276,28 @@ namespace wreath
             if (IsDualMode() && Mode::DUAL != mode)
             {
                 loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
-                loopers_[RIGHT].SetSpeedMult(loopers_[LEFT].GetSpeedMult());
+                loopers_[RIGHT].SetReadRate(loopers_[LEFT].GetReadRate());
+                loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
                 loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
-                loopers_[RIGHT].SetReadPos(loopers_[LEFT].GetReadPos());
+                loopers_[RIGHT].UpdateReadPos();
             }
 
             mode_ = mode;
         }
 
-        inline size_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
+        inline int32_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
         inline float GetBufferSeconds(int channel) { return loopers_[channel].GetBufferSeconds(); }
         inline float GetLoopStartSeconds(int channel) { return loopers_[channel].GetLoopStartSeconds(); }
         inline float GetLoopLengthSeconds(int channel) { return loopers_[channel].GetLoopLengthSeconds(); }
-        inline float GetPositionSeconds(int channel) { return loopers_[channel].GetPositionSeconds(); }
-        inline size_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
-        inline size_t GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
-        inline size_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
+        inline float GetReadPosSeconds(int channel) { return loopers_[channel].GetReadPosSeconds(); }
+        inline int32_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
+        inline int32_t GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
+        inline int32_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
         inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
         inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
         inline float GetNextReadPos(int channel) { return loopers_[channel].GetNextReadPos(); }
-        inline float GetSpeedMult(int channel) { return loopers_[channel].GetSpeedMult(); }
-        inline Looper::Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
+        inline float GetReadRate(int channel) { return loopers_[channel].GetReadRate(); }
+        inline Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
         inline bool IsGoingForward(int channel) { return loopers_[channel].IsGoingForward(); }
 
         inline bool IsStartingUp() { return State::INIT == state_; }
@@ -288,21 +319,42 @@ namespace wreath
             loopers_[LEFT].SetReading(active);
             loopers_[RIGHT].SetReading(active);
         }
-        void SetMovement(int channel, Looper::Movement movement)
+        void SetMovement(int channel, Movement movement)
         {
-            loopers_[channel].SetMovement(movement);
+            if (BOTH == channel)
+            {
+                loopers_[LEFT].SetMovement(movement);
+                loopers_[RIGHT].SetMovement(movement);
+            }
+            else{
+                loopers_[channel].SetMovement(movement);
+            }
         }
-        void SetLoopStart(int channel, size_t value)
+        void SetDirection(int channel, Direction direction)
         {
-            loopers_[channel].SetLoopStart(value);
+            if (BOTH == channel)
+            {
+                loopers_[LEFT].SetDirection(direction);
+                loopers_[RIGHT].SetDirection(direction);
+            }
+            else{
+                loopers_[channel].SetDirection(direction);
+            }
         }
-        void SetSpeedMult(int channel, float multiplier)
+        void SetLoopStart(int channel, int32_t value)
         {
-            loopers_[channel].SetSpeedMult(multiplier);
+            mustSetChannelLoopStart = channel;
+            nextLoopStart = value;
         }
-        void SetLoopLength(int channel, size_t length)
+        void SetReadRate(int channel, float multiplier)
         {
-            loopers_[channel].SetLoopLength(length);
+            mustSetChannelSpeedMult = channel;
+            nextSpeedMult = multiplier;
+        }
+        void SetLoopLength(int channel, int32_t length)
+        {
+            mustSetChannelLoopLength = channel;
+            nextLoopLength = length;
         }
 
         bool mustResetLooper{};
@@ -310,12 +362,21 @@ namespace wreath
         bool mustStopBuffering{};
         bool mustRestart{};
 
-        float nextGain{1.f};
-        float nextMix{0.5f};
-        float nextFeedback{0.98f};
-        float nextFilterValue{0.f};
+        bool hasCvRestart{};
 
-        inline float temp() { return loopers_[LEFT].temp; }
+        float nextGain{1.f};
+        float nextMix{1.f};
+        float nextFeedback{0.f};
+        float nextFilterValue{};
+
+        int mustSetChannelLoopStart{NONE};
+        int32_t nextLoopStart{};
+
+        int mustSetChannelLoopLength{NONE};
+        int32_t nextLoopLength{};
+
+        int mustSetChannelSpeedMult{NONE};
+        float nextSpeedMult{};
 
     private:
         Looper loopers_[2];
@@ -327,8 +388,8 @@ namespace wreath
         Mode mode_{};   // The current mode of the looper
         CrossFade cf_;
         Svf feedbackFilter_;
-        EnvFollow filterEnvelope_;
-        size_t sampleRate_{};
+        //EnvFollow filterEnvelope_;
+        int32_t sampleRate_{};
         bool readingActive_{true};
         bool writingActive_{true};
         bool hasChangedLeft_{};

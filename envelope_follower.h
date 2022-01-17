@@ -1,3 +1,5 @@
+// From https://forum.electro-smith.com/t/audio-cuts-out-overflowing-floats/543/14
+
 #ifndef ENV_FOLLOW_H
 #define ENV_FOLLOW_H
 #include <math.h>

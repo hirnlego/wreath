@@ -7,7 +7,6 @@ namespace wreath
 {
     class Looper
     {
-
     public:
         Looper() {}
         ~Looper() {}
@@ -23,23 +22,21 @@ namespace wreath
         bool Buffer(float value);
         void SetReadPosition(float position);
         float Read();
-        void Write(float value, float bufferedValue);
+        void Write(float value);
         void UpdateReadPos();
         void UpdateWritePos();
         bool HandleFade();
-        bool Restart(bool triggerRestart);
+        bool Start();
+        bool Stop();
+        bool Restart();
         void SetLoopStart(int32_t pos);
         int32_t GetRandomPosition();
         void SetLoopEnd(int32_t pos);
         void SetDirection(Direction direction);
+        void SetRunStatus(RunStatus status) { runStatus_ = status; }
         void ToggleDirection();
         void SetWriting(bool active);
         void ToggleWriting();
-        void ToggleReading();
-
-        bool isRestarting{};
-        bool isStopping{};
-        bool isStarting{};
 
         inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }
@@ -63,6 +60,7 @@ namespace wreath
 
         inline Movement GetMovement() { return movement_; }
         inline Direction GetDirection() { return direction_; }
+        inline RunStatus GetRunStatus() { return runStatus_; }
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
         inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
 
@@ -74,7 +72,6 @@ namespace wreath
     private:
         void CalculateHeadsDistance();
         void CalculateCrossPoint();
-        void SetUpFade(Fade fade);
 
         float *buffer_{};           // The buffer
         float bufferSeconds_{};     // Written buffer length in seconds
@@ -100,10 +97,12 @@ namespace wreath
         bool readingActive_{true};
         bool writingActive_{true};
         int32_t sampleRateSpeed_{};
-        bool looping_{true};
+        bool looping_{};
+        bool isRestarting_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 
+        RunStatus runStatus_{};
         Movement movement_{}; // The current movement type of the looper
     };
 } // namespace wreath

@@ -38,9 +38,6 @@ void Looper::Reset()
     direction_ = Direction::FORWARD;
     writeRate_ = 1.f;
     SetReadRate(1.f);
-
-    // Testing...
-    //SetLooping(false);
 }
 
 void Looper::ClearBuffer()
@@ -65,35 +62,51 @@ void Looper::StopBuffering()
     loopEnd_ = bufferSamples_ - 1 ;
     loopLength_ = bufferSamples_;
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
-
-    // DEBUG
-    //direction_ = heads_[READ].ToggleDirection();
-    //heads_[READ].ResetPosition();
+    heads_[WRITE].SetRunStatus(RunStatus::RUNNING);
 }
 
-bool Looper::Restart(bool triggerRestart)
+bool Looper::Start()
 {
-    bool isRunning = heads_[READ].IsRunning();
-
-    if (triggerRestart)
+    RunStatus status = heads_[READ].GetRunStatus();
+    if (RunStatus::RUNNING != status && RunStatus::STARTING != status)
     {
-        if (isRestarting)
-        {
-            // Trigger another restart.
-            isRunning = true;
-            isStarting = false;
-            isStopping = false;
-        }
-        else
-        {
-            isRestarting = true;
-        }
+        heads_[READ].Start();
+    }
+    else if (RunStatus::RUNNING == status)
+    {
+        return true;
     }
 
-    if (!isRunning && isStopping && !isStarting)
+    return false;
+}
+
+bool Looper::Stop()
+{
+    RunStatus status = heads_[READ].GetRunStatus();
+    if (RunStatus::STOPPED != status && RunStatus::STOPPING != status)
+    {
+        heads_[READ].Stop();
+    }
+    else if (RunStatus::STOPPED == status)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+bool Looper::Restart()
+{
+    RunStatus status = heads_[READ].GetRunStatus();
+    if (!isRestarting_)
+    {
+        isRestarting_ = true;
+        Stop();
+    }
+    else if (RunStatus::STOPPED == status)
     {
         heads_[READ].ResetPosition();
-        heads_[WRITE].ResetPosition();
+        //heads_[WRITE].ResetPosition();
         // Invert direction when in pendulum.
         if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
         {
@@ -101,25 +114,11 @@ bool Looper::Restart(bool triggerRestart)
         }
         crossPointFound_ = false;
 
-        heads_[READ].Run(true);
-        isStopping = false;
-        isStarting = true;
-
-        return false;
+        Start();
     }
-
-    if (isRunning && !isStarting && !isStopping)
+    else if (RunStatus::RUNNING == status)
     {
-        heads_[READ].Stop(true);
-        isStopping = true;
-
-        return false;
-    }
-
-    if (isRunning && isStarting)
-    {
-        isStarting = false;
-        isRestarting = false;
+        isRestarting_ = false;
 
         return true;
     }
@@ -187,28 +186,12 @@ void Looper::SetLooping(bool looping)
     looping_ = looping;
 }
 
-void Looper::SetUpFade(Fade fade)
-{
-    switch (fade)
-    {
-    case Fade::SMOOTH:
-        heads_[READ].SetUpFade(fade);
-        break;
-    case Fade::IN:
-    case Fade::OUT:
-        heads_[WRITE].SetUpFade(fade);
-        break;
-    default:
-        break;
-    }
-}
-
 float Looper::Read()
 {
     return heads_[READ].Read();
 }
 
-void Looper::Write(float value, float bufferedValue)
+void Looper::Write(float value)
 {
     heads_[WRITE].Write(value);
 }
@@ -223,13 +206,6 @@ void Looper::UpdateWritePos()
 {
     heads_[WRITE].UpdatePosition();
     writePos_ = heads_[WRITE].GetIntPosition();
-
-    // Testing...
-    // Restart the reading head each time the writing one restarts.
-    if (!looping_ && writePos_ == loopStart_)
-    {
-        heads_[READ].Run(true);
-    }
 }
 
 void Looper::ToggleDirection()
@@ -237,14 +213,9 @@ void Looper::ToggleDirection()
     direction_ = heads_[READ].ToggleDirection();
 }
 
-void Looper::ToggleReading()
-{
-    readingActive_ = heads_[READ].ToggleRun();
-}
-
 void Looper::SetWriting(bool active)
 {
-    active ? SetUpFade(Fade::IN) : SetUpFade(Fade::OUT);
+    active ? heads_[WRITE].Start() : heads_[WRITE].Stop();
     writingActive_ = active;
 }
 
@@ -320,9 +291,7 @@ void Looper::CalculateCrossPoint()
 
 bool Looper::HandleFade()
 {
-    bool fading = heads_[READ].IsFading() || heads_[WRITE].IsFading();
-
-    if (fading)
+    if (heads_[READ].IsFading())
     {
         return false;
     }
@@ -340,7 +309,7 @@ bool Looper::HandleFade()
             if (crossPointFound_ && intReadPos == crossPoint_)
             {
                 crossPointFound_ = false;
-                SetUpFade(Fade::SMOOTH);
+                heads_[READ].SwitchAndRamp();
 
                 return true;
             }
@@ -349,12 +318,6 @@ bool Looper::HandleFade()
             {
                 CalculateCrossPoint();
             }
-        }
-        else if (intReadPos == loopEnd_)
-        {
-            //SetUpFade(Fade::SMOOTH);
-
-            return true;
         }
     }
 

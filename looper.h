@@ -27,14 +27,19 @@ namespace wreath
         void UpdateReadPos();
         void UpdateWritePos();
         bool HandleFade();
-        void Restart();
+        bool Restart(bool triggerRestart);
         void SetLoopStart(int32_t pos);
         int32_t GetRandomPosition();
         void SetLoopEnd(int32_t pos);
         void SetDirection(Direction direction);
         void ToggleDirection();
+        void SetWriting(bool active);
         void ToggleWriting();
         void ToggleReading();
+
+        bool isRestarting{};
+        bool isStopping{};
+        bool isStarting{};
 
         inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }

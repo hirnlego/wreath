@@ -71,16 +71,60 @@ void Looper::StopBuffering()
     //heads_[READ].ResetPosition();
 }
 
-void Looper::Restart()
+bool Looper::Restart(bool triggerRestart)
 {
-    heads_[READ].ResetPosition();
-    heads_[WRITE].ResetPosition();
-    // Invert direction when in pendulum.
-    if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
+    bool isRunning = heads_[READ].IsRunning();
+
+    if (triggerRestart)
     {
-        direction_ = heads_[READ].ToggleDirection();
+        if (isRestarting)
+        {
+            // Trigger another restart.
+            isRunning = true;
+            isStarting = false;
+            isStopping = false;
+        }
+        else
+        {
+            isRestarting = true;
+        }
     }
-    crossPointFound_ = false;
+
+    if (!isRunning && isStopping && !isStarting)
+    {
+        heads_[READ].ResetPosition();
+        heads_[WRITE].ResetPosition();
+        // Invert direction when in pendulum.
+        if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
+        {
+            direction_ = heads_[READ].ToggleDirection();
+        }
+        crossPointFound_ = false;
+
+        heads_[READ].Run(true);
+        isStopping = false;
+        isStarting = true;
+
+        return false;
+    }
+
+    if (isRunning && !isStarting && !isStopping)
+    {
+        heads_[READ].Stop(true);
+        isStopping = true;
+
+        return false;
+    }
+
+    if (isRunning && isStarting)
+    {
+        isStarting = false;
+        isRestarting = false;
+
+        return true;
+    }
+
+    return false;
 }
 
 void Looper::SetLoopStart(int32_t pos)
@@ -184,7 +228,7 @@ void Looper::UpdateWritePos()
     // Restart the reading head each time the writing one restarts.
     if (!looping_ && writePos_ == loopStart_)
     {
-        //heads_[READ].Run(true);
+        heads_[READ].Run(true);
     }
 }
 
@@ -198,10 +242,15 @@ void Looper::ToggleReading()
     readingActive_ = heads_[READ].ToggleRun();
 }
 
+void Looper::SetWriting(bool active)
+{
+    active ? SetUpFade(Fade::IN) : SetUpFade(Fade::OUT);
+    writingActive_ = active;
+}
+
 void Looper::ToggleWriting()
 {
-    writingActive_ ? SetUpFade(Fade::OUT) : SetUpFade(Fade::IN);
-    writingActive_ = !writingActive_;
+    SetWriting(!writingActive_);
 }
 
 void Looper::CalculateHeadsDistance()

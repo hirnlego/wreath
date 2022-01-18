@@ -70,6 +70,30 @@ namespace wreath
             loopers_[RIGHT].ToggleWriting();
         }
 
+        void SetFreeze(float value)
+        {
+            if (value < 0.5f && IsFrozen())
+            {
+                state_ = State::RECORDING;
+                writingActive_ = true;
+                loopers_[LEFT].SetWriting(true);
+                loopers_[RIGHT].SetWriting(true);
+            }
+            else if (value >= 0.5f && !IsFrozen())
+            {
+                state_ = State::FROZEN;
+                writingActive_ = false;
+                loopers_[LEFT].SetWriting(false);
+                loopers_[RIGHT].SetWriting(false);
+            }
+        }
+
+        void Restart()
+        {
+            mustRestart = true;
+            isRestarting = false;
+        }
+
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
         {
             leftOut = 0.f;
@@ -142,9 +166,13 @@ namespace wreath
                 // point.
                 if (mustRestart)
                 {
-                    mustRestart = false;
-                    loopers_[LEFT].Restart();
-                    loopers_[RIGHT].Restart();
+                    bool doneLeft{loopers_[LEFT].Restart(!isRestarting)};
+                    bool doneRight{loopers_[RIGHT].Restart(!isRestarting)};
+                    isRestarting = true;
+                    if (doneLeft && doneRight)
+                    {
+                        mustRestart = false;
+                    }
                 }
 
                 switch (mustSetChannelLoopStart)
@@ -229,13 +257,13 @@ namespace wreath
                 if (filterValue_ >= 20.f)
                 {
                     feedbackFilter_.Process(leftDry);
-                    leftWet = SoftLimit(leftWet + feedbackFilter_.Band());
+                    leftWet = Mix(leftWet, feedbackFilter_.Band());
                     feedbackFilter_.Process(rightDry);
-                    rightWet = SoftLimit(rightWet + feedbackFilter_.Band());
+                    rightWet = Mix(rightWet, feedbackFilter_.Band());
                 }
                 float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
-                loopers_[LEFT].Write(SoftClip(leftDry * dryLevel + leftWet), leftOut);
-                loopers_[RIGHT].Write(SoftClip(rightDry * dryLevel + rightWet), rightOut);
+                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftWet), leftOut);
+                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightWet), rightOut);
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
@@ -359,7 +387,6 @@ namespace wreath
         bool mustResetLooper{};
         bool mustClearBuffer{};
         bool mustStopBuffering{};
-        bool mustRestart{};
 
         bool hasCvRestart{};
 
@@ -393,6 +420,15 @@ namespace wreath
         bool writingActive_{true};
         bool hasChangedLeft_{};
         bool hasChangedRight_{};
+        bool mustRestart{};
+        bool isRestarting{};
+
+        float Mix(float a, float b)
+        {
+            return SoftLimit(a + b);
+            //return a + b - ((a * b) / 2.f);
+            //return (1 / std::sqrt(2)) * (a + b);
+        }
     };
 
 }

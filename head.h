@@ -589,5 +589,6 @@ namespace wreath
         inline float GetPosition() { return index_; }
         inline int32_t GetIntPosition() { return intIndex_; }
         bool IsGoingForward() { return FORWARD == direction_; }
+        bool IsRunning() { return run_; }
     };
 }

@@ -14,8 +14,7 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    //constexpr int kBufferSeconds{150};                   // 2:30 minutes max
-    constexpr int kBufferSeconds{1};                   // 2:30 minutes max
+    constexpr int kBufferSeconds{150};                   // 2:30 minutes max
     const float kMinSamplesForTone{kSampleRate * 0.03f}; // 30ms
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 

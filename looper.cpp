@@ -40,7 +40,7 @@ void Looper::Reset()
     SetReadRate(1.f);
 
     // Testing...
-    SetLooping(false);
+    //SetLooping(false);
 }
 
 void Looper::ClearBuffer()
@@ -100,7 +100,10 @@ void Looper::SetLoopEnd(int32_t pos)
 void Looper::SetLoopLength(int32_t length)
 {
     loopLength_ = heads_[READ].SetLoopLength(length);
-    //heads_[WRITE].SetLoopLength(length);
+    if (looping_)
+    {
+        heads_[WRITE].SetLoopLength(length);
+    }
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
     crossPointFound_ = false;
@@ -181,7 +184,7 @@ void Looper::UpdateWritePos()
     // Restart the reading head each time the writing one restarts.
     if (!looping_ && writePos_ == loopStart_)
     {
-        heads_[READ].Run(true);
+        //heads_[READ].Run(true);
     }
 }
 

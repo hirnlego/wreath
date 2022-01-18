@@ -5,10 +5,10 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <algorithm>
-#include <cstring>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 
 namespace wreath
 {

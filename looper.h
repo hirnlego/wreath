@@ -1,7 +1,7 @@
 #pragma once
 
 #include "head.h"
-#include <stdint.h>
+#include <cstdint>
 
 namespace wreath
 {

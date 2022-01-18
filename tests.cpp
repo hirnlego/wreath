@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <cassert>
-#include <stdint.h>
+#include <cstdint>
 
 using namespace wreath;
 
@@ -146,43 +146,6 @@ void TestRead()
 void TestFade()
 {
     Buffer(false);
-
-    looper.SetReadRate(1.f);
-    looper.ToggleDirection();
-    looper.Restart();
-    bool needsCrossPoint = true;
-    bool crossPointFound = false;
-    bool startup = true;
-
-    float pValue{};
-    int32_t i{};
-    int32_t cp{};
-    while (true)
-    {
-        if (looper.CrossPointFound())
-        {
-            cp = looper.GetCrossPoint();
-            std::cout << "Cross point: " << cp << "\n";
-        }
-
-        float rValue = looper.Read();
-        float wValue = rValue * 0.5f + Sine(1.7345f, i) * 0.5f;
-        looper.Write(wValue);
-        std::cout << "Value at " << i << ": " << wValue << " (from " << pValue << ")\n";
-        pValue = wValue;
-
-        looper.UpdateWritePos();
-        looper.UpdateReadPos();
-        if (looper.HandleFade())
-        {
-            std::cout << "Fading at " << cp << "\n";
-            exit(0);
-        }
-
-        i++;
-        i %= bufferSamples;
-        startup = false;
-    }
 
 }
 

@@ -35,8 +35,7 @@ namespace wreath
         void SetDirection(Direction direction);
         void SetRunStatus(RunStatus status) { runStatus_ = status; }
         void ToggleDirection();
-        void SetWriting(bool active);
-        void ToggleWriting();
+        void SetWriting(float amount);
 
         inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }

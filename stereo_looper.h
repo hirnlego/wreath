@@ -58,7 +58,28 @@ namespace wreath
             LOOP,
         };
 
-        void Init(int32_t sampleRate)
+        struct Conf
+        {
+            Mode mode;
+            TriggerMode triggerMode;
+            Movement movement;
+            Direction direction;
+            float rate;
+        };
+
+        void Reset()
+        {
+            loopers_[LEFT].Reset();
+            loopers_[RIGHT].Reset();
+
+            SetMode(conf_.mode);
+            SetTriggerMode(conf_.triggerMode);
+            SetMovement(BOTH, conf_.movement);
+            SetDirection(BOTH, conf_.direction);
+            SetReadRate(BOTH, conf_.rate);
+        }
+
+        void Init(int32_t sampleRate, Conf conf)
         {
             sampleRate_ = sampleRate;
             loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSamples);
@@ -67,14 +88,16 @@ namespace wreath
             cf_.Init(CROSSFADE_CPOW);
             feedbackFilter_.Init(sampleRate_);
             feedbackFilter_.SetFreq(filterValue_);
+
+            // Process configuration and reset the looper.
+            conf_ = conf;
+            Reset();
         }
 
         void ToggleFreeze()
         {
-            state_ = IsFrozen() ? State::RECORDING : State::FROZEN;
-            writingActive_ = !writingActive_;
-            loopers_[LEFT].ToggleWriting();
-            loopers_[RIGHT].ToggleWriting();
+            bool frozen = IsFrozen();
+            SetFreeze(!frozen);
         }
 
         void SetFreeze(float value)
@@ -82,17 +105,13 @@ namespace wreath
             if (value < 0.5f && IsFrozen())
             {
                 state_ = State::RECORDING;
-                writingActive_ = true;
-                loopers_[LEFT].SetWriting(true);
-                loopers_[RIGHT].SetWriting(true);
             }
             else if (value >= 0.5f && !IsFrozen())
             {
                 state_ = State::FROZEN;
-                writingActive_ = false;
-                loopers_[LEFT].SetWriting(false);
-                loopers_[RIGHT].SetWriting(false);
             }
+            loopers_[LEFT].SetWriting(value);
+            loopers_[RIGHT].SetWriting(value);
         }
 
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
@@ -110,8 +129,7 @@ namespace wreath
             if (mustResetLooper)
             {
                 mustResetLooper = false;
-                loopers_[LEFT].Reset();
-                loopers_[RIGHT].Reset();
+                Reset();
                 state_ = State::BUFFERING;
             }
 
@@ -466,9 +484,9 @@ namespace wreath
         //EnvFollow filterEnvelope_;
         int32_t sampleRate_{};
         bool readingActive_{true};
-        bool writingActive_{true};
         bool hasChangedLeft_{};
         bool hasChangedRight_{};
+        Conf conf_{};
 
         float Mix(float a, float b)
         {

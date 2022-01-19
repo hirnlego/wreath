@@ -38,6 +38,8 @@ void Looper::Reset()
     direction_ = Direction::FORWARD;
     writeRate_ = 1.f;
     SetReadRate(1.f);
+    heads_[WRITE].SetLooping(true);
+    heads_[WRITE].SetRunStatus(RunStatus::RUNNING);
 }
 
 void Looper::ClearBuffer()
@@ -62,7 +64,6 @@ void Looper::StopBuffering()
     loopEnd_ = bufferSamples_ - 1 ;
     loopLength_ = bufferSamples_;
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
-    heads_[WRITE].SetRunStatus(RunStatus::RUNNING);
 }
 
 bool Looper::Start()
@@ -142,6 +143,13 @@ void Looper::SetLoopEnd(int32_t pos)
 
 void Looper::SetLoopLength(int32_t length)
 {
+    if (length == loopLength_)
+    {
+        return;
+    }
+
+    int32_t oldLoopEnd = loopEnd_;
+    int32_t oldLoopLength = loopLength_;
     loopLength_ = heads_[READ].SetLoopLength(length);
     if (looping_)
     {
@@ -149,7 +157,16 @@ void Looper::SetLoopLength(int32_t length)
     }
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
-    crossPointFound_ = false;
+    // Grown.
+    if (length > oldLoopLength)
+    {
+        crossPoint_ = oldLoopEnd;
+    }
+    else
+    {
+        crossPoint_ = loopEnd_;
+    }
+    crossPointFound_ = true;
 }
 
 void Looper::SetReadRate(float rate)
@@ -213,15 +230,20 @@ void Looper::ToggleDirection()
     direction_ = heads_[READ].ToggleDirection();
 }
 
-void Looper::SetWriting(bool active)
+void Looper::SetWriting(float amount)
 {
-    active ? heads_[WRITE].Start() : heads_[WRITE].Stop();
-    writingActive_ = active;
-}
-
-void Looper::ToggleWriting()
-{
-    SetWriting(!writingActive_);
+    // TODO: variable amount should determine how many samples are written (1 = all, 0 = none).
+    if (amount < 0.5f && !writingActive_)
+    {
+        heads_[WRITE].SetIndex(heads_[READ].GetIntPosition());
+        heads_[WRITE].Start();
+        writingActive_ = true;
+    }
+    else if (amount >= 0.5f && writingActive_)
+    {
+        heads_[WRITE].Stop();
+        writingActive_ = false;
+    }
 }
 
 void Looper::CalculateHeadsDistance()
@@ -293,32 +315,31 @@ bool Looper::HandleFade()
 {
     if (heads_[READ].IsFading())
     {
-        return false;
+        //return false;
     }
 
-    if (readingActive_)
+    int32_t intReadPos = heads_[READ].GetIntPosition();
+
+    // Handle when reading and writing speeds differ or we're going
+    // backwards.
+    if (readSpeed_ != writeSpeed_ || !IsGoingForward())
     {
-        int32_t intReadPos = heads_[READ].GetIntPosition();
+        CalculateHeadsDistance();
 
-        // Handle when reading and writing speeds differ or we're going
-        // backwards.
-        if (readSpeed_ != writeSpeed_ || !IsGoingForward())
+        // Calculate the cross point.
+        if (!crossPointFound_ && headsDistance_ <= heads_[READ].SamplesToFade())
         {
-            CalculateHeadsDistance();
-            // Handle reaching the cross point.
-            if (crossPointFound_ && intReadPos == crossPoint_)
-            {
-                crossPointFound_ = false;
-                heads_[READ].SwitchAndRamp();
-
-                return true;
-            }
-            // Calculate the cross point.
-            else if (!crossPointFound_ && headsDistance_ <= heads_[READ].SamplesToFade())
-            {
-                CalculateCrossPoint();
-            }
+            CalculateCrossPoint();
         }
+    }
+
+    // Handle reaching the cross point.
+    if (crossPointFound_ && intReadPos == crossPoint_)
+    {
+        crossPointFound_ = false;
+        heads_[READ].SwitchAndRamp();
+
+        return true;
     }
 
     return false;

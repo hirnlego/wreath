@@ -15,7 +15,6 @@ namespace wreath
 
     constexpr int32_t kSampleRate{48000};
     constexpr int kBufferSeconds{150};                   // 2:30 minutes max
-    const float kMinSamplesForTone{kSampleRate * 0.03f}; // 30ms
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -77,6 +76,7 @@ namespace wreath
             SetMovement(BOTH, conf_.movement);
             SetDirection(BOTH, conf_.direction);
             SetReadRate(BOTH, conf_.rate);
+            SetWriteRate(BOTH, conf_.rate);
         }
 
         void Init(int32_t sampleRate, Conf conf)
@@ -181,10 +181,21 @@ namespace wreath
 
             if (IsRecording() || IsFrozen())
             {
+                if (mustRestartRead)
+                {
+                    //loopers_[LEFT].SetReadPos(loopers_[LEFT].GetWritePos());
+                    //loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetWritePos());
+                    //loopers_[LEFT].SetWritePos(loopers_[LEFT].GetReadPos());
+                    //loopers_[RIGHT].SetWritePos(loopers_[RIGHT].GetReadPos());
+                    //loopers_[LEFT].SetRunStatus(RunStatus::RUNNING);
+                    //loopers_[RIGHT].SetRunStatus(RunStatus::RUNNING);
+                    mustRestartRead = false;
+                }
+
                 if (mustRestart)
                 {
-                    bool doneLeft{loopers_[LEFT].Restart()};
-                    bool doneRight{loopers_[RIGHT].Restart()};
+                    bool doneLeft{loopers_[LEFT].Restart(resetPosition)};
+                    bool doneRight{loopers_[RIGHT].Restart(resetPosition)};
                     if (doneLeft && doneRight)
                     {
                         mustRestart = false;
@@ -197,6 +208,7 @@ namespace wreath
                     bool doneRight{loopers_[RIGHT].Start()};
                     if (doneLeft && doneRight)
                     {
+                        readingActive_ = true;
                         mustStart = false;
                     }
                 }
@@ -207,21 +219,39 @@ namespace wreath
                     bool doneRight{loopers_[RIGHT].Stop()};
                     if (doneLeft && doneRight)
                     {
+                        readingActive_ = false;
                         mustStop = false;
                     }
                 }
 
-                switch (mustSetChannelSpeedMult)
+                switch (mustSetChannelReadRate)
                 {
                 case BOTH:
-                    loopers_[LEFT].SetReadRate(nextSpeedMult);
-                    loopers_[RIGHT].SetReadRate(nextSpeedMult);
-                    mustSetChannelSpeedMult = NONE;
+                    loopers_[LEFT].SetReadRate(nextReadRate);
+                    loopers_[RIGHT].SetReadRate(nextReadRate);
+                    mustSetChannelReadRate = NONE;
                     break;
                 case LEFT:
                 case RIGHT:
-                    loopers_[mustSetChannelSpeedMult].SetReadRate(nextSpeedMult);
-                    mustSetChannelSpeedMult = NONE;
+                    loopers_[mustSetChannelReadRate].SetReadRate(nextReadRate);
+                    mustSetChannelReadRate = NONE;
+                    break;
+
+                default:
+                    break;
+                }
+
+                switch (mustSetChannelWriteRate)
+                {
+                case BOTH:
+                    loopers_[LEFT].SetWriteRate(nextWriteRate);
+                    loopers_[RIGHT].SetWriteRate(nextWriteRate);
+                    mustSetChannelWriteRate = NONE;
+                    break;
+                case LEFT:
+                case RIGHT:
+                    loopers_[mustSetChannelWriteRate].SetWriteRate(nextWriteRate);
+                    mustSetChannelWriteRate = NONE;
                     break;
 
                 default:
@@ -297,9 +327,9 @@ namespace wreath
                     feedbackFilter_.Process(rightDry);
                     rightWet = Mix(rightWet, feedbackFilter_.Band());
                 }
-                float dryLevel = 1.f - fmap(mix_ - 1.f, 0.f, 1.f);
-                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftWet));
-                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightWet));
+
+                loopers_[LEFT].Write(Mix(leftDry * dryLevel_, leftWet));
+                loopers_[RIGHT].Write(Mix(rightDry * dryLevel_, rightWet));
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
@@ -339,10 +369,12 @@ namespace wreath
             if (IsDualMode() && Mode::DUAL != mode)
             {
                 loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
+                loopers_[RIGHT].SetDirection(loopers_[LEFT].GetDirection());
                 loopers_[RIGHT].SetReadRate(loopers_[LEFT].GetReadRate());
-                loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
+                loopers_[RIGHT].SetWriteRate(loopers_[LEFT].GetWriteRate());
                 loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
-                loopers_[RIGHT].UpdateReadPos();
+                loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
+                loopers_[RIGHT].SetReadPos(loopers_[LEFT].GetReadPos());
             }
 
             mode_ = mode;
@@ -353,22 +385,27 @@ namespace wreath
             switch (mode)
             {
                 case TriggerMode::GATE:
-                    loopers_[LEFT].Stop();
-                    loopers_[RIGHT].Stop();
+                    dryLevel_ = 0.f;
+                    resetPosition = false;
+                    loopers_[LEFT].SetReadPos(loopers_[LEFT].GetWritePos());
+                    loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetWritePos());
                     loopers_[LEFT].SetLooping(true);
                     loopers_[RIGHT].SetLooping(true);
+                    mustRestart = true;
                     break;
                 case TriggerMode::TRIGGER:
-                    loopers_[LEFT].Stop();
-                    loopers_[RIGHT].Stop();
+                    dryLevel_ = 1.f;
+                    resetPosition = true;
                     loopers_[LEFT].SetLooping(false);
                     loopers_[RIGHT].SetLooping(false);
+                    mustStop = true;
                     break;
                 case TriggerMode::LOOP:
-                    loopers_[LEFT].Start();
-                    loopers_[RIGHT].Start();
+                    dryLevel_ = 1.f;
+                    resetPosition = true;
                     loopers_[LEFT].SetLooping(true);
                     loopers_[RIGHT].SetLooping(true);
+                    mustStart = true;
                     break;
             }
             triggerMode_ = mode;
@@ -403,12 +440,6 @@ namespace wreath
         inline float GetFeedBack() { return feedback_; }
         inline float GetFilter() { return filterValue_; }
 
-        void SetReading(bool active)
-        {
-            readingActive_ = active;
-            loopers_[LEFT].SetReading(active);
-            loopers_[RIGHT].SetReading(active);
-        }
         void SetMovement(int channel, Movement movement)
         {
             if (BOTH == channel)
@@ -438,8 +469,13 @@ namespace wreath
         }
         void SetReadRate(int channel, float multiplier)
         {
-            mustSetChannelSpeedMult = channel;
-            nextSpeedMult = multiplier;
+            mustSetChannelReadRate = channel;
+            nextReadRate = multiplier;
+        }
+        void SetWriteRate(int channel, float multiplier)
+        {
+            mustSetChannelWriteRate = channel;
+            nextWriteRate = multiplier;
         }
         void SetLoopLength(int channel, int32_t length)
         {
@@ -447,9 +483,11 @@ namespace wreath
             nextLoopLength = length;
         }
 
+        bool mustRestartRead{};
         bool mustResetLooper{};
         bool mustClearBuffer{};
         bool mustStopBuffering{};
+        bool resetPosition{true};
         bool hasCvRestart{};
 
         float nextGain{1.f};
@@ -463,13 +501,17 @@ namespace wreath
         int mustSetChannelLoopLength{NONE};
         int32_t nextLoopLength{};
 
-        int mustSetChannelSpeedMult{NONE};
-        float nextSpeedMult{};
+        int mustSetChannelReadRate{NONE};
+        int mustSetChannelWriteRate{NONE};
+        float nextReadRate{};
+        float nextWriteRate{};
 
         bool mustStart{};
         bool mustStop{};
         bool mustRestart{};
 
+        float dryLevel_{1.f};
+        bool readingActive_{true};
     private:
         Looper loopers_[2];
         float gain_{};
@@ -483,7 +525,6 @@ namespace wreath
         Svf feedbackFilter_;
         //EnvFollow filterEnvelope_;
         int32_t sampleRate_{};
-        bool readingActive_{true};
         bool hasChangedLeft_{};
         bool hasChangedRight_{};
         Conf conf_{};

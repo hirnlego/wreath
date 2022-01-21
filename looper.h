@@ -16,11 +16,13 @@ namespace wreath
         void ClearBuffer();
         void StopBuffering();
         void SetReadRate(float rate);
+        void SetWriteRate(float rate);
         void SetLoopLength(int32_t length);
         void SetMovement(Movement movement);
         void SetLooping(bool looping);
         bool Buffer(float value);
-        void SetReadPosition(float position);
+        void SetReadPos(float position);
+        void SetWritePos(float position);
         float Read();
         void Write(float value);
         void UpdateReadPos();
@@ -28,12 +30,16 @@ namespace wreath
         bool HandleFade();
         bool Start();
         bool Stop();
-        bool Restart();
+        bool Restart(bool resetPosition);
         void SetLoopStart(int32_t pos);
         int32_t GetRandomPosition();
         void SetLoopEnd(int32_t pos);
         void SetDirection(Direction direction);
-        void SetRunStatus(RunStatus status) { runStatus_ = status; }
+        void SetRunStatus(RunStatus status)
+        {
+            heads_[READ].SetRunStatus(status);
+            runStatus_ = status;
+        }
         void ToggleDirection();
         void SetWriting(float amount);
 
@@ -55,6 +61,7 @@ namespace wreath
         inline int32_t GetWritePos() { return writePos_; }
 
         inline float GetReadRate() { return readRate_; }
+        inline float GetWriteRate() { return writeRate_; }
         inline int32_t GetSampleRateSpeed() { return sampleRateSpeed_; }
 
         inline Movement GetMovement() { return movement_; }

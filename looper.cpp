@@ -36,8 +36,8 @@ void Looper::Reset()
     writePos_ = 0;
     movement_ = Movement::NORMAL;
     direction_ = Direction::FORWARD;
-    writeRate_ = 1.f;
     SetReadRate(1.f);
+    SetWriteRate(1.f);
     heads_[WRITE].SetLooping(true);
     heads_[WRITE].SetRunStatus(RunStatus::RUNNING);
 }
@@ -73,7 +73,7 @@ bool Looper::Start()
     {
         heads_[READ].Start();
     }
-    else if (RunStatus::RUNNING == status)
+    if (RunStatus::RUNNING == status)
     {
         return true;
     }
@@ -88,7 +88,7 @@ bool Looper::Stop()
     {
         heads_[READ].Stop();
     }
-    else if (RunStatus::STOPPED == status)
+    if (RunStatus::STOPPED == status)
     {
         return true;
     }
@@ -96,7 +96,7 @@ bool Looper::Stop()
     return false;
 }
 
-bool Looper::Restart()
+bool Looper::Restart(bool resetPosition)
 {
     RunStatus status = heads_[READ].GetRunStatus();
     if (!isRestarting_)
@@ -106,14 +106,16 @@ bool Looper::Restart()
     }
     else if (RunStatus::STOPPED == status)
     {
-        heads_[READ].ResetPosition();
-        //heads_[WRITE].ResetPosition();
-        // Invert direction when in pendulum.
-        if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
+        if (resetPosition)
         {
-            direction_ = heads_[READ].ToggleDirection();
+            heads_[READ].ResetPosition();
+            // Invert direction when in pendulum.
+            if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
+            {
+                direction_ = heads_[READ].ToggleDirection();
+            }
+            crossPointFound_ = false;
         }
-        crossPointFound_ = false;
 
         Start();
     }
@@ -173,9 +175,16 @@ void Looper::SetReadRate(float rate)
 {
     heads_[READ].SetRate(rate);
     readRate_ = rate;
-    readSpeed_ = sampleRate_ * readRate_; // samples/s.
-    writeSpeed_ = sampleRate_ * writeRate_;             // samples/s.
+    readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
+    crossPointFound_ = false;
+}
+
+void Looper::SetWriteRate(float rate)
+{
+    heads_[WRITE].SetRate(rate);
+    writeRate_ = rate;
+    writeSpeed_ = sampleRate_ * writeRate_;
     crossPointFound_ = false;
 }
 
@@ -191,10 +200,16 @@ void Looper::SetDirection(Direction direction)
     direction_ = direction;
 }
 
-void Looper::SetReadPosition(float position)
+void Looper::SetReadPos(float position)
 {
     heads_[READ].SetIndex(position);
     readPos_ = position;
+}
+
+void Looper::SetWritePos(float position)
+{
+    heads_[WRITE].SetIndex(position);
+    writePos_ = position;
 }
 
 void Looper::SetLooping(bool looping)

@@ -12,8 +12,9 @@
 
 namespace wreath
 {
-    constexpr int32_t kMinLoopLengthSamples{48};
-    constexpr int32_t kMinLoopLengthForFade{4800};
+    constexpr int kMinLoopLengthSamples{48};
+    constexpr int kMinLoopLengthForFade{4800};
+    constexpr float kMinSamplesForTone{1440}; // 30ms @ 48KHz
     constexpr int32_t kSamplesToFade{1200};
 
     enum Type
@@ -129,8 +130,15 @@ namespace wreath
                     }
                     // When the head is not looping, and while it's not already
                     // stopping, stop it and allow for a fade out.
-                    else if (RunStatus::STOPPING != runStatus_ && !looping_ && intIndex_ < loopStart_ + SamplesToFade())
+                    else if (!looping_ && intIndex_ < loopStart_ + SamplesToFade())
                     {
+                        if (RunStatus::STOPPING == runStatus_)
+                        {
+                            SetIndex((loopEnd_ - std::abs(loopStart_ - index_)) + 1);
+
+                            return Action::LOOP;
+                        }
+
                         return Action::STOP;
                     }
                 }
@@ -551,12 +559,24 @@ namespace wreath
 
         inline void Start()
         {
-            SetRunStatus(RunStatus::STARTING);
+            if (SamplesToFade() > kMinSamplesForTone)
+            {
+                SetRunStatus(RunStatus::STARTING);
+            }
+            else {
+                SetRunStatus(RunStatus::RUNNING);
+            }
         }
 
         inline void Stop()
         {
-            SetRunStatus(RunStatus::STOPPING);
+            if (SamplesToFade() > kMinSamplesForTone)
+            {
+                SetRunStatus(RunStatus::STOPPING);
+            }
+            else {
+                SetRunStatus(RunStatus::STOPPED);
+            }
         }
 
         inline void SetLooping(bool looping)

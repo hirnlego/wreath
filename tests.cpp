@@ -119,7 +119,7 @@ void TestBoundaries()
         looper.SetDirection(scenario.direction);
         std::cout << "Direction: " << scenario.direction << "\n";
         float index = scenario.index;
-        looper.SetReadPosition(index);
+        looper.SetReadPos(index);
         std::cout << "Current index: " << index << "\n";
         looper.UpdateReadPos();
         index = looper.GetReadPos();
@@ -138,7 +138,7 @@ void TestRead()
 
     float index = bufferSamples - 1;
 
-    looper.SetReadPosition(index);
+    looper.SetReadPos(index);
     float value = looper.Read();
     std::cout << "Value at " << index << ": " << value << "\n";
 }

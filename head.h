@@ -267,6 +267,60 @@ namespace wreath
             return index;
         }
 
+        /*
+        int32_t FindMinValPos(float pos)
+        {
+            float min{};
+            int32_t intIndex = static_cast<int32_t>(std::floor(pos));
+            int32_t minPos{intIndex};
+            float value{buffer_[intIndex]};
+            for (int i = 0; i < 10; i++)
+            {
+                intIndex = WrapIndex(intIndex + i * direction_);
+                float val = buffer_[intIndex];
+                if (std::abs(value - val) < min)
+                {
+                    min = val;
+                    minPos = intIndex;
+                }
+            }
+
+            return minPos;
+        }
+
+        int32_t ZeroCrossingPos(float pos)
+        {
+            bool sign1, sign2;
+            int32_t currentPos = static_cast<int32_t>(std::floor(pos));
+            int32_t pos1{};
+            int32_t pos2{};
+            for (int32_t i = 0; i < 10; i++)
+            {
+                pos1 = WrapIndex(currentPos - i);
+                sign1 = buffer_[pos1] > 0;
+                pos2 = WrapIndex(currentPos - i - 1);
+                sign2 = buffer_[pos2] > 0;
+
+                if (sign1 != sign2)
+                {
+                    return pos1;
+                }
+
+                pos1 = WrapIndex(currentPos + i);
+                sign1 = buffer_[pos1] > 0;
+                pos2 = WrapIndex(currentPos + i + 1);
+                sign2 = buffer_[pos2] > 0;
+
+                if (sign1 != sign2)
+                {
+                    return pos1;
+                }
+            }
+
+            return currentPos;
+        }
+        */
+
         void CalculateLoopEnd()
         {
             if (loopStart_ + loopLength_ > bufferSamples_)

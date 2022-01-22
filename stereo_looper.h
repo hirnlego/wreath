@@ -181,16 +181,12 @@ namespace wreath
 
             if (IsRecording() || IsFrozen())
             {
+                /*
                 if (mustRestartRead)
                 {
-                    //loopers_[LEFT].SetReadPos(loopers_[LEFT].GetWritePos());
-                    //loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetWritePos());
-                    //loopers_[LEFT].SetWritePos(loopers_[LEFT].GetReadPos());
-                    //loopers_[RIGHT].SetWritePos(loopers_[RIGHT].GetReadPos());
-                    //loopers_[LEFT].SetRunStatus(RunStatus::RUNNING);
-                    //loopers_[RIGHT].SetRunStatus(RunStatus::RUNNING);
                     mustRestartRead = false;
                 }
+                */
 
                 if (mustRestart)
                 {
@@ -221,6 +217,51 @@ namespace wreath
                     {
                         readingActive_ = false;
                         mustStop = false;
+                    }
+                }
+
+                if (mustSetMode)
+                {
+                    mustSetMode = false;
+                    /*
+                    loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
+                    loopers_[RIGHT].SetDirection(loopers_[LEFT].GetDirection());
+                    loopers_[RIGHT].SetReadRate(loopers_[LEFT].GetReadRate());
+                    loopers_[RIGHT].SetWriteRate(loopers_[LEFT].GetWriteRate());
+                    loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
+                    loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
+                    loopers_[RIGHT].SetReadPos(loopers_[LEFT].GetReadPos());
+                    */
+                }
+
+                if (mustSetTriggerMode)
+                {
+                    mustSetTriggerMode = false;
+                    switch (nextTriggerMode)
+                    {
+                        case TriggerMode::GATE:
+                            dryLevel_ = 0.f;
+                            resetPosition = false;
+                            loopers_[LEFT].SetReadPos(loopers_[LEFT].GetWritePos());
+                            loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetWritePos());
+                            loopers_[LEFT].SetLooping(true);
+                            loopers_[RIGHT].SetLooping(true);
+                            mustRestart = true;
+                            break;
+                        case TriggerMode::TRIGGER:
+                            dryLevel_ = 1.f;
+                            resetPosition = true;
+                            loopers_[LEFT].SetLooping(false);
+                            loopers_[RIGHT].SetLooping(false);
+                            mustStop = true;
+                            break;
+                        case TriggerMode::LOOP:
+                            dryLevel_ = 1.f;
+                            resetPosition = true;
+                            loopers_[LEFT].SetLooping(true);
+                            loopers_[RIGHT].SetLooping(true);
+                            mustStart = true;
+                            break;
                     }
                 }
 
@@ -368,47 +409,18 @@ namespace wreath
             // looper to the LEFT one.
             if (IsDualMode() && Mode::DUAL != mode)
             {
-                loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
-                loopers_[RIGHT].SetDirection(loopers_[LEFT].GetDirection());
-                loopers_[RIGHT].SetReadRate(loopers_[LEFT].GetReadRate());
-                loopers_[RIGHT].SetWriteRate(loopers_[LEFT].GetWriteRate());
-                loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
-                loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
-                loopers_[RIGHT].SetReadPos(loopers_[LEFT].GetReadPos());
+                mustSetMode = true;
+                nextMode = mode;
             }
 
-            mode_ = mode;
+            conf_.mode = mode;
         }
 
         void SetTriggerMode(TriggerMode mode)
         {
-            switch (mode)
-            {
-                case TriggerMode::GATE:
-                    dryLevel_ = 0.f;
-                    resetPosition = false;
-                    loopers_[LEFT].SetReadPos(loopers_[LEFT].GetWritePos());
-                    loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetWritePos());
-                    loopers_[LEFT].SetLooping(true);
-                    loopers_[RIGHT].SetLooping(true);
-                    mustRestart = true;
-                    break;
-                case TriggerMode::TRIGGER:
-                    dryLevel_ = 1.f;
-                    resetPosition = true;
-                    loopers_[LEFT].SetLooping(false);
-                    loopers_[RIGHT].SetLooping(false);
-                    mustStop = true;
-                    break;
-                case TriggerMode::LOOP:
-                    dryLevel_ = 1.f;
-                    resetPosition = true;
-                    loopers_[LEFT].SetLooping(true);
-                    loopers_[RIGHT].SetLooping(true);
-                    mustStart = true;
-                    break;
-            }
-            triggerMode_ = mode;
+            mustSetTriggerMode = true;
+            nextTriggerMode = mode;
+            conf_.triggerMode = mode;
         }
 
         inline int32_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
@@ -430,11 +442,11 @@ namespace wreath
         inline bool IsBuffering() { return State::BUFFERING == state_; }
         inline bool IsRecording() { return State::RECORDING == state_; }
         inline bool IsFrozen() { return State::FROZEN == state_; }
-        inline bool IsMonoMode() { return Mode::MONO == mode_; }
-        inline bool IsCrossMode() { return Mode::CROSS == mode_; }
-        inline bool IsDualMode() { return Mode::DUAL == mode_; }
-        inline Mode GetMode() { return mode_; }
-        inline TriggerMode GetTriggerMode() { return triggerMode_; }
+        inline bool IsMonoMode() { return Mode::MONO == conf_.mode; }
+        inline bool IsCrossMode() { return Mode::CROSS == conf_.mode; }
+        inline bool IsDualMode() { return Mode::DUAL == conf_.mode; }
+        inline Mode GetMode() { return conf_.mode; }
+        inline TriggerMode GetTriggerMode() { return conf_.triggerMode; }
         inline float GetGain() { return gain_; }
         inline float GetMix() { return mix_; }
         inline float GetFeedBack() { return feedback_; }
@@ -446,6 +458,7 @@ namespace wreath
             {
                 loopers_[LEFT].SetMovement(movement);
                 loopers_[RIGHT].SetMovement(movement);
+                conf_.movement = movement;
             }
             else{
                 loopers_[channel].SetMovement(movement);
@@ -457,6 +470,7 @@ namespace wreath
             {
                 loopers_[LEFT].SetDirection(direction);
                 loopers_[RIGHT].SetDirection(direction);
+                conf_.direction = direction;
             }
             else{
                 loopers_[channel].SetDirection(direction);
@@ -467,15 +481,19 @@ namespace wreath
             mustSetChannelLoopStart = channel;
             nextLoopStart = value;
         }
-        void SetReadRate(int channel, float multiplier)
+        void SetReadRate(int channel, float rate)
         {
+            if (BOTH == channel)
+            {
+                conf_.rate = rate;
+            }
             mustSetChannelReadRate = channel;
-            nextReadRate = multiplier;
+            nextReadRate = rate;
         }
-        void SetWriteRate(int channel, float multiplier)
+        void SetWriteRate(int channel, float rate)
         {
             mustSetChannelWriteRate = channel;
-            nextWriteRate = multiplier;
+            nextWriteRate = rate;
         }
         void SetLoopLength(int channel, int32_t length)
         {
@@ -506,6 +524,12 @@ namespace wreath
         float nextReadRate{};
         float nextWriteRate{};
 
+        bool mustSetMode{};
+        Mode nextMode{};
+
+        bool mustSetTriggerMode{};
+        TriggerMode nextTriggerMode{};
+
         bool mustStart{};
         bool mustStop{};
         bool mustRestart{};
@@ -519,8 +543,6 @@ namespace wreath
         float feedback_{};
         float filterValue_{};
         State state_{}; // The current state of the looper
-        Mode mode_{};   // The current mode of the looper
-        TriggerMode triggerMode_{};
         CrossFade cf_;
         Svf feedbackFilter_;
         //EnvFollow filterEnvelope_;

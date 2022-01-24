@@ -30,8 +30,8 @@ namespace wreath
         {
             LEFT,
             RIGHT,
-            NONE,
             BOTH,
+            NONE,
         };
 
         enum State
@@ -265,21 +265,15 @@ namespace wreath
                     }
                 }
 
-                switch (mustSetChannelReadRate)
+                if (mustSetLeftReadRate)
                 {
-                case BOTH:
-                    loopers_[LEFT].SetReadRate(nextReadRate);
-                    loopers_[RIGHT].SetReadRate(nextReadRate);
-                    mustSetChannelReadRate = NONE;
-                    break;
-                case LEFT:
-                case RIGHT:
-                    loopers_[mustSetChannelReadRate].SetReadRate(nextReadRate);
-                    mustSetChannelReadRate = NONE;
-                    break;
-
-                default:
-                    break;
+                    loopers_[LEFT].SetReadRate(nextLeftReadRate);
+                    mustSetLeftReadRate = false;
+                }
+                if (mustSetRightReadRate)
+                {
+                    loopers_[RIGHT].SetReadRate(nextRightReadRate);
+                    mustSetRightReadRate = false;
                 }
 
                 switch (mustSetChannelWriteRate)
@@ -299,21 +293,26 @@ namespace wreath
                     break;
                 }
 
-                switch (mustSetChannelLoopLength)
+                if (mustSetLeftDirection)
                 {
-                case BOTH:
-                    loopers_[LEFT].SetLoopLength(nextLoopLength);
-                    loopers_[RIGHT].SetLoopLength(nextLoopLength);
-                    mustSetChannelLoopLength = NONE;
-                    break;
-                case LEFT:
-                case RIGHT:
-                    loopers_[mustSetChannelLoopLength].SetLoopLength(nextLoopLength);
-                    mustSetChannelLoopLength = NONE;
-                    break;
+                    loopers_[LEFT].SetDirection(nextLeftDirection);
+                    mustSetLeftDirection = false;
+                }
+                if (mustSetRightDirection)
+                {
+                    loopers_[RIGHT].SetDirection(nextRightDirection);
+                    mustSetRightDirection = false;
+                }
 
-                default:
-                    break;
+                if (mustSetLeftLoopLength)
+                {
+                    loopers_[LEFT].SetLoopLength(nextLeftLoopLength);
+                    mustSetLeftLoopLength = false;
+                }
+                if (mustSetRightLoopLength)
+                {
+                    loopers_[RIGHT].SetLoopLength(nextRightLoopLength);
+                    mustSetRightLoopLength = false;
                 }
 
                 switch (mustSetChannelLoopStart)
@@ -466,14 +465,17 @@ namespace wreath
         }
         void SetDirection(int channel, Direction direction)
         {
-            if (BOTH == channel)
+            if (LEFT == channel || BOTH == channel)
             {
-                loopers_[LEFT].SetDirection(direction);
-                loopers_[RIGHT].SetDirection(direction);
-                conf_.direction = direction;
+                //conf_.direction = direction;
+                nextLeftDirection = direction;
+                mustSetLeftDirection = true;
             }
-            else{
-                loopers_[channel].SetDirection(direction);
+            if (RIGHT == channel || BOTH == channel)
+            {
+                //conf_.direction = direction;
+                nextRightDirection = direction;
+                mustSetRightDirection = true;
             }
         }
         void SetLoopStart(int channel, int32_t value)
@@ -483,12 +485,18 @@ namespace wreath
         }
         void SetReadRate(int channel, float rate)
         {
-            if (BOTH == channel)
+            if (LEFT == channel || BOTH == channel)
             {
-                conf_.rate = rate;
+                //conf_.rate = rate;
+                nextLeftReadRate = rate;
+                mustSetLeftReadRate = true;
             }
-            mustSetChannelReadRate = channel;
-            nextReadRate = rate;
+            if (RIGHT == channel || BOTH == channel)
+            {
+                //conf_.rate = rate;
+                mustSetRightReadRate = true;
+                nextRightReadRate = rate;
+            }
         }
         void SetWriteRate(int channel, float rate)
         {
@@ -497,8 +505,16 @@ namespace wreath
         }
         void SetLoopLength(int channel, int32_t length)
         {
-            mustSetChannelLoopLength = channel;
-            nextLoopLength = length;
+            if (LEFT == channel || BOTH == channel)
+            {
+                mustSetLeftLoopLength = true;
+                nextLeftLoopLength = length;
+            }
+            if (RIGHT == channel || BOTH == channel)
+            {
+                mustSetRightLoopLength = true;
+                nextRightLoopLength = length;
+            }
         }
 
         bool mustRestartRead{};
@@ -516,12 +532,22 @@ namespace wreath
         int mustSetChannelLoopStart{NONE};
         int32_t nextLoopStart{};
 
-        int mustSetChannelLoopLength{NONE};
-        int32_t nextLoopLength{};
+        bool mustSetLeftDirection{};
+        Direction nextLeftDirection{};
+        bool mustSetRightDirection{};
+        Direction nextRightDirection{};
 
-        int mustSetChannelReadRate{NONE};
+        bool mustSetLeftLoopLength{};
+        int32_t nextLeftLoopLength{};
+        bool mustSetRightLoopLength{};
+        int32_t nextRightLoopLength{};
+
+        bool mustSetLeftReadRate{};
+        float nextLeftReadRate{};
+        bool mustSetRightReadRate{};
+        float nextRightReadRate{};
+
         int mustSetChannelWriteRate{NONE};
-        float nextReadRate{};
         float nextWriteRate{};
 
         bool mustSetMode{};

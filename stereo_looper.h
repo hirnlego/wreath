@@ -88,6 +88,8 @@ namespace wreath
             cf_.Init(CROSSFADE_CPOW);
             feedbackFilter_.Init(sampleRate_);
             feedbackFilter_.SetFreq(filterValue_);
+            outputFilter_.Init(sampleRate_);
+            outputFilter_.SetFreq(filterValue_);
 
             // Process configuration and reset the looper.
             conf_ = conf;
@@ -112,6 +114,7 @@ namespace wreath
             }
             loopers_[LEFT].SetWriting(value);
             loopers_[RIGHT].SetWriting(value);
+            freeze_ = value;
         }
 
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
@@ -161,6 +164,9 @@ namespace wreath
             feedbackFilter_.SetFreq(filterValue_);
             feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
             feedbackFilter_.SetRes(0.45f + filterValue_ * 0.0005f);
+            outputFilter_.SetFreq(filterValue_);
+            outputFilter_.SetDrive(filterValue_ * 0.0001f);
+            outputFilter_.SetRes(0.45f + filterValue_ * 0.0005f);
 
             // Input gain stage.
             float leftDry{leftIn * gain_};
@@ -315,21 +321,15 @@ namespace wreath
                     mustSetRightLoopLength = false;
                 }
 
-                switch (mustSetChannelLoopStart)
+                if (mustSetLeftLoopStart)
                 {
-                case BOTH:
-                    loopers_[LEFT].SetLoopStart(nextLoopStart);
-                    loopers_[RIGHT].SetLoopStart(nextLoopStart);
-                    mustSetChannelLoopStart = NONE;
-                    break;
-                case LEFT:
-                case RIGHT:
-                    loopers_[mustSetChannelLoopStart].SetLoopStart(nextLoopStart);
-                    mustSetChannelLoopStart = NONE;
-                    break;
-
-                default:
-                    break;
+                    loopers_[LEFT].SetLoopStart(nextLeftLoopStart);
+                    mustSetLeftLoopLength = false;
+                }
+                if (mustSetRightLoopStart)
+                {
+                    loopers_[RIGHT].SetLoopStart(nextRightLoopStart);
+                    mustSetRightLoopLength = false;
                 }
 
                 loopers_[LEFT].HandleFade();
@@ -362,10 +362,20 @@ namespace wreath
                 float rightWet = rightOut * feedback_;
                 if (filterValue_ >= 20.f)
                 {
-                    feedbackFilter_.Process(leftDry);
-                    leftWet = Mix(leftWet, feedbackFilter_.Band());
-                    feedbackFilter_.Process(rightDry);
-                    rightWet = Mix(rightWet, feedbackFilter_.Band());
+                    if (freeze_ > 0.f)
+                    {
+                        outputFilter_.Process(leftOut);
+                        leftOut = Mix(leftOut, outputFilter_.Band() * freeze_);
+                        outputFilter_.Process(rightOut);
+                        rightOut = Mix(rightOut, outputFilter_.Band() * freeze_);
+                    }
+                    if (freeze_ < 1.f)
+                    {
+                        feedbackFilter_.Process(leftDry);
+                        leftWet = Mix(leftWet, feedbackFilter_.Band() * (1.f - freeze_));
+                        feedbackFilter_.Process(rightDry);
+                        rightWet = Mix(rightWet, feedbackFilter_.Band() * (1.f - freeze_));
+                    }
                 }
 
                 loopers_[LEFT].Write(Mix(leftDry * dryLevel_, leftWet));
@@ -480,8 +490,16 @@ namespace wreath
         }
         void SetLoopStart(int channel, int32_t value)
         {
-            mustSetChannelLoopStart = channel;
-            nextLoopStart = value;
+            if (LEFT == channel || BOTH == channel)
+            {
+                nextLeftLoopStart = value;
+                mustSetLeftLoopStart = true;
+            }
+            if (RIGHT == channel || BOTH == channel)
+            {
+                nextRightLoopStart = value;
+                mustSetRightLoopStart = true;
+            }
         }
         void SetReadRate(int channel, float rate)
         {
@@ -529,8 +547,10 @@ namespace wreath
         float nextFeedback{0.f};
         float nextFilterValue{};
 
-        int mustSetChannelLoopStart{NONE};
-        int32_t nextLoopStart{};
+        bool mustSetLeftLoopStart{};
+        int32_t nextLeftLoopStart{};
+        bool mustSetRightLoopStart{};
+        int32_t nextRightLoopStart{};
 
         bool mustSetLeftDirection{};
         Direction nextLeftDirection{};
@@ -571,11 +591,12 @@ namespace wreath
         State state_{}; // The current state of the looper
         CrossFade cf_;
         Svf feedbackFilter_;
-        //EnvFollow filterEnvelope_;
+        Svf outputFilter_;
         int32_t sampleRate_{};
         bool hasChangedLeft_{};
         bool hasChangedRight_{};
         Conf conf_{};
+        float freeze_{};
 
         float Mix(float a, float b)
         {

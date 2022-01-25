@@ -80,6 +80,7 @@ namespace wreath
         Direction direction_{};
 
         float currentValue_{};
+        float writeBalance_{}; // Balance between new and old value when writing
 
         Action HandleLoopAction()
         {
@@ -383,6 +384,7 @@ namespace wreath
             return std::min(kSamplesToFade, loopLength_);
         }
 
+        inline void SetWriteBalance(float amount) { writeBalance_ = amount; }
         inline void SetRate(float rate) { rate_ = rate; }
         inline void SetMovement(Movement movement) { movement_ = movement; }
         inline void SetDirection(Direction direction) { direction_ = direction; }
@@ -521,6 +523,7 @@ namespace wreath
         void Write(float value)
         {
             currentValue_ = ReadAt(index_);
+            //value = value * (1.f - writeBalance_) + currentValue_ * writeBalance_;
             int32_t samplesToFade = SamplesToFade();
 
             // Gradually start writing, fading from the buffered value to the input
@@ -611,26 +614,24 @@ namespace wreath
             fadeIndex_ = 0;
         }
 
-        inline void Start()
+        RunStatus Start()
         {
-            if (SamplesToFade() > kMinSamplesForTone)
-            {
-                SetRunStatus(RunStatus::STARTING);
-            }
-            else {
-                SetRunStatus(RunStatus::RUNNING);
-            }
+            // Start right away if the loop length is smaller than the minimum
+            // number of samples needed for a tone.
+            RunStatus status = loopLength_ > kMinSamplesForTone ? RunStatus::STARTING : RunStatus::RUNNING;
+            SetRunStatus(status);
+
+            return status;
         }
 
-        inline void Stop()
+        RunStatus Stop()
         {
-            if (SamplesToFade() > kMinSamplesForTone)
-            {
-                SetRunStatus(RunStatus::STOPPING);
-            }
-            else {
-                SetRunStatus(RunStatus::STOPPED);
-            }
+            // Stop right away if the loop length is smaller than the minimum
+            // number of samples needed for a tone.
+            RunStatus status = loopLength_ > kMinSamplesForTone ? RunStatus::STOPPING : RunStatus::STOPPED;
+            SetRunStatus(status);
+
+            return status;
         }
 
         inline void SetLooping(bool looping)

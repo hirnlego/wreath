@@ -35,11 +35,6 @@ namespace wreath
         int32_t GetRandomPosition();
         void SetLoopEnd(int32_t pos);
         void SetDirection(Direction direction);
-        void SetRunStatus(RunStatus status)
-        {
-            heads_[READ].SetRunStatus(status);
-            runStatus_ = status;
-        }
         void ToggleDirection();
         void SetWriting(float amount);
 
@@ -66,7 +61,6 @@ namespace wreath
 
         inline Movement GetMovement() { return movement_; }
         inline Direction GetDirection() { return direction_; }
-        inline RunStatus GetRunStatus() { return runStatus_; }
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
         inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
 
@@ -108,7 +102,6 @@ namespace wreath
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 
-        RunStatus runStatus_{};
         Movement movement_{}; // The current movement type of the looper
     };
 } // namespace wreath

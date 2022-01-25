@@ -71,7 +71,7 @@ bool Looper::Start()
     RunStatus status = heads_[READ].GetRunStatus();
     if (RunStatus::RUNNING != status && RunStatus::STARTING != status)
     {
-        heads_[READ].Start();
+        status = heads_[READ].Start();
     }
     if (RunStatus::RUNNING == status)
     {
@@ -86,7 +86,7 @@ bool Looper::Stop()
     RunStatus status = heads_[READ].GetRunStatus();
     if (RunStatus::STOPPED != status && RunStatus::STOPPING != status)
     {
-        heads_[READ].Stop();
+        status = heads_[READ].Stop();
     }
     if (RunStatus::STOPPED == status)
     {
@@ -247,7 +247,6 @@ void Looper::ToggleDirection()
 
 void Looper::SetWriting(float amount)
 {
-    // TODO: variable amount should determine how many samples are written (1 = all, 0 = none).
     if (amount < 0.5f && !writingActive_)
     {
         heads_[WRITE].SetIndex(heads_[READ].GetIntPosition());
@@ -259,6 +258,9 @@ void Looper::SetWriting(float amount)
         heads_[WRITE].Stop();
         writingActive_ = false;
     }
+
+    // TODO: variable amount should determine how many samples are written (1 = all, 0 = none).
+    heads_[WRITE].SetWriteBalance(amount);
 }
 
 void Looper::CalculateHeadsDistance()

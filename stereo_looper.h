@@ -71,12 +71,12 @@ namespace wreath
             loopers_[LEFT].Reset();
             loopers_[RIGHT].Reset();
 
-            SetMode(conf_.mode);
-            SetTriggerMode(conf_.triggerMode);
-            SetMovement(BOTH, conf_.movement);
-            SetDirection(BOTH, conf_.direction);
-            SetReadRate(BOTH, conf_.rate);
-            SetWriteRate(BOTH, conf_.rate);
+            //SetMode(conf_.mode);
+            //SetTriggerMode(conf_.triggerMode);
+            //SetMovement(BOTH, conf_.movement);
+            //SetDirection(BOTH, conf_.direction);
+            //SetReadRate(BOTH, conf_.rate);
+            //SetWriteRate(BOTH, conf_.rate);
         }
 
         void Init(int32_t sampleRate, Conf conf)
@@ -119,8 +119,8 @@ namespace wreath
 
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
         {
-            leftOut = 0.f;
-            rightOut = 0.f;
+            float leftWet{};
+            float rightWet{};
 
             if (mustClearBuffer)
             {
@@ -194,38 +194,6 @@ namespace wreath
                 }
                 */
 
-                if (mustRestart)
-                {
-                    bool doneLeft{loopers_[LEFT].Restart(resetPosition)};
-                    bool doneRight{loopers_[RIGHT].Restart(resetPosition)};
-                    if (doneLeft && doneRight)
-                    {
-                        mustRestart = false;
-                    }
-                }
-
-                if (mustStart)
-                {
-                    bool doneLeft{loopers_[LEFT].Start()};
-                    bool doneRight{loopers_[RIGHT].Start()};
-                    if (doneLeft && doneRight)
-                    {
-                        readingActive_ = true;
-                        mustStart = false;
-                    }
-                }
-
-                if (mustStop)
-                {
-                    bool doneLeft{loopers_[LEFT].Stop()};
-                    bool doneRight{loopers_[RIGHT].Stop()};
-                    if (doneLeft && doneRight)
-                    {
-                        readingActive_ = false;
-                        mustStop = false;
-                    }
-                }
-
                 if (mustSetMode)
                 {
                     mustSetMode = false;
@@ -271,32 +239,36 @@ namespace wreath
                     }
                 }
 
-                if (mustSetLeftReadRate)
+                if (mustRestart)
                 {
-                    loopers_[LEFT].SetReadRate(nextLeftReadRate);
-                    mustSetLeftReadRate = false;
-                }
-                if (mustSetRightReadRate)
-                {
-                    loopers_[RIGHT].SetReadRate(nextRightReadRate);
-                    mustSetRightReadRate = false;
+                    bool doneLeft{loopers_[LEFT].Restart(resetPosition)};
+                    bool doneRight{loopers_[RIGHT].Restart(resetPosition)};
+                    if (doneLeft && doneRight)
+                    {
+                        mustRestart = false;
+                    }
                 }
 
-                switch (mustSetChannelWriteRate)
+                if (mustStart)
                 {
-                case BOTH:
-                    loopers_[LEFT].SetWriteRate(nextWriteRate);
-                    loopers_[RIGHT].SetWriteRate(nextWriteRate);
-                    mustSetChannelWriteRate = NONE;
-                    break;
-                case LEFT:
-                case RIGHT:
-                    loopers_[mustSetChannelWriteRate].SetWriteRate(nextWriteRate);
-                    mustSetChannelWriteRate = NONE;
-                    break;
+                    bool doneLeft{loopers_[LEFT].Start()};
+                    bool doneRight{loopers_[RIGHT].Start()};
+                    if (doneLeft && doneRight)
+                    {
+                        readingActive_ = true;
+                        mustStart = false;
+                    }
+                }
 
-                default:
-                    break;
+                if (mustStop)
+                {
+                    bool doneLeft{loopers_[LEFT].Stop()};
+                    bool doneRight{loopers_[RIGHT].Stop()};
+                    if (doneLeft && doneRight)
+                    {
+                        readingActive_ = false;
+                        mustStop = false;
+                    }
                 }
 
                 if (mustSetLeftDirection)
@@ -332,11 +304,39 @@ namespace wreath
                     mustSetRightLoopLength = false;
                 }
 
+                if (mustSetLeftReadRate)
+                {
+                    loopers_[LEFT].SetReadRate(nextLeftReadRate);
+                    mustSetLeftReadRate = false;
+                }
+                if (mustSetRightReadRate)
+                {
+                    loopers_[RIGHT].SetReadRate(nextRightReadRate);
+                    mustSetRightReadRate = false;
+                }
+
+                switch (mustSetChannelWriteRate)
+                {
+                case BOTH:
+                    loopers_[LEFT].SetWriteRate(nextWriteRate);
+                    loopers_[RIGHT].SetWriteRate(nextWriteRate);
+                    mustSetChannelWriteRate = NONE;
+                    break;
+                case LEFT:
+                case RIGHT:
+                    loopers_[mustSetChannelWriteRate].SetWriteRate(nextWriteRate);
+                    mustSetChannelWriteRate = NONE;
+                    break;
+
+                default:
+                    break;
+                }
+
                 loopers_[LEFT].HandleFade();
                 loopers_[RIGHT].HandleFade();
 
-                leftOut = loopers_[LEFT].Read();
-                rightOut = loopers_[RIGHT].Read();
+                leftWet = loopers_[LEFT].Read();
+                rightWet = loopers_[RIGHT].Read();
 
                 loopers_[LEFT].UpdateReadPos();
                 loopers_[RIGHT].UpdateReadPos();
@@ -346,44 +346,45 @@ namespace wreath
                 // left buffer is written in the right one and vice-versa.
                 if (IsCrossMode())
                 {
-                    float temp = leftOut;
+                    float temp = leftWet;
                     if (hasChangedLeft_)
                     {
-                        leftOut = rightOut;
+                        leftWet = rightWet;
                     }
                     if (hasChangedRight_)
                     {
-                        rightOut = temp;
+                        rightWet = temp;
                     }
                 }
                 */
 
-                float leftWet = leftOut * feedback_;
-                float rightWet = rightOut * feedback_;
+                float leftFeedback = leftWet * feedback_;
+                float rightFeedback = rightWet * feedback_;
                 if (filterValue_ >= 20.f)
                 {
                     if (freeze_ > 0.f)
                     {
-                        outputFilter_.Process(leftOut);
-                        leftOut = Mix(leftOut, outputFilter_.Band() * freeze_);
-                        outputFilter_.Process(rightOut);
-                        rightOut = Mix(rightOut, outputFilter_.Band() * freeze_);
+                        outputFilter_.Process(leftWet);
+                        leftWet = Mix(leftWet, outputFilter_.Band() * freeze_);
+                        outputFilter_.Process(rightWet);
+                        rightWet = Mix(rightWet, outputFilter_.Band() * freeze_);
                     }
                     if (freeze_ < 1.f)
                     {
                         feedbackFilter_.Process(leftDry);
-                        leftWet = Mix(leftWet, feedbackFilter_.Band() * (1.f - freeze_));
+                        leftFeedback = Mix(leftFeedback, feedbackFilter_.Band() * (1.f - freeze_));
                         feedbackFilter_.Process(rightDry);
-                        rightWet = Mix(rightWet, feedbackFilter_.Band() * (1.f - freeze_));
+                        rightFeedback = Mix(rightFeedback, feedbackFilter_.Band() * (1.f - freeze_));
                     }
                 }
 
-                loopers_[LEFT].Write(Mix(leftDry * dryLevel_, leftWet));
-                loopers_[RIGHT].Write(Mix(rightDry * dryLevel_, rightWet));
+                loopers_[LEFT].Write(Mix(leftDry * dryLevel_, leftFeedback));
+                loopers_[RIGHT].Write(Mix(rightDry * dryLevel_, rightFeedback));
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
 
+                /*
                 if (!hasCvRestart)
                 {
                     // When drunk there's a small probability of changing direction.
@@ -405,11 +406,12 @@ namespace wreath
                         }
                     }
                 }
+                */
             }
 
             cf_.SetPos(fclamp(mix_, 0.f, 1.f));
-            leftOut = cf_.Process(leftDry, leftOut);
-            rightOut = cf_.Process(rightDry, rightOut);
+            leftOut = cf_.Process(leftDry, leftWet);
+            rightOut = cf_.Process(rightDry, rightWet);
         }
 
         void SetMode(Mode mode)
@@ -527,11 +529,13 @@ namespace wreath
             {
                 mustSetLeftLoopLength = true;
                 nextLeftLoopLength = length;
+                noteModeLeft = length == kMinLoopLengthSamples;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 mustSetRightLoopLength = true;
                 nextRightLoopLength = length;
+                noteModeRight = length == kMinLoopLengthSamples;
             }
         }
 
@@ -546,6 +550,9 @@ namespace wreath
         float nextMix{1.f};
         float nextFeedback{0.f};
         float nextFilterValue{};
+
+        bool noteModeLeft{};
+        bool noteModeRight{};
 
         bool mustSetLeftLoopStart{};
         int32_t nextLeftLoopStart{};

@@ -14,7 +14,7 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150};                   // 2:30 minutes max
+    constexpr int kBufferSeconds{150}; // 2:30 minutes max
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -55,6 +55,13 @@ namespace wreath
             TRIGGER,
             GATE,
             LOOP,
+        };
+
+        enum FilterType
+        {
+            LP,
+            BP,
+            HP,
         };
 
         struct Conf
@@ -117,6 +124,22 @@ namespace wreath
             freeze_ = value;
         }
 
+        float Filter(Svf *filter, float value)
+        {
+            filter->Process(value);
+            switch (filterType)
+            {
+                case FilterType::BP:
+                    return filter->Band();
+                case FilterType::HP:
+                    return filter->High();
+                case FilterType::LP:
+                    return filter->Low();
+                default:
+                    return filter->Band();
+            }
+        }
+
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
         {
             float leftWet{};
@@ -132,7 +155,10 @@ namespace wreath
             if (mustResetLooper)
             {
                 mustResetLooper = false;
+                loopers_[LEFT].Stop(true);
+                loopers_[RIGHT].Stop(true);
                 Reset();
+                mustSetTriggerMode = true;
                 state_ = State::BUFFERING;
             }
 
@@ -163,10 +189,10 @@ namespace wreath
             fonepole(filterValue_, nextFilterValue, 0.01f);
             feedbackFilter_.SetFreq(filterValue_);
             feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
-            feedbackFilter_.SetRes(0.45f + filterValue_ * 0.0005f);
+            feedbackFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
             outputFilter_.SetFreq(filterValue_);
             outputFilter_.SetDrive(filterValue_ * 0.0001f);
-            outputFilter_.SetRes(0.45f + filterValue_ * 0.0005f);
+            outputFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
 
             // Input gain stage.
             float leftDry{leftIn * gain_};
@@ -262,8 +288,8 @@ namespace wreath
 
                 if (mustStop)
                 {
-                    bool doneLeft{loopers_[LEFT].Stop()};
-                    bool doneRight{loopers_[RIGHT].Stop()};
+                    bool doneLeft{loopers_[LEFT].Stop(false)};
+                    bool doneRight{loopers_[RIGHT].Stop(false)};
                     if (doneLeft && doneRight)
                     {
                         readingActive = false;
@@ -347,17 +373,13 @@ namespace wreath
                 {
                     if (freeze_ > 0.f)
                     {
-                        outputFilter_.Process(leftWet);
-                        leftWet = Mix(leftWet, outputFilter_.Band() * freeze_);
-                        outputFilter_.Process(rightWet);
-                        rightWet = Mix(rightWet, outputFilter_.Band() * freeze_);
+                        leftWet = Mix(leftWet, Filter(&outputFilter_, leftWet) * freeze_);
+                        rightWet = Mix(rightWet, Filter(&outputFilter_, rightWet) * freeze_);
                     }
                     if (freeze_ < 1.f)
                     {
-                        feedbackFilter_.Process(leftDry);
-                        leftFeedback = Mix(leftFeedback, feedbackFilter_.Band() * (1.f - freeze_));
-                        feedbackFilter_.Process(rightDry);
-                        rightFeedback = Mix(rightFeedback, feedbackFilter_.Band() * (1.f - freeze_));
+                        leftFeedback = Mix(leftFeedback, Filter(&feedbackFilter_, leftDry) * (1.f - freeze_));
+                        rightFeedback = Mix(rightFeedback, Filter(&feedbackFilter_, rightDry) * (1.f - freeze_));
                     }
                 }
 
@@ -430,7 +452,6 @@ namespace wreath
         inline int32_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
         inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
         inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
-        inline float GetNextReadPos(int channel) { return loopers_[channel].GetNextReadPos(); }
         inline float GetReadRate(int channel) { return loopers_[channel].GetReadRate(); }
         inline Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
         inline bool IsGoingForward(int channel) { return loopers_[channel].IsGoingForward(); }
@@ -574,6 +595,8 @@ namespace wreath
         bool mustRestart{};
         float stereoImage{1.f};
         float dryLevel{1.f};
+        float filterResonance{0.45f};
+        FilterType filterType{FilterType::BP};
         bool readingActive{true};
     private:
         Looper loopers_[2];

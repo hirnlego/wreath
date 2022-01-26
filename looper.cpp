@@ -17,6 +17,12 @@ void Looper::Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples)
     heads_[READ].Init(buffer, maxBufferSamples);
     heads_[WRITE].Init(buffer, maxBufferSamples);
     Reset();
+    movement_ = Movement::NORMAL;
+    direction_ = Direction::FORWARD;
+    SetReadRate(1.f);
+    SetWriteRate(1.f);
+    heads_[WRITE].SetLooping(true);
+    heads_[WRITE].SetRunStatus(RunStatus::RUNNING);
 }
 
 void Looper::Reset()
@@ -32,14 +38,7 @@ void Looper::Reset()
     loopLengthSeconds_ = 0.f;
     readPos_ = 0.f;
     readPosSeconds_ = 0.f;
-    nextReadPos_ = 0.f;
     writePos_ = 0;
-    movement_ = Movement::NORMAL;
-    direction_ = Direction::FORWARD;
-    SetReadRate(1.f);
-    SetWriteRate(1.f);
-    heads_[WRITE].SetLooping(true);
-    heads_[WRITE].SetRunStatus(RunStatus::RUNNING);
 }
 
 void Looper::ClearBuffer()
@@ -81,8 +80,15 @@ bool Looper::Start()
     return false;
 }
 
-bool Looper::Stop()
+bool Looper::Stop(bool now)
 {
+    if (now)
+    {
+        heads_[READ].SetRunStatus(RunStatus::STOPPED);
+
+        return true;
+    }
+
     RunStatus status = heads_[READ].GetRunStatus();
     if (RunStatus::STOPPED != status && RunStatus::STOPPING != status)
     {
@@ -102,7 +108,7 @@ bool Looper::Restart(bool resetPosition)
     if (!isRestarting_)
     {
         isRestarting_ = true;
-        Stop();
+        Stop(false);
     }
     else if (RunStatus::STOPPED == status)
     {

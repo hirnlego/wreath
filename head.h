@@ -342,20 +342,19 @@ namespace wreath
         {
             intIndex_ = 0;
             index_ = 0.f;
-            rate_ = 1.f;
             loopStart_ = 0;
             loopEnd_ = 0;
-            loopLength_ = 0;
-            looping_ = false;
-            runStatus_ = RunStatus::STOPPED;
-            movement_ = Movement::NORMAL;
-            direction_ = Direction::FORWARD;
         }
 
         void Init(float *buffer, int32_t maxBufferSamples)
         {
             buffer_ = buffer;
             maxBufferSamples_ = maxBufferSamples;
+            rate_ = 1.f;
+            looping_ = false;
+            runStatus_ = RunStatus::STOPPED;
+            movement_ = Movement::NORMAL;
+            direction_ = Direction::FORWARD;
             Reset();
         }
 

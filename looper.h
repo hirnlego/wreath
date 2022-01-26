@@ -29,7 +29,7 @@ namespace wreath
         void UpdateWritePos();
         bool HandleFade();
         bool Start();
-        bool Stop();
+        bool Stop(bool now);
         bool Restart(bool resetPosition);
         void SetLoopStart(int32_t pos);
         int32_t GetRandomPosition();
@@ -51,7 +51,6 @@ namespace wreath
 
         inline float GetReadPos() { return readPos_; }
         inline float GetReadPosSeconds() { return readPosSeconds_; }
-        inline float GetNextReadPos() { return nextReadPos_; }
 
         inline int32_t GetWritePos() { return writePos_; }
 
@@ -77,7 +76,6 @@ namespace wreath
         float bufferSeconds_{};     // Written buffer length in seconds
         float readPos_{};           // The read position
         float readPosSeconds_{};    // Read position in seconds
-        float nextReadPos_{};       // Next read position
         float loopStartSeconds_{};  // Start of the loop in seconds
         float loopLengthSeconds_{}; // Length of the loop in seconds
         float readRate_{};         // Speed multiplier

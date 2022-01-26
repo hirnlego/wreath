@@ -214,7 +214,7 @@ namespace wreath
                     switch (nextTriggerMode)
                     {
                         case TriggerMode::GATE:
-                            dryLevel_ = 0.f;
+                            dryLevel = 0.f;
                             resetPosition = false;
                             loopers_[LEFT].SetReadPos(loopers_[LEFT].GetWritePos());
                             loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetWritePos());
@@ -223,14 +223,14 @@ namespace wreath
                             mustRestart = true;
                             break;
                         case TriggerMode::TRIGGER:
-                            dryLevel_ = 1.f;
+                            dryLevel = 1.f;
                             resetPosition = true;
                             loopers_[LEFT].SetLooping(false);
                             loopers_[RIGHT].SetLooping(false);
                             mustStop = true;
                             break;
                         case TriggerMode::LOOP:
-                            dryLevel_ = 1.f;
+                            dryLevel = 1.f;
                             resetPosition = true;
                             loopers_[LEFT].SetLooping(true);
                             loopers_[RIGHT].SetLooping(true);
@@ -255,7 +255,7 @@ namespace wreath
                     bool doneRight{loopers_[RIGHT].Start()};
                     if (doneLeft && doneRight)
                     {
-                        readingActive_ = true;
+                        readingActive = true;
                         mustStart = false;
                     }
                 }
@@ -266,7 +266,7 @@ namespace wreath
                     bool doneRight{loopers_[RIGHT].Stop()};
                     if (doneLeft && doneRight)
                     {
-                        readingActive_ = false;
+                        readingActive = false;
                         mustStop = false;
                     }
                 }
@@ -341,23 +341,6 @@ namespace wreath
                 loopers_[LEFT].UpdateReadPos();
                 loopers_[RIGHT].UpdateReadPos();
 
-                /*
-                // In cross mode swap the two channels, so what's read in the
-                // left buffer is written in the right one and vice-versa.
-                if (IsCrossMode())
-                {
-                    float temp = leftWet;
-                    if (hasChangedLeft_)
-                    {
-                        leftWet = rightWet;
-                    }
-                    if (hasChangedRight_)
-                    {
-                        rightWet = temp;
-                    }
-                }
-                */
-
                 float leftFeedback = leftWet * feedback_;
                 float rightFeedback = rightWet * feedback_;
                 if (filterValue_ >= 20.f)
@@ -378,8 +361,11 @@ namespace wreath
                     }
                 }
 
-                loopers_[LEFT].Write(Mix(leftDry * dryLevel_, leftFeedback));
-                loopers_[RIGHT].Write(Mix(rightDry * dryLevel_, rightFeedback));
+                leftWet = leftWet * stereoImage + rightWet * (1.f - stereoImage);
+                rightWet = rightWet * stereoImage + leftWet * (1.f - stereoImage);
+
+                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
+                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
@@ -586,9 +572,9 @@ namespace wreath
         bool mustStart{};
         bool mustStop{};
         bool mustRestart{};
-
-        float dryLevel_{1.f};
-        bool readingActive_{true};
+        float stereoImage{1.f};
+        float dryLevel{1.f};
+        bool readingActive{true};
     private:
         Looper loopers_[2];
         float gain_{};

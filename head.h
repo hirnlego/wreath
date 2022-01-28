@@ -384,7 +384,7 @@ namespace wreath
         }
 
         inline void SetWriteBalance(float amount) { writeBalance_ = amount; }
-        inline void SetRate(float rate) { rate_ = rate; }
+        inline void SetRate(float rate) { rate_ = std::abs(rate); }
         inline void SetMovement(Movement movement) { movement_ = movement; }
         inline void SetDirection(Direction direction) { direction_ = direction; }
         inline void SetIndex(float index)
@@ -456,10 +456,10 @@ namespace wreath
             if (RunStatus::STARTING == runStatus_)
             {
                 float pos = fadeIndex_ * (1.f / samplesToFade);
-                if (fadeIndex_ < samplesToFade - rate_)
+                if (fadeIndex_ < samplesToFade - 1)
                 {
                     currentValue_ *= pos;
-                    fadeIndex_ += rate_;
+                    fadeIndex_ += 1;
                 }
                 else
                 {
@@ -470,10 +470,10 @@ namespace wreath
             else if (RunStatus::STOPPING == runStatus_)
             {
                 float pos = fadeIndex_ * (1.f / samplesToFade);
-                if (fadeIndex_ < samplesToFade - rate_)
+                if (fadeIndex_ < samplesToFade - 1)
                 {
                     currentValue_ *= 1.0f - pos;
-                    fadeIndex_ += rate_;
+                    fadeIndex_ += 1;
                 }
                 else
                 {
@@ -530,10 +530,10 @@ namespace wreath
             if (RunStatus::STARTING == runStatus_)
             {
                 float pos = fadeIndex_ * (1.f / samplesToFade);
-                if (fadeIndex_ < samplesToFade - rate_)
+                if (fadeIndex_ < samplesToFade - 1)
                 {
                     value = currentValue_ * (1.0f - pos) + (value * pos);
-                    fadeIndex_ += rate_;
+                    fadeIndex_ += 1;
                 }
                 else
                 {
@@ -545,10 +545,10 @@ namespace wreath
             else if (RunStatus::STOPPING == runStatus_)
             {
                 float pos = fadeIndex_ * (1.f / samplesToFade);
-                if (fadeIndex_ < samplesToFade - rate_)
+                if (fadeIndex_ < samplesToFade - 1)
                 {
                     value = value * (1.0f - pos) + (currentValue_ * pos);
-                    fadeIndex_ += rate_;
+                    fadeIndex_ += 1;
                 }
                 else
                 {

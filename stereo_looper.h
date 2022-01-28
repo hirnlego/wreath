@@ -209,6 +209,8 @@ namespace wreath
                 {
                     mustStopBuffering = true;
                 }
+                leftWet = leftDry;
+                rightWet = rightDry;
             }
 
             if (IsRecording() || IsFrozen())
@@ -267,10 +269,19 @@ namespace wreath
 
                 if (mustRestart)
                 {
-                    bool doneLeft{loopers_[LEFT].Restart(resetPosition)};
-                    bool doneRight{loopers_[RIGHT].Restart(resetPosition)};
-                    if (doneLeft && doneRight)
+                    static bool dl{};
+                    static bool dr{};
+                    if (!dl)
                     {
+                        dl = loopers_[LEFT].Restart(resetPosition);
+                    }
+                    if (!dr)
+                    {
+                        dr = loopers_[RIGHT].Restart(resetPosition);
+                    }
+                    if (dl && dr)
+                    {
+                        dl = dr = false;
                         mustRestart = false;
                     }
                 }
@@ -383,9 +394,6 @@ namespace wreath
                     }
                 }
 
-                leftWet = leftWet * stereoImage + rightWet * (1.f - stereoImage);
-                rightWet = rightWet * stereoImage + leftWet * (1.f - stereoImage);
-
                 loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
                 loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
 
@@ -417,9 +425,13 @@ namespace wreath
                 */
             }
 
+
+            float stereoLeft = leftWet * stereoImage + rightWet * (1.f - stereoImage);
+            float stereoRight = rightWet * stereoImage + leftWet * (1.f - stereoImage);
+
             cf_.SetPos(fclamp(mix_, 0.f, 1.f));
-            leftOut = cf_.Process(leftDry, leftWet);
-            rightOut = cf_.Process(rightDry, rightWet);
+            leftOut = cf_.Process(leftDry, stereoLeft);
+            rightOut = cf_.Process(rightDry, stereoRight);
         }
 
         void SetMode(Mode mode)

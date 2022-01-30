@@ -15,7 +15,7 @@ namespace wreath
     constexpr int kMinLoopLengthSamples{48};
     constexpr int kMinLoopLengthForFade{4800};
     constexpr float kMinSamplesForTone{1440}; // 30ms @ 48KHz
-    constexpr int32_t kSamplesToFade{1200};
+    constexpr int32_t kSamplesToFade{600};
 
     enum Type
     {
@@ -400,7 +400,7 @@ namespace wreath
         {
             if (RunStatus::STOPPED == runStatus_)
             {
-                return index_;
+                //return index_;
             }
 
             float index = index_ + (rate_ * direction_);
@@ -437,7 +437,7 @@ namespace wreath
 
         void SwitchAndRamp()
         {
-            snapshotValue_ = ReadAt(index_);
+            snapshotValue_ = currentValue_;//ReadAt(index_);
             switchAndRamp_ = true;
             fadeIndex_ = 0;
         }
@@ -449,16 +449,16 @@ namespace wreath
                 return 0.f;
             }
 
-            currentValue_ = ReadAt(index_);
+            float value = ReadAt(index_);
             int32_t samplesToFade = SamplesToFade();
 
             // Gradually start reading, fading from zero to the buffered value.
             if (RunStatus::STARTING == runStatus_)
             {
-                float pos = fadeIndex_ * (1.f / samplesToFade);
                 if (fadeIndex_ < samplesToFade - 1)
                 {
-                    currentValue_ *= pos;
+                    float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
+                    value *= win;
                     fadeIndex_ += 1;
                 }
                 else
@@ -469,35 +469,44 @@ namespace wreath
             // Gradually stop reading, fading from the buffered value to zero.
             else if (RunStatus::STOPPING == runStatus_)
             {
-                float pos = fadeIndex_ * (1.f / samplesToFade);
                 if (fadeIndex_ < samplesToFade - 1)
                 {
-                    currentValue_ *= 1.0f - pos;
+                    float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
+                    value *= 1.0f - win;
                     fadeIndex_ += 1;
                 }
                 else
                 {
-                    currentValue_ = 0.f;
+                    value = 0.f;
                     runStatus_ = RunStatus::STOPPED;
                 }
             }
-
-            // Apply switch-and-ramp technique to smooth the read value.
-            // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
-            if (switchAndRamp_)
+            else
             {
-                float pos = fadeIndex_ * (1.f / samplesToFade);
-                if (fadeIndex_ < samplesToFade - rate_)
+                if (!switchAndRamp_ && std::abs(currentValue_ - value) > 0.2f)
                 {
-                    float delta = snapshotValue_ - currentValue_;
-                    currentValue_ += delta * (1.0f - pos);
-                    fadeIndex_ += rate_;
+                    //SwitchAndRamp();
                 }
-                else
+
+                // Apply switch-and-ramp technique to smooth the read value.
+                // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
+                if (switchAndRamp_)
                 {
-                    switchAndRamp_ = false;
+                    if (fadeIndex_ < samplesToFade - 1)
+                    {
+                        float delta = snapshotValue_ - value;
+                        float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
+                        value += delta * (1.0f - win);
+                        fadeIndex_ += 1;
+                    }
+                    else
+                    {
+                        switchAndRamp_ = false;
+                    }
                 }
             }
+
+            currentValue_ = value;
 
             return currentValue_;
         }
@@ -529,13 +538,10 @@ namespace wreath
             // signal.
             if (RunStatus::STARTING == runStatus_)
             {
-                float pos = fadeIndex_ * (1.f / samplesToFade);
-                if (fadeIndex_ < samplesToFade - 1)
-                {
-                    value = currentValue_ * (1.0f - pos) + (value * pos);
-                    fadeIndex_ += 1;
-                }
-                else
+                float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
+                value = currentValue_ * (1.0f - win) + value * win;
+                fadeIndex_ += 1;
+                if (fadeIndex_ > samplesToFade)
                 {
                     runStatus_ = RunStatus::RUNNING;
                 }
@@ -544,13 +550,10 @@ namespace wreath
             // value.
             else if (RunStatus::STOPPING == runStatus_)
             {
-                float pos = fadeIndex_ * (1.f / samplesToFade);
-                if (fadeIndex_ < samplesToFade - 1)
-                {
-                    value = value * (1.0f - pos) + (currentValue_ * pos);
-                    fadeIndex_ += 1;
-                }
-                else
+                float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
+                value = value * (1.0f - win) + currentValue_ * win;
+                fadeIndex_ += 1;
+                if (fadeIndex_ > samplesToFade)
                 {
                     runStatus_ = RunStatus::STOPPED;
                 }
@@ -569,12 +572,21 @@ namespace wreath
 
         bool Buffer(float value)
         {
-            buffer_[intIndex_] = value;
-
-            // Handle end of buffer.
-            if (bufferSamples_ > maxBufferSamples_ - 1)
+            if (intIndex_ < maxBufferSamples_ - kSamplesToFade)
             {
-                return true;
+                buffer_[intIndex_] = value;
+            }
+            // Fade out recording until reaching the end of the available buffer.
+            else
+            {
+                // Handle end of buffer.
+                if (intIndex_ > maxBufferSamples_ - 1)
+                {
+                    return true;
+                }
+
+                int32_t d = std::abs(maxBufferSamples_ - intIndex_ - kSamplesToFade);
+                buffer_[intIndex_] = value * (1.f - d / static_cast<float>(kSamplesToFade));
             }
 
             intIndex_++;

@@ -14,7 +14,8 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    //constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    constexpr int kBufferSeconds{1}; // 2:30 minutes max
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -72,6 +73,60 @@ namespace wreath
             Direction direction;
             float rate;
         };
+
+
+        bool mustRestartRead{};
+        bool mustResetLooper{};
+        bool mustClearBuffer{};
+        bool mustStopBuffering{};
+        bool resetPosition{true};
+        bool hasCvRestart{};
+
+        float nextGain{1.f};
+        float nextMix{1.f};
+        float nextFeedback{0.f};
+        float nextFilterValue{};
+
+        bool noteModeLeft{};
+        bool noteModeRight{};
+
+        bool mustSetLeftLoopStart{};
+        int32_t nextLeftLoopStart{};
+        bool mustSetRightLoopStart{};
+        int32_t nextRightLoopStart{};
+
+        bool mustSetLeftDirection{};
+        Direction nextLeftDirection{};
+        bool mustSetRightDirection{};
+        Direction nextRightDirection{};
+
+        bool mustSetLeftLoopLength{};
+        int32_t nextLeftLoopLength{};
+        bool mustSetRightLoopLength{};
+        int32_t nextRightLoopLength{};
+
+        bool mustSetLeftReadRate{};
+        float nextLeftReadRate{};
+        bool mustSetRightReadRate{};
+        float nextRightReadRate{};
+
+        int mustSetChannelWriteRate{NONE};
+        float nextWriteRate{};
+
+        bool mustSetMode{};
+        Mode nextMode{};
+
+        bool mustSetTriggerMode{};
+        TriggerMode nextTriggerMode{};
+
+        bool mustStart{};
+        bool mustStop{};
+        bool mustRestart{};
+        float stereoImage{1.f};
+        float dryLevel{1.f};
+        float filterResonance{0.45f};
+        FilterType filterType{FilterType::BP};
+        bool readingActive{true};
 
         void Reset()
         {
@@ -425,7 +480,6 @@ namespace wreath
                 */
             }
 
-
             float stereoLeft = leftWet * stereoImage + rightWet * (1.f - stereoImage);
             float stereoRight = rightWet * stereoImage + leftWet * (1.f - stereoImage);
 
@@ -453,34 +507,6 @@ namespace wreath
             nextTriggerMode = mode;
             conf_.triggerMode = mode;
         }
-
-        inline int32_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
-        inline float GetBufferSeconds(int channel) { return loopers_[channel].GetBufferSeconds(); }
-        inline float GetLoopStartSeconds(int channel) { return loopers_[channel].GetLoopStartSeconds(); }
-        inline float GetLoopLengthSeconds(int channel) { return loopers_[channel].GetLoopLengthSeconds(); }
-        inline float GetReadPosSeconds(int channel) { return loopers_[channel].GetReadPosSeconds(); }
-        inline int32_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
-        inline int32_t GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
-        inline int32_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
-        inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
-        inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
-        inline float GetReadRate(int channel) { return loopers_[channel].GetReadRate(); }
-        inline Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
-        inline bool IsGoingForward(int channel) { return loopers_[channel].IsGoingForward(); }
-
-        inline bool IsStartingUp() { return State::INIT == state_; }
-        inline bool IsBuffering() { return State::BUFFERING == state_; }
-        inline bool IsRecording() { return State::RECORDING == state_; }
-        inline bool IsFrozen() { return State::FROZEN == state_; }
-        inline bool IsMonoMode() { return Mode::MONO == conf_.mode; }
-        inline bool IsCrossMode() { return Mode::CROSS == conf_.mode; }
-        inline bool IsDualMode() { return Mode::DUAL == conf_.mode; }
-        inline Mode GetMode() { return conf_.mode; }
-        inline TriggerMode GetTriggerMode() { return conf_.triggerMode; }
-        inline float GetGain() { return gain_; }
-        inline float GetMix() { return mix_; }
-        inline float GetFeedBack() { return feedback_; }
-        inline float GetFilter() { return filterValue_; }
 
         void SetMovement(int channel, Movement movement)
         {
@@ -558,58 +584,34 @@ namespace wreath
             }
         }
 
-        bool mustRestartRead{};
-        bool mustResetLooper{};
-        bool mustClearBuffer{};
-        bool mustStopBuffering{};
-        bool resetPosition{true};
-        bool hasCvRestart{};
+        inline int32_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
+        inline float GetBufferSeconds(int channel) { return loopers_[channel].GetBufferSeconds(); }
+        inline float GetLoopStartSeconds(int channel) { return loopers_[channel].GetLoopStartSeconds(); }
+        inline float GetLoopLengthSeconds(int channel) { return loopers_[channel].GetLoopLengthSeconds(); }
+        inline float GetReadPosSeconds(int channel) { return loopers_[channel].GetReadPosSeconds(); }
+        inline int32_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
+        inline int32_t GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
+        inline int32_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
+        inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
+        inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
+        inline float GetReadRate(int channel) { return loopers_[channel].GetReadRate(); }
+        inline Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
+        inline bool IsGoingForward(int channel) { return loopers_[channel].IsGoingForward(); }
 
-        float nextGain{1.f};
-        float nextMix{1.f};
-        float nextFeedback{0.f};
-        float nextFilterValue{};
+        inline bool IsStartingUp() { return State::INIT == state_; }
+        inline bool IsBuffering() { return State::BUFFERING == state_; }
+        inline bool IsRecording() { return State::RECORDING == state_; }
+        inline bool IsFrozen() { return State::FROZEN == state_; }
+        inline bool IsMonoMode() { return Mode::MONO == conf_.mode; }
+        inline bool IsCrossMode() { return Mode::CROSS == conf_.mode; }
+        inline bool IsDualMode() { return Mode::DUAL == conf_.mode; }
+        inline Mode GetMode() { return conf_.mode; }
+        inline TriggerMode GetTriggerMode() { return conf_.triggerMode; }
+        inline float GetGain() { return gain_; }
+        inline float GetMix() { return mix_; }
+        inline float GetFeedBack() { return feedback_; }
+        inline float GetFilter() { return filterValue_; }
 
-        bool noteModeLeft{};
-        bool noteModeRight{};
-
-        bool mustSetLeftLoopStart{};
-        int32_t nextLeftLoopStart{};
-        bool mustSetRightLoopStart{};
-        int32_t nextRightLoopStart{};
-
-        bool mustSetLeftDirection{};
-        Direction nextLeftDirection{};
-        bool mustSetRightDirection{};
-        Direction nextRightDirection{};
-
-        bool mustSetLeftLoopLength{};
-        int32_t nextLeftLoopLength{};
-        bool mustSetRightLoopLength{};
-        int32_t nextRightLoopLength{};
-
-        bool mustSetLeftReadRate{};
-        float nextLeftReadRate{};
-        bool mustSetRightReadRate{};
-        float nextRightReadRate{};
-
-        int mustSetChannelWriteRate{NONE};
-        float nextWriteRate{};
-
-        bool mustSetMode{};
-        Mode nextMode{};
-
-        bool mustSetTriggerMode{};
-        TriggerMode nextTriggerMode{};
-
-        bool mustStart{};
-        bool mustStop{};
-        bool mustRestart{};
-        float stereoImage{1.f};
-        float dryLevel{1.f};
-        float filterResonance{0.45f};
-        FilterType filterType{FilterType::BP};
-        bool readingActive{true};
     private:
         Looper loopers_[2];
         float gain_{};

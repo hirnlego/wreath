@@ -121,6 +121,7 @@ bool Looper::Restart(bool resetPosition)
                 direction_ = heads_[READ].ToggleDirection();
             }
             crossPointFound_ = false;
+            fading_ = false;
         }
 
         Start();
@@ -142,6 +143,7 @@ void Looper::SetLoopStart(int32_t pos)
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
     crossPointFound_ = false;
+    fading_ = false;
 };
 
 void Looper::SetLoopEnd(int32_t pos)
@@ -165,6 +167,7 @@ void Looper::SetLoopLength(int32_t length)
     }
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
+    /*
     // Grown.
     if (length > oldLoopLength)
     {
@@ -175,6 +178,10 @@ void Looper::SetLoopLength(int32_t length)
         crossPoint_ = loopEnd_;
     }
     crossPointFound_ = true;
+    */
+
+    crossPointFound_ = false;
+    fading_ = false;
 }
 
 void Looper::SetReadRate(float rate)
@@ -184,6 +191,7 @@ void Looper::SetReadRate(float rate)
     readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
     crossPointFound_ = false;
+    fading_ = false;
 }
 
 void Looper::SetWriteRate(float rate)
@@ -192,6 +200,7 @@ void Looper::SetWriteRate(float rate)
     writeRate_ = rate;
     writeSpeed_ = sampleRate_ * writeRate_;
     crossPointFound_ = false;
+    fading_ = false;
 }
 
 void Looper::SetMovement(Movement movement)
@@ -317,7 +326,7 @@ void Looper::CalculateCrossPoint()
     }
 
     float deltaTime = headsDistance_ / relSpeed;
-    crossPoint_ = writePos_ + (writeSpeed_ * deltaTime) - 2 * direction_;
+    crossPoint_ = writePos_ + writeSpeed_ * deltaTime;
     // Wrap the crossing point if it's outside of the buffer.
     if (crossPoint_ >= bufferSamples_)
     {
@@ -334,38 +343,58 @@ void Looper::CalculateCrossPoint()
     crossPointFound_ = true;
 }
 
-bool Looper::HandleFade()
+void Looper::HandleFade()
 {
-    if (heads_[READ].IsFading())
+    if (loopLength_ <= heads_[READ].SamplesToFade())
     {
-        //return false;
+        return;
     }
-
-    int32_t intReadPos = heads_[READ].GetIntPosition();
 
     // Handle when reading and writing speeds differ or we're going
     // backwards.
     if (readSpeed_ != writeSpeed_ || !IsGoingForward())
     {
+        // Prevent clicking when the read head loops by fading in the write head.
+        if (heads_[READ].GetIntPosition() == loopStart_ && RunStatus::RUNNING == heads_[WRITE].GetRunStatus())
+        {
+            //heads_[WRITE].SetRunStatus(RunStatus::STARTING);
+        }
+
         CalculateHeadsDistance();
 
         // Calculate the cross point.
-        if (!crossPointFound_ && headsDistance_ <= heads_[READ].SamplesToFade())
+        if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].SamplesToFade() * 2)
         {
             CalculateCrossPoint();
         }
+
+        if (crossPointFound_)
+        {
+            if (!fading_)
+            {
+                int32_t pos = (writeSpeed_ > readSpeed_) ? writePos_ : heads_[READ].GetIntPosition();
+                if (std::abs(crossPoint_ - pos) == heads_[READ].SamplesToFade())
+                {
+                    heads_[WRITE].Stop();
+                    fading_ = true;
+                }
+            }
+
+            if (fading_)
+            {
+                if (RunStatus::STOPPED == heads_[WRITE].GetRunStatus())
+                {
+                    //heads_[WRITE].SetRunStatus(RunStatus::STARTING);
+                    heads_[WRITE].Start();
+                }
+                else if (RunStatus::RUNNING == heads_[WRITE].GetRunStatus())
+                {
+                    crossPointFound_ = false;
+                    fading_ = false;
+                }
+            }
+        }
     }
-
-    // Handle reaching the cross point.
-    if (crossPointFound_ && intReadPos == crossPoint_)
-    {
-        crossPointFound_ = false;
-        heads_[READ].SwitchAndRamp();
-
-        return true;
-    }
-
-    return false;
 }
 
 /**

@@ -27,7 +27,7 @@ namespace wreath
         void Write(float value);
         void UpdateReadPos();
         void UpdateWritePos();
-        bool HandleFade();
+        void HandleFade();
         bool Start();
         bool Stop(bool now);
         bool Restart(bool resetPosition);
@@ -97,6 +97,7 @@ namespace wreath
         int32_t sampleRateSpeed_{};
         bool looping_{};
         bool isRestarting_{};
+        bool fading_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

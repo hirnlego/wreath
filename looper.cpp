@@ -354,12 +354,6 @@ void Looper::HandleFade()
     // backwards.
     if (readSpeed_ != writeSpeed_ || !IsGoingForward())
     {
-        // Prevent clicking when the read head loops by fading in the write head.
-        if (heads_[READ].GetIntPosition() == loopStart_ && RunStatus::RUNNING == heads_[WRITE].GetRunStatus())
-        {
-            //heads_[WRITE].SetRunStatus(RunStatus::STARTING);
-        }
-
         CalculateHeadsDistance();
 
         // Calculate the cross point.
@@ -372,9 +366,22 @@ void Looper::HandleFade()
         {
             if (!fading_)
             {
-                int32_t pos = (writeSpeed_ > readSpeed_) ? writePos_ : heads_[READ].GetIntPosition();
-                if (std::abs(crossPoint_ - pos) == heads_[READ].SamplesToFade())
+                // Calculate the correct point to start the write head's fade,
+                // that is the minimum distance from the cross point of the read
+                // and write heads.
+                // The fade samples and rate are calculated taking into account
+                // the heads' speeds and the direction.
+                int32_t pos = writePos_;
+                int32_t samples = crossPoint_ - pos;
+                if (writeSpeed_ < readSpeed_)
                 {
+                    pos = heads_[READ].GetIntPosition();
+                    samples = Direction::FORWARD == direction_ ? crossPoint_ - pos : pos - crossPoint_;
+                }
+                // If the condition are met, start the fade out of the write head.
+                if (samples > 0 && samples <= heads_[READ].SamplesToFade())
+                {
+                    heads_[WRITE].SetFade(samples, std::max(1.f, readRate_));
                     heads_[WRITE].Stop();
                     fading_ = true;
                 }
@@ -382,12 +389,13 @@ void Looper::HandleFade()
 
             if (fading_)
             {
+                // When the write head stopped we may restart it.
                 if (RunStatus::STOPPED == heads_[WRITE].GetRunStatus())
                 {
-                    //heads_[WRITE].SetRunStatus(RunStatus::STARTING);
                     heads_[WRITE].Start();
                 }
-                else if (RunStatus::RUNNING == heads_[WRITE].GetRunStatus())
+                // Finally, remove any trace of the fade operation.
+                if (RunStatus::RUNNING == heads_[WRITE].GetRunStatus())
                 {
                     crossPointFound_ = false;
                     fading_ = false;

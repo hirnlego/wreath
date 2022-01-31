@@ -15,7 +15,7 @@ namespace wreath
     constexpr int kMinLoopLengthSamples{48};
     constexpr int kMinLoopLengthForFade{4800};
     constexpr float kMinSamplesForTone{1440}; // 30ms @ 48KHz
-    constexpr int32_t kSamplesToFade{600};
+    constexpr int32_t kSamplesToFade{1200};
 
     enum Type
     {
@@ -79,8 +79,12 @@ namespace wreath
         Movement movement_{};
         Direction direction_{};
 
+        float previousValue_{};
         float currentValue_{};
         float writeBalance_{}; // Balance between new and old value when writing
+
+        int32_t samplesToFade_{kSamplesToFade};
+        float fadeRate_{1.f};
 
         Action HandleLoopAction()
         {
@@ -334,6 +338,14 @@ namespace wreath
             }
         }
 
+        float CrossFade(float from, float to, float pos)
+        {
+            float in = std::sin(1.570796326794897 * pos);
+            float out = std::cos(1.570796326794897 * pos);
+
+            return from * out + to * in;
+        }
+
     public:
         Head(Type type) : type_{type} {}
         ~Head() {}
@@ -435,11 +447,18 @@ namespace wreath
             return switchAndRamp_;
         }
 
+        void SetFade(int32_t samples, float rate)
+        {
+            samplesToFade_ = samples;
+            fadeRate_ = rate;
+        }
+
         void SwitchAndRamp()
         {
-            snapshotValue_ = currentValue_;//ReadAt(index_);
+            snapshotValue_ = previousValue_;//ReadAt(index_);
             switchAndRamp_ = true;
             fadeIndex_ = 0;
+            samplesToFade_ = static_cast<int32_t>(std::abs(snapshotValue_ - currentValue_) * 1000);
         }
 
         float Read()
@@ -449,19 +468,16 @@ namespace wreath
                 return 0.f;
             }
 
+            previousValue_ = currentValue_;
             float value = ReadAt(index_);
-            int32_t samplesToFade = SamplesToFade();
+            currentValue_ = value;
 
             // Gradually start reading, fading from zero to the buffered value.
             if (RunStatus::STARTING == runStatus_)
             {
-                if (fadeIndex_ < samplesToFade - 1)
-                {
-                    float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
-                    value *= win;
-                    fadeIndex_ += 1;
-                }
-                else
+                value = CrossFade(0, value, fadeIndex_ * (1.f / samplesToFade_));
+                fadeIndex_ += rate_;
+                if (fadeIndex_ > samplesToFade_)
                 {
                     runStatus_ = RunStatus::RUNNING;
                 }
@@ -469,46 +485,39 @@ namespace wreath
             // Gradually stop reading, fading from the buffered value to zero.
             else if (RunStatus::STOPPING == runStatus_)
             {
-                if (fadeIndex_ < samplesToFade - 1)
+                value = CrossFade(value, 0, fadeIndex_ * (1.f / samplesToFade_));
+                fadeIndex_ += rate_;
+                if (fadeIndex_ > samplesToFade_)
                 {
-                    float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
-                    value *= 1.0f - win;
-                    fadeIndex_ += 1;
-                }
-                else
-                {
-                    value = 0.f;
                     runStatus_ = RunStatus::STOPPED;
                 }
             }
             else
             {
-                if (!switchAndRamp_ && std::abs(currentValue_ - value) > 0.2f)
+                // Apply switch-and-ramp technique to smooth the read value if
+                // the difference from the previous value is more than the
+                // defined threshold.
+                // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
+                if (!switchAndRamp_ && std::abs(previousValue_ - value) > 0.2f)
                 {
-                    //SwitchAndRamp();
+                    SwitchAndRamp();
                 }
 
-                // Apply switch-and-ramp technique to smooth the read value.
-                // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
                 if (switchAndRamp_)
                 {
-                    if (fadeIndex_ < samplesToFade - 1)
-                    {
-                        float delta = snapshotValue_ - value;
-                        float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
-                        value += delta * (1.0f - win);
-                        fadeIndex_ += 1;
-                    }
-                    else
+                    float delta = snapshotValue_ - value;
+                    float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade_));
+                    //win = fadeIndex_ * (1.f / samplesToFade_);
+                    value += delta * (1.0f - win);
+                    fadeIndex_ += rate_;
+                    if (fadeIndex_ > samplesToFade_)
                     {
                         switchAndRamp_ = false;
                     }
                 }
             }
 
-            currentValue_ = value;
-
-            return currentValue_;
+            return value;
         }
 
         float ReadAt(float index)
@@ -532,16 +541,14 @@ namespace wreath
         {
             currentValue_ = ReadAt(index_);
             //value = value * (1.f - writeBalance_) + currentValue_ * writeBalance_;
-            int32_t samplesToFade = SamplesToFade();
 
             // Gradually start writing, fading from the buffered value to the input
             // signal.
             if (RunStatus::STARTING == runStatus_)
             {
-                float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
-                value = currentValue_ * (1.0f - win) + value * win;
-                fadeIndex_ += 1;
-                if (fadeIndex_ > samplesToFade)
+                value = CrossFade(currentValue_, value, fadeIndex_ * (1.f / samplesToFade_));
+                fadeIndex_ += fadeRate_;
+                if (fadeIndex_ > samplesToFade_)
                 {
                     runStatus_ = RunStatus::RUNNING;
                 }
@@ -550,10 +557,9 @@ namespace wreath
             // value.
             else if (RunStatus::STOPPING == runStatus_)
             {
-                float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade));
-                value = value * (1.0f - win) + currentValue_ * win;
-                fadeIndex_ += 1;
-                if (fadeIndex_ > samplesToFade)
+                value = CrossFade(value, currentValue_, fadeIndex_ * (1.f / samplesToFade_));
+                fadeIndex_ += fadeRate_;
+                if (fadeIndex_ > samplesToFade_)
                 {
                     runStatus_ = RunStatus::STOPPED;
                 }

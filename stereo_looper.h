@@ -174,8 +174,8 @@ namespace wreath
             {
                 state_ = State::FROZEN;
             }
-            loopers_[LEFT].SetWriting(value);
-            loopers_[RIGHT].SetWriting(value);
+            //loopers_[LEFT].SetWriting(value);
+            //loopers_[RIGHT].SetWriting(value);
             freeze_ = value;
         }
 
@@ -449,8 +449,11 @@ namespace wreath
                     }
                 }
 
-                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
-                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
+                if (IsRecording())
+                {
+                    loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
+                    loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
+                }
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
@@ -574,13 +577,13 @@ namespace wreath
             {
                 mustSetLeftLoopLength = true;
                 nextLeftLoopLength = length;
-                //noteModeLeft = length == kMinLoopLengthSamples;
+                noteModeLeft = length == kMinSamplesForTone;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 mustSetRightLoopLength = true;
                 nextRightLoopLength = length;
-                //noteModeRight = length == kMinLoopLengthSamples;
+                noteModeRight = length == kMinSamplesForTone;
             }
         }
 

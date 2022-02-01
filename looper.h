@@ -69,7 +69,7 @@ namespace wreath
         inline bool CrossPointFound() { return crossPointFound_; }
 
     private:
-        void CalculateHeadsDistance();
+        int32_t CalculateDistance(int32_t a, int32_t b);
         void CalculateCrossPoint();
 
         float *buffer_{};           // The buffer

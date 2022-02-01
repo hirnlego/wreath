@@ -278,43 +278,57 @@ void Looper::SetWriting(float amount)
     heads_[WRITE].SetWriteBalance(amount);
 }
 
-void Looper::CalculateHeadsDistance()
+int32_t Looper::CalculateDistance(int32_t a, int32_t b)
 {
-    // This is the floor of the float position.
-    int32_t intReadPos = heads_[READ].GetIntPosition();
-
-    // forward, rp > wp, ws > rs = rp - wp
-    // backwards, rp > wp, ws > rs = rp - wp
-    // backwards, rp > wp, rs > ws = rp - wp
-    if (intReadPos > writePos_ && ((IsGoingForward() && writeSpeed_ > readSpeed_) || (!IsGoingForward() && intReadPos > writePos_)))
+    if (a == b)
     {
-        headsDistance_ = intReadPos - writePos_;
+        return 0;
     }
 
-    // forward, rp > wp, rs > ws = b - rp + wp
-    else if (IsGoingForward() && intReadPos > writePos_)
+    // Normal loop
+    if (loopEnd_ > loopStart_)
     {
-        headsDistance_ = bufferSamples_ - intReadPos + writePos_;
+        if (a > b)
+        {
+            if (writeSpeed_ < readSpeed_)
+            {
+                return loopEnd_ - a + b;
+            }
+
+            return a - b;
+        }
+        else if (IsGoingForward())
+        {
+            if (writeSpeed_ < readSpeed_)
+            {
+                return b - a;
+            }
+            return loopEnd_ - b + a;
+        }
+
+        return loopEnd_ - b + a;
     }
 
-    // forward, wp > rp, ws > rs = b - wp + rp
-    // backwards, wp > rp, ws > rs = b - wp + rp
-    // backwards, wp > rp, rs > ws = b - wp + rp
-    else if ((IsGoingForward() && writePos_ > intReadPos && writeSpeed_ > readSpeed_) || (!IsGoingForward() && writePos_ > intReadPos))
+    if (a > b)
     {
-        headsDistance_ = bufferSamples_ - writePos_ + intReadPos;
+        if (writeSpeed_ < readSpeed_)
+        {
+            return (bufferSamples_ - 1) - a + b;
+        }
+
+        return (loopEnd_ - b) + (a - loopStart_);
+    }
+    else if (IsGoingForward())
+    {
+        if (writeSpeed_ < readSpeed_)
+        {
+            return (loopEnd_ - a) + (b - loopStart_);
+        }
+
+        return (bufferSamples_ - 1) - b + a;
     }
 
-    // forward, wp > rp, rs > ws = wp - rp
-    else if (IsGoingForward() && readSpeed_ > writeSpeed_)
-    {
-        headsDistance_ = writePos_ - intReadPos;
-    }
-
-    else
-    {
-        headsDistance_ = 0;
-    }
+    return (bufferSamples_ - 1) - b + a;
 }
 
 void Looper::CalculateCrossPoint()
@@ -363,7 +377,9 @@ void Looper::HandleFade()
     // backwards.
     if (readSpeed_ != writeSpeed_ || !IsGoingForward())
     {
-        CalculateHeadsDistance();
+        int32_t intReadPos = heads_[READ].GetIntPosition();
+
+        headsDistance_ = CalculateDistance(intReadPos, writePos_);
 
         // Calculate the cross point.
         if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].SamplesToFade() * 2)
@@ -384,7 +400,7 @@ void Looper::HandleFade()
                 int32_t samples = crossPoint_ - pos;
                 if (writeSpeed_ < readSpeed_)
                 {
-                    pos = heads_[READ].GetIntPosition();
+                    pos = intReadPos;
                     samples = Direction::FORWARD == direction_ ? crossPoint_ - pos : pos - crossPoint_;
                 }
                 // If the condition are met, start the fade out of the write head.

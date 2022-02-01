@@ -327,8 +327,16 @@ void Looper::CalculateCrossPoint()
 
     float deltaTime = headsDistance_ / relSpeed;
     crossPoint_ = writePos_ + writeSpeed_ * deltaTime;
-    // Wrap the crossing point if it's outside of the buffer.
-    if (crossPoint_ >= bufferSamples_)
+
+    // When the loop end point precedes the start point and the cross point falls
+    // just between them, nudge it forward.
+    if (loopEnd_ < loopStart_ && crossPoint_ > loopEnd_ && crossPoint_ < loopStart_)
+    {
+        crossPoint_ = loopStart_ + (crossPoint_ - loopEnd_);
+    }
+
+    // Wrap the crossing point if it's outside of the loop (or the buffer).
+    if (crossPoint_ > loopEnd_ || crossPoint_ >= bufferSamples_)
     {
         int32_t r = crossPoint_ % loopLength_;
         if (loopStart_ + r > bufferSamples_)
@@ -340,6 +348,7 @@ void Looper::CalculateCrossPoint()
             crossPoint_ = loopStart_ + r;
         }
     }
+
     crossPointFound_ = true;
 }
 
@@ -359,7 +368,7 @@ void Looper::HandleFade()
         // Calculate the cross point.
         if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].SamplesToFade() * 2)
         {
-            //CalculateCrossPoint();
+            CalculateCrossPoint();
         }
 
         if (crossPointFound_)

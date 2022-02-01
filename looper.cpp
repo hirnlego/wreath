@@ -359,7 +359,7 @@ void Looper::HandleFade()
         // Calculate the cross point.
         if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].SamplesToFade() * 2)
         {
-            CalculateCrossPoint();
+            //CalculateCrossPoint();
         }
 
         if (crossPointFound_)

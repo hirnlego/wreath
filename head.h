@@ -514,7 +514,7 @@ namespace wreath
                 // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
                 if (!switchAndRamp_ && std::abs(previousValue_ - value) > 0.2f && loopLength_ > kMinSamplesForTone)
                 {
-                    SwitchAndRamp();
+                    //SwitchAndRamp();
                 }
 
                 if (switchAndRamp_)

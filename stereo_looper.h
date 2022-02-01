@@ -574,13 +574,13 @@ namespace wreath
             {
                 mustSetLeftLoopLength = true;
                 nextLeftLoopLength = length;
-                noteModeLeft = length == kMinLoopLengthSamples;
+                //noteModeLeft = length == kMinLoopLengthSamples;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 mustSetRightLoopLength = true;
                 nextRightLoopLength = length;
-                noteModeRight = length == kMinLoopLengthSamples;
+                //noteModeRight = length == kMinLoopLengthSamples;
             }
         }
 

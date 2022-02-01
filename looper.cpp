@@ -345,7 +345,7 @@ void Looper::CalculateCrossPoint()
 
 void Looper::HandleFade()
 {
-    if (loopLength_ <= heads_[READ].SamplesToFade())
+    if (loopLength_ < kMinSamplesForTone)
     {
         return;
     }

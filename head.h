@@ -378,6 +378,7 @@ namespace wreath
             {
                 ResetPosition();
             }
+            switchAndRamp_ = false;
 
             return loopStart_;
         }
@@ -386,6 +387,7 @@ namespace wreath
         {
             loopLength_ = std::min(std::max(length, static_cast<int32_t>(kMinLoopLengthSamples)), bufferSamples_);
             CalculateLoopEnd();
+            switchAndRamp_ = false;
 
             return loopLength_;
         }
@@ -396,9 +398,21 @@ namespace wreath
         }
 
         inline void SetWriteBalance(float amount) { writeBalance_ = amount; }
-        inline void SetRate(float rate) { rate_ = std::abs(rate); }
-        inline void SetMovement(Movement movement) { movement_ = movement; }
-        inline void SetDirection(Direction direction) { direction_ = direction; }
+        inline void SetRate(float rate)
+        {
+            rate_ = std::abs(rate);
+            switchAndRamp_ = false;
+        }
+        inline void SetMovement(Movement movement)
+        {
+            movement_ = movement;
+            switchAndRamp_ = false;
+        }
+        inline void SetDirection(Direction direction)
+        {
+            direction_ = direction;
+            switchAndRamp_ = false;
+        }
         inline void SetIndex(float index)
         {
             index_ = index;
@@ -458,7 +472,7 @@ namespace wreath
             snapshotValue_ = previousValue_;//ReadAt(index_);
             switchAndRamp_ = true;
             fadeIndex_ = 0;
-            samplesToFade_ = static_cast<int32_t>(std::abs(snapshotValue_ - currentValue_) * 1000);
+            samplesToFade_ = std::min(static_cast<int32_t>(std::abs(snapshotValue_ - currentValue_) * 1000), loopLength_);
         }
 
         float Read()
@@ -498,7 +512,7 @@ namespace wreath
                 // the difference from the previous value is more than the
                 // defined threshold.
                 // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
-                if (!switchAndRamp_ && std::abs(previousValue_ - value) > 0.2f)
+                if (!switchAndRamp_ && std::abs(previousValue_ - value) > 0.2f && loopLength_ > kMinSamplesForTone)
                 {
                     SwitchAndRamp();
                 }

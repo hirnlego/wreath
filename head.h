@@ -16,7 +16,7 @@ namespace wreath
     constexpr int kMinLoopLengthForFade{4800};
     constexpr float kMinSamplesForTone{1440}; // 30ms @ 48KHz
     constexpr int32_t kSamplesToFade{1200};
-    constexpr float kSwitchAndRampThresh{0.02f};
+    constexpr float kSwitchAndRampThresh{0.2f};
 
     enum Type
     {
@@ -475,10 +475,13 @@ namespace wreath
                 // the difference from the previous value is more than the
                 // defined threshold.
                 // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
+
+                /* FIX: this generates artefacts with high frequency signals
                 if (!switchAndRamp_ && std::abs(previousValue_ - value) > kSwitchAndRampThresh && loopLength_ > kMinSamplesForTone)
                 {
                     SwitchAndRamp();
                 }
+                */
 
                 if (switchAndRamp_)
                 {

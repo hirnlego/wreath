@@ -372,7 +372,7 @@ void Looper::CalculateCrossPoint()
 
 void Looper::HandleFade()
 {
-    if (loopLength_ < kMinSamplesForTone || !writingActive_)
+    if (loopLength_ < kMinLoopLengthSamples || !writingActive_)
     {
         return;
     }

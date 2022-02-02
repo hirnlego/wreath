@@ -14,8 +14,8 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    //constexpr int kBufferSeconds{150}; // 2:30 minutes max
-    constexpr int kBufferSeconds{1}; // 2:30 minutes max
+    constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    //constexpr int kBufferSeconds{1}; // 2:30 minutes max
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -574,13 +574,13 @@ namespace wreath
             {
                 mustSetLeftLoopLength = true;
                 nextLeftLoopLength = length;
-                noteModeLeft = length == kMinSamplesForTone;
+                //noteModeLeft = length == kMinSamplesForTone;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 mustSetRightLoopLength = true;
                 nextRightLoopLength = length;
-                noteModeRight = length == kMinSamplesForTone;
+                //noteModeRight = length == kMinSamplesForTone;
             }
         }
 

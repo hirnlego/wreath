@@ -65,11 +65,12 @@ namespace wreath
 
         inline void SetReading(bool active) { readingActive_ = active; }
 
+        inline int32_t GetHeadsDistance() { return headsDistance_; }
         inline int32_t GetCrossPoint() { return crossPoint_; }
         inline bool CrossPointFound() { return crossPointFound_; }
 
     private:
-        int32_t CalculateDistance(int32_t a, int32_t b);
+        int32_t CalculateDistance(int32_t a, int32_t b, float aSpeed, float bSpeed);
         void CalculateCrossPoint();
 
         float *buffer_{};           // The buffer

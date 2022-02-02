@@ -278,7 +278,7 @@ void Looper::SetWriting(float amount)
     heads_[WRITE].SetWriteBalance(amount);
 }
 
-int32_t Looper::CalculateDistance(int32_t a, int32_t b)
+int32_t Looper::CalculateDistance(int32_t a, int32_t b, float aSpeed, float bSpeed)
 {
     if (a == b)
     {
@@ -290,45 +290,30 @@ int32_t Looper::CalculateDistance(int32_t a, int32_t b)
     {
         if (a > b)
         {
-            if (writeSpeed_ < readSpeed_)
-            {
-                return loopEnd_ - a + b;
-            }
-
-            return a - b;
-        }
-        else if (IsGoingForward())
-        {
-            if (writeSpeed_ < readSpeed_)
-            {
-                return b - a;
-            }
-            return loopEnd_ - b + a;
+            return (aSpeed > bSpeed) ? loopEnd_ - a + b : a - b;
         }
 
-        return loopEnd_ - b + a;
+        return (bSpeed > aSpeed) ? loopEnd_ - b + a : b - a;
+    }
+
+    // Broken loop, case where a is in the second segment and b in the first.
+    if (a > loopStart_ && b < loopEnd_)
+    {
+        return (aSpeed > bSpeed) ? (bufferSamples_ - 1) - a + b : (loopEnd_ - b) + (a - loopStart_);
+    }
+
+    // Broken loop, case where b is in the second segment and a in the first.
+    if (b > loopStart_ && a < loopEnd_)
+    {
+        return (bSpeed > aSpeed) ? (bufferSamples_ - 1) - b + a : (loopEnd_ - a) + (b - loopStart_);
     }
 
     if (a > b)
     {
-        if (writeSpeed_ < readSpeed_)
-        {
-            return (bufferSamples_ - 1) - a + b;
-        }
-
-        return (loopEnd_ - b) + (a - loopStart_);
-    }
-    else if (IsGoingForward())
-    {
-        if (writeSpeed_ < readSpeed_)
-        {
-            return (loopEnd_ - a) + (b - loopStart_);
-        }
-
-        return (bufferSamples_ - 1) - b + a;
+        return (aSpeed > bSpeed) ? loopLength_ - (a - b) : a - b;
     }
 
-    return (bufferSamples_ - 1) - b + a;
+    return (bSpeed > aSpeed) ? loopLength_ - (b - a) : b - a;
 }
 
 void Looper::CalculateCrossPoint()
@@ -342,24 +327,43 @@ void Looper::CalculateCrossPoint()
     float deltaTime = headsDistance_ / relSpeed;
     crossPoint_ = writePos_ + writeSpeed_ * deltaTime;
 
-    // When the loop end point precedes the start point and the cross point falls
-    // just between them, nudge it forward.
-    if (loopEnd_ < loopStart_ && crossPoint_ > loopEnd_ && crossPoint_ < loopStart_)
+    // Normal loop
+    if (loopEnd_ > loopStart_)
     {
-        crossPoint_ = loopStart_ + (crossPoint_ - loopEnd_);
-    }
-
-    // Wrap the crossing point if it's outside of the loop (or the buffer).
-    if (crossPoint_ > loopEnd_ || crossPoint_ >= bufferSamples_)
-    {
-        int32_t r = crossPoint_ % loopLength_;
-        if (loopStart_ + r > bufferSamples_)
+        // Wrap the crossing point if it's outside of the loop (or the buffer).
+        if (crossPoint_ > loopEnd_ || crossPoint_ >= bufferSamples_)
         {
-            crossPoint_ = r - (bufferSamples_ - loopStart_);
+            int32_t r = crossPoint_ % loopLength_;
+            if (loopStart_ + r > bufferSamples_)
+            {
+                crossPoint_ = r - (bufferSamples_ - loopStart_);
+            }
+            else
+            {
+                crossPoint_ = loopStart_ + r;
+            }
         }
-        else
+    }
+    else
+    {
+        // Wrap the crossing point if it's outside of the buffer.
+        if (crossPoint_ >= bufferSamples_)
         {
-            crossPoint_ = loopStart_ + r;
+            int32_t r = crossPoint_ % loopLength_;
+            if (loopStart_ + r > bufferSamples_)
+            {
+                crossPoint_ = r - (bufferSamples_ - loopStart_);
+            }
+            else
+            {
+                crossPoint_ = loopStart_ + r;
+            }
+        }
+        // If the cross point falls just between the loop's start and end point,
+        // nudge it forward.
+        if (crossPoint_ > loopEnd_ && crossPoint_ < loopStart_)
+        {
+            crossPoint_ = loopStart_ + (crossPoint_ - loopEnd_);
         }
     }
 
@@ -368,7 +372,7 @@ void Looper::CalculateCrossPoint()
 
 void Looper::HandleFade()
 {
-    if (loopLength_ < kMinSamplesForTone)
+    if (loopLength_ < kMinSamplesForTone || !writingActive_)
     {
         return;
     }
@@ -379,7 +383,7 @@ void Looper::HandleFade()
     {
         int32_t intReadPos = heads_[READ].GetIntPosition();
 
-        headsDistance_ = CalculateDistance(intReadPos, writePos_);
+        headsDistance_ = CalculateDistance(intReadPos, writePos_, readSpeed_, writeSpeed_);
 
         // Calculate the cross point.
         if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].SamplesToFade() * 2)
@@ -396,13 +400,7 @@ void Looper::HandleFade()
                 // and write heads.
                 // The fade samples and rate are calculated taking into account
                 // the heads' speeds and the direction.
-                int32_t pos = writePos_;
-                int32_t samples = crossPoint_ - pos;
-                if (writeSpeed_ < readSpeed_)
-                {
-                    pos = intReadPos;
-                    samples = Direction::FORWARD == direction_ ? crossPoint_ - pos : pos - crossPoint_;
-                }
+                int32_t samples = (writeSpeed_ < readSpeed_) ? CalculateDistance(intReadPos, crossPoint_, readSpeed_, 0) : CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0);
                 // If the condition are met, start the fade out of the write head.
                 if (samples > 0 && samples <= heads_[READ].SamplesToFade())
                 {

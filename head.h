@@ -16,6 +16,7 @@ namespace wreath
     constexpr int kMinLoopLengthForFade{4800};
     constexpr float kMinSamplesForTone{1440}; // 30ms @ 48KHz
     constexpr int32_t kSamplesToFade{1200};
+    constexpr float kSwitchAndRampThresh{0.02f};
 
     enum Type
     {
@@ -94,6 +95,14 @@ namespace wreath
                 // Forward direction.
                 if (Direction::FORWARD == direction_)
                 {
+                    // This prevents "dragging" the index while changing the
+                    // loop's start point.
+                    if (intIndex_ < loopStart_)
+                    {
+                        SetIndex(loopStart_);
+
+                        return Action::LOOP;
+                    }
                     if (looping_ && intIndex_ > loopEnd_)
                     {
                         if (Movement::PENDULUM == movement_ && looping_)
@@ -118,6 +127,14 @@ namespace wreath
                 }
                 // Backwards direction.
                 else {
+                    // This prevents "dragging" the index while changing the
+                    // loop's start point.
+                    if (intIndex_ > loopEnd_)
+                    {
+                        SetIndex(loopEnd_);
+
+                        return Action::LOOP;
+                    }
                     if (looping_ && intIndex_ < loopStart_)
                     {
                         if (Movement::PENDULUM == movement_ && looping_)
@@ -272,60 +289,6 @@ namespace wreath
             return index;
         }
 
-        /*
-        int32_t FindMinValPos(float pos)
-        {
-            float min{};
-            int32_t intIndex = static_cast<int32_t>(std::floor(pos));
-            int32_t minPos{intIndex};
-            float value{buffer_[intIndex]};
-            for (int i = 0; i < 10; i++)
-            {
-                intIndex = WrapIndex(intIndex + i * direction_);
-                float val = buffer_[intIndex];
-                if (std::abs(value - val) < min)
-                {
-                    min = val;
-                    minPos = intIndex;
-                }
-            }
-
-            return minPos;
-        }
-
-        int32_t ZeroCrossingPos(float pos)
-        {
-            bool sign1, sign2;
-            int32_t currentPos = static_cast<int32_t>(std::floor(pos));
-            int32_t pos1{};
-            int32_t pos2{};
-            for (int32_t i = 0; i < 10; i++)
-            {
-                pos1 = WrapIndex(currentPos - i);
-                sign1 = buffer_[pos1] > 0;
-                pos2 = WrapIndex(currentPos - i - 1);
-                sign2 = buffer_[pos2] > 0;
-
-                if (sign1 != sign2)
-                {
-                    return pos1;
-                }
-
-                pos1 = WrapIndex(currentPos + i);
-                sign1 = buffer_[pos1] > 0;
-                pos2 = WrapIndex(currentPos + i + 1);
-                sign2 = buffer_[pos2] > 0;
-
-                if (sign1 != sign2)
-                {
-                    return pos1;
-                }
-            }
-
-            return currentPos;
-        }
-        */
-
         void CalculateLoopEnd()
         {
             if (loopStart_ + loopLength_ > bufferSamples_)
@@ -469,7 +432,7 @@ namespace wreath
 
         void SwitchAndRamp()
         {
-            snapshotValue_ = previousValue_;//ReadAt(index_);
+            snapshotValue_ = previousValue_;
             switchAndRamp_ = true;
             fadeIndex_ = 0;
             samplesToFade_ = std::min(static_cast<int32_t>(std::abs(snapshotValue_ - currentValue_) * 1000), loopLength_);
@@ -512,7 +475,7 @@ namespace wreath
                 // the difference from the previous value is more than the
                 // defined threshold.
                 // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
-                if (!switchAndRamp_ && std::abs(previousValue_ - value) > 0.2f && loopLength_ > kMinSamplesForTone)
+                if (!switchAndRamp_ && std::abs(previousValue_ - value) > kSwitchAndRampThresh && loopLength_ > kMinSamplesForTone)
                 {
                     SwitchAndRamp();
                 }

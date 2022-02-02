@@ -14,8 +14,8 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150}; // 2:30 minutes max
-    //constexpr int kBufferSeconds{1}; // 2:30 minutes max
+    //constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    constexpr int kBufferSeconds{1}; // 2:30 minutes max
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -174,8 +174,8 @@ namespace wreath
             {
                 state_ = State::FROZEN;
             }
-            //loopers_[LEFT].SetWriting(value);
-            //loopers_[RIGHT].SetWriting(value);
+            loopers_[LEFT].SetWriting(value);
+            loopers_[RIGHT].SetWriting(value);
             freeze_ = value;
         }
 
@@ -388,12 +388,12 @@ namespace wreath
                 if (mustSetLeftLoopStart)
                 {
                     loopers_[LEFT].SetLoopStart(nextLeftLoopStart);
-                    mustSetLeftLoopLength = false;
+                    mustSetLeftLoopStart = false;
                 }
                 if (mustSetRightLoopStart)
                 {
                     loopers_[RIGHT].SetLoopStart(nextRightLoopStart);
-                    mustSetRightLoopLength = false;
+                    mustSetRightLoopStart = false;
                 }
 
                 if (mustSetLeftReadRate)
@@ -449,11 +449,8 @@ namespace wreath
                     }
                 }
 
-                if (IsRecording())
-                {
-                    loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
-                    loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
-                }
+                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
+                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
@@ -600,6 +597,8 @@ namespace wreath
         inline float GetReadRate(int channel) { return loopers_[channel].GetReadRate(); }
         inline Movement GetMovement(int channel) { return loopers_[channel].GetMovement(); }
         inline bool IsGoingForward(int channel) { return loopers_[channel].IsGoingForward(); }
+        inline int32_t GetCrossPoint(int channel) { return loopers_[channel].GetCrossPoint(); }
+        inline int32_t GetHeadsDistance(int channel) { return loopers_[channel].GetHeadsDistance(); }
 
         inline bool IsStartingUp() { return State::INIT == state_; }
         inline bool IsBuffering() { return State::BUFFERING == state_; }

@@ -442,6 +442,7 @@ namespace wreath
         {
             switchAndRamp_ = true;
             switchAndRampPos_ = start;
+            fadeIndex_ = 0;
         }
 
         void SwitchAndRamp()
@@ -467,7 +468,7 @@ namespace wreath
             // Gradually start reading, fading from zero to the buffered value.
             if (RunStatus::STARTING == runStatus_)
             {
-                float v = switchAndRamp_ ? ReadAt(switchAndRampPos_ + fadeIndex_ * direction_) : 0;
+                float v = switchAndRamp_ ? ReadAt(switchAndRampPos_ + fadeIndex_) : 0;
                 value = CrossFade(v, value, fadeIndex_ * (1.f / samplesToFade_));
                 if (fadeIndex_ >= samplesToFade_)
                 {

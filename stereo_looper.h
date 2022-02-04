@@ -14,8 +14,8 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    //constexpr int kBufferSeconds{150}; // 2:30 minutes max
-    constexpr int kBufferSeconds{1}; // 2:30 minutes max
+    constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    //constexpr int kBufferSeconds{1}; // 2:30 minutes max
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
     //constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
     constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
@@ -437,14 +437,8 @@ namespace wreath
                 }
                 */
 
-                loopers_[LEFT].HandleFade();
-                loopers_[RIGHT].HandleFade();
-
                 leftWet = loopers_[LEFT].Read();
                 rightWet = loopers_[RIGHT].Read();
-
-                loopers_[LEFT].UpdateReadPos();
-                loopers_[RIGHT].UpdateReadPos();
 
                 float leftFeedback = leftWet * feedback_;
                 float rightFeedback = rightWet * feedback_;
@@ -465,8 +459,14 @@ namespace wreath
                 loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
                 loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
 
+                loopers_[LEFT].UpdateReadPos();
+                loopers_[RIGHT].UpdateReadPos();
+
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
+
+                loopers_[LEFT].HandleFade();
+                loopers_[RIGHT].HandleFade();
 
                 /*
                 if (!hasCvRestart)

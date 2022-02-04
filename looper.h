@@ -31,9 +31,9 @@ namespace wreath
         bool Start();
         bool Stop(bool now);
         bool Restart(bool resetPosition);
-        void SetLoopStart(float pos);
+        void SetLoopStart(float start);
         int32_t GetRandomPosition();
-        void SetLoopEnd(int32_t pos);
+        void SetLoopEnd(float end);
         void SetDirection(Direction direction);
         void ToggleDirection();
         void SetWriting(float amount);
@@ -89,17 +89,22 @@ namespace wreath
         float loopEnd_{};          // Loop end position
         float loopLength_{};       // Length of the loop in samples
         int32_t intLoopLength_{};
+        int32_t intLoopStart_{};        // Loop start position
+        int32_t intLoopEnd_{};          // Loop end position
         int32_t headsDistance_{};
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};
-        int32_t crossPoint_{};
-        bool crossPointFound_{};
         bool readingActive_{true};
         bool writingActive_{true};
         int32_t sampleRateSpeed_{};
         bool looping_{};
         bool isRestarting_{};
-        bool fading_{};
+        bool crossPointFade_{};
+        int32_t crossPoint_{};
+        bool crossPointFound_{};
+        float readFadePos_{};
+        bool mustFadeStart_{};
+        bool mustFadeEnd_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

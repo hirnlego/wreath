@@ -17,6 +17,8 @@ namespace wreath
     //constexpr int kBufferSeconds{150}; // 2:30 minutes max
     constexpr int kBufferSeconds{1}; // 2:30 minutes max
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
+    //constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
+    constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightBuffer_[kBufferSamples];
@@ -90,9 +92,7 @@ namespace wreath
         bool noteModeLeft{};
         bool noteModeRight{};
 
-        bool mustSetLeftLoopStart{};
-        float nextLeftLoopStart{};
-        float mustSetRightLoopStart{};
+        int32_t nextLeftLoopStart{};
         int32_t nextRightLoopStart{};
 
         bool mustSetLeftDirection{};
@@ -100,14 +100,10 @@ namespace wreath
         bool mustSetRightDirection{};
         Direction nextRightDirection{};
 
-        bool mustSetLeftLoopLength{};
-        float nextLeftLoopLength{};
-        bool mustSetRightLoopLength{};
-        float nextRightLoopLength{};
+        int32_t nextLeftLoopLength{};
+        int32_t nextRightLoopLength{};
 
-        bool mustSetLeftReadRate{};
         float nextLeftReadRate{};
-        bool mustSetRightReadRate{};
         float nextRightReadRate{};
 
         int mustSetChannelWriteRate{NONE};
@@ -224,6 +220,10 @@ namespace wreath
                 loopers_[RIGHT].StopBuffering();
                 nextLeftLoopLength = loopers_[LEFT].GetLoopLength();
                 nextRightLoopLength = loopers_[RIGHT].GetLoopLength();
+                nextLeftLoopStart = loopers_[LEFT].GetLoopStart();
+                nextRightLoopStart = loopers_[RIGHT].GetLoopStart();
+                nextLeftReadRate = 1.f;
+                nextRightReadRate = 1.f;
                 state_ = State::RECORDING;
             }
 
@@ -240,10 +240,10 @@ namespace wreath
             }
 
             // Update parameters.
-            fonepole(feedback_, nextFeedback, 0.01f);
-            fonepole(gain_, nextGain, 0.01f);
-            fonepole(mix_, nextMix, 0.01f);
-            fonepole(filterValue_, nextFilterValue, 0.01f);
+            fonepole(feedback_, nextFeedback, kParamSlewCoeff);
+            fonepole(gain_, nextGain, kParamSlewCoeff);
+            fonepole(mix_, nextMix, kParamSlewCoeff);
+            fonepole(filterValue_, nextFilterValue, kParamSlewCoeff);
             feedbackFilter_.SetFreq(filterValue_);
             feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
             feedbackFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
@@ -377,41 +377,48 @@ namespace wreath
                 }
 
                 float leftLoopLength = loopers_[LEFT].GetLoopLength();
-                if (nextLeftLoopLength != leftLoopLength)
+                if (leftLoopLength != nextLeftLoopLength)
                 {
-                    fonepole(leftLoopLength, nextLeftLoopLength, 0.0002f);
+                    fonepole(leftLoopLength, nextLeftLoopLength, kParamSlewCoeff);
                     loopers_[LEFT].SetLoopLength(leftLoopLength);
                 }
 
                 float rightLoopLength = loopers_[RIGHT].GetLoopLength();
-                if (nextRightLoopLength != rightLoopLength)
+                if (rightLoopLength != nextRightLoopLength)
                 {
-                    fonepole(rightLoopLength, nextRightLoopLength, 0.0002f);
+                    fonepole(rightLoopLength, nextRightLoopLength, kParamSlewCoeff);
                     loopers_[RIGHT].SetLoopLength(rightLoopLength);
                 }
 
-                if (mustSetLeftLoopStart)
+                float leftLoopStart = loopers_[LEFT].GetLoopStart();
+                if (leftLoopStart != nextLeftLoopStart)
                 {
-                    loopers_[LEFT].SetLoopStart(nextLeftLoopStart);
-                    mustSetLeftLoopStart = false;
-                }
-                if (mustSetRightLoopStart)
-                {
-                    loopers_[RIGHT].SetLoopStart(nextRightLoopStart);
-                    mustSetRightLoopStart = false;
+                    fonepole(leftLoopStart, nextLeftLoopStart, kParamSlewCoeff);
+                    loopers_[LEFT].SetLoopStart(leftLoopStart);
                 }
 
-                if (mustSetLeftReadRate)
+                float rightLoopStart = loopers_[RIGHT].GetLoopStart();
+                if (rightLoopStart != nextRightLoopStart)
                 {
-                    loopers_[LEFT].SetReadRate(nextLeftReadRate);
-                    mustSetLeftReadRate = false;
-                }
-                if (mustSetRightReadRate)
-                {
-                    loopers_[RIGHT].SetReadRate(nextRightReadRate);
-                    mustSetRightReadRate = false;
+                    fonepole(rightLoopStart, nextRightLoopStart, kParamSlewCoeff);
+                    loopers_[RIGHT].SetLoopStart(rightLoopStart);
                 }
 
+                float leftReadRate = loopers_[LEFT].GetReadRate();
+                if (leftReadRate != nextLeftReadRate)
+                {
+                    fonepole(leftReadRate, nextLeftReadRate, kParamSlewCoeff);
+                    loopers_[LEFT].SetReadRate(leftReadRate);
+                }
+
+                float rightReadRate = loopers_[RIGHT].GetReadRate();
+                if (rightReadRate != nextRightReadRate)
+                {
+                    fonepole(rightReadRate, nextRightReadRate, kParamSlewCoeff);
+                    loopers_[RIGHT].SetReadRate(rightReadRate);
+                }
+
+                /*
                 switch (mustSetChannelWriteRate)
                 {
                 case BOTH:
@@ -428,6 +435,7 @@ namespace wreath
                 default:
                     break;
                 }
+                */
 
                 loopers_[LEFT].HandleFade();
                 loopers_[RIGHT].HandleFade();
@@ -545,12 +553,10 @@ namespace wreath
             if (LEFT == channel || BOTH == channel)
             {
                 nextLeftLoopStart = std::min(std::max(value, 0.f), loopers_[LEFT].GetBufferSamples() - 1.f);
-                mustSetLeftLoopStart = true;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 nextRightLoopStart = std::min(std::max(value, 0.f), loopers_[RIGHT].GetBufferSamples() - 1.f);
-                mustSetRightLoopStart = true;
             }
         }
         void SetReadRate(int channel, float rate)
@@ -559,12 +565,10 @@ namespace wreath
             {
                 //conf_.rate = rate;
                 nextLeftReadRate = rate;
-                mustSetLeftReadRate = true;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 //conf_.rate = rate;
-                mustSetRightReadRate = true;
                 nextRightReadRate = rate;
             }
         }
@@ -577,14 +581,12 @@ namespace wreath
         {
             if (LEFT == channel || BOTH == channel)
             {
-                mustSetLeftLoopLength = true;
-                nextLeftLoopLength = std::min(std::max(length, 0.f), static_cast<float>(loopers_[LEFT].GetBufferSamples()));
+                nextLeftLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[LEFT].GetBufferSamples()));
                 //noteModeLeft = length == kMinSamplesForTone;
             }
             if (RIGHT == channel || BOTH == channel)
             {
-                mustSetRightLoopLength = true;
-                nextRightLoopLength = std::min(std::max(length, 0.f), static_cast<float>(loopers_[RIGHT].GetBufferSamples()));
+                nextRightLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[RIGHT].GetBufferSamples()));
                 //noteModeRight = length == kMinSamplesForTone;
             }
         }

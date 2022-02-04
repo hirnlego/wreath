@@ -14,8 +14,8 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150}; // 2:30 minutes max
-    //constexpr int kBufferSeconds{1}; // 2:30 minutes max
+    //constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    constexpr int kBufferSeconds{1}; // 2:30 minutes max
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -91,8 +91,8 @@ namespace wreath
         bool noteModeRight{};
 
         bool mustSetLeftLoopStart{};
-        int32_t nextLeftLoopStart{};
-        bool mustSetRightLoopStart{};
+        float nextLeftLoopStart{};
+        float mustSetRightLoopStart{};
         int32_t nextRightLoopStart{};
 
         bool mustSetLeftDirection{};
@@ -101,9 +101,9 @@ namespace wreath
         Direction nextRightDirection{};
 
         bool mustSetLeftLoopLength{};
-        int32_t nextLeftLoopLength{};
+        float nextLeftLoopLength{};
         bool mustSetRightLoopLength{};
-        int32_t nextRightLoopLength{};
+        float nextRightLoopLength{};
 
         bool mustSetLeftReadRate{};
         float nextLeftReadRate{};
@@ -222,6 +222,8 @@ namespace wreath
                 mustStopBuffering = false;
                 loopers_[LEFT].StopBuffering();
                 loopers_[RIGHT].StopBuffering();
+                nextLeftLoopLength = loopers_[LEFT].GetLoopLength();
+                nextRightLoopLength = loopers_[RIGHT].GetLoopLength();
                 state_ = State::RECORDING;
             }
 
@@ -374,15 +376,18 @@ namespace wreath
                     mustSetRightDirection = false;
                 }
 
-                if (mustSetLeftLoopLength)
+                float leftLoopLength = loopers_[LEFT].GetLoopLength();
+                if (nextLeftLoopLength != leftLoopLength)
                 {
-                    loopers_[LEFT].SetLoopLength(nextLeftLoopLength);
-                    mustSetLeftLoopLength = false;
+                    fonepole(leftLoopLength, nextLeftLoopLength, 0.0002f);
+                    loopers_[LEFT].SetLoopLength(leftLoopLength);
                 }
-                if (mustSetRightLoopLength)
+
+                float rightLoopLength = loopers_[RIGHT].GetLoopLength();
+                if (nextRightLoopLength != rightLoopLength)
                 {
-                    loopers_[RIGHT].SetLoopLength(nextRightLoopLength);
-                    mustSetRightLoopLength = false;
+                    fonepole(rightLoopLength, nextRightLoopLength, 0.0002f);
+                    loopers_[RIGHT].SetLoopLength(rightLoopLength);
                 }
 
                 if (mustSetLeftLoopStart)
@@ -535,16 +540,16 @@ namespace wreath
                 mustSetRightDirection = true;
             }
         }
-        void SetLoopStart(int channel, int32_t value)
+        void SetLoopStart(int channel, float value)
         {
             if (LEFT == channel || BOTH == channel)
             {
-                nextLeftLoopStart = value;
+                nextLeftLoopStart = std::min(std::max(value, 0.f), loopers_[LEFT].GetBufferSamples() - 1.f);
                 mustSetLeftLoopStart = true;
             }
             if (RIGHT == channel || BOTH == channel)
             {
-                nextRightLoopStart = value;
+                nextRightLoopStart = std::min(std::max(value, 0.f), loopers_[RIGHT].GetBufferSamples() - 1.f);
                 mustSetRightLoopStart = true;
             }
         }
@@ -568,18 +573,18 @@ namespace wreath
             mustSetChannelWriteRate = channel;
             nextWriteRate = rate;
         }
-        void SetLoopLength(int channel, int32_t length)
+        void SetLoopLength(int channel, float length)
         {
             if (LEFT == channel || BOTH == channel)
             {
                 mustSetLeftLoopLength = true;
-                nextLeftLoopLength = length;
+                nextLeftLoopLength = std::min(std::max(length, 0.f), static_cast<float>(loopers_[LEFT].GetBufferSamples()));
                 //noteModeLeft = length == kMinSamplesForTone;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 mustSetRightLoopLength = true;
-                nextRightLoopLength = length;
+                nextRightLoopLength = std::min(std::max(length, 0.f), static_cast<float>(loopers_[RIGHT].GetBufferSamples()));
                 //noteModeRight = length == kMinSamplesForTone;
             }
         }
@@ -589,9 +594,9 @@ namespace wreath
         inline float GetLoopStartSeconds(int channel) { return loopers_[channel].GetLoopStartSeconds(); }
         inline float GetLoopLengthSeconds(int channel) { return loopers_[channel].GetLoopLengthSeconds(); }
         inline float GetReadPosSeconds(int channel) { return loopers_[channel].GetReadPosSeconds(); }
-        inline int32_t GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
-        inline int32_t GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
-        inline int32_t GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
+        inline float GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
+        inline float GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
+        inline float  GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
         inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
         inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
         inline float GetReadRate(int channel) { return loopers_[channel].GetReadRate(); }

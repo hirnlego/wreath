@@ -136,10 +136,10 @@ bool Looper::Restart(bool resetPosition)
     return false;
 }
 
-void Looper::SetLoopStart(int32_t pos)
+void Looper::SetLoopStart(float start)
 {
-    loopStart_ = heads_[READ].SetLoopStart(pos);
-    heads_[WRITE].SetLoopStart(pos);
+    loopStart_ = heads_[READ].SetLoopStart(start);
+    heads_[WRITE].SetLoopStart(start);
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
     crossPointFound_ = false;
@@ -151,34 +151,21 @@ void Looper::SetLoopEnd(int32_t pos)
     loopEnd_ = pos;
 }
 
-void Looper::SetLoopLength(int32_t length)
+void Looper::SetLoopLength(float length)
 {
     if (length == loopLength_)
     {
         return;
     }
 
-    int32_t oldLoopEnd = loopEnd_;
-    int32_t oldLoopLength = loopLength_;
     loopLength_ = heads_[READ].SetLoopLength(length);
+    intLoopLength_ = loopLength_;
     if (looping_)
     {
         heads_[WRITE].SetLoopLength(length);
     }
     loopLengthSeconds_ = loopLength_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
-    /*
-    // Grown.
-    if (length > oldLoopLength)
-    {
-        crossPoint_ = oldLoopEnd;
-    }
-    else
-    {
-        crossPoint_ = loopEnd_;
-    }
-    crossPointFound_ = true;
-    */
 
     crossPointFound_ = false;
     fading_ = false;
@@ -333,7 +320,7 @@ void Looper::CalculateCrossPoint()
         // Wrap the crossing point if it's outside of the loop (or the buffer).
         if (crossPoint_ > loopEnd_ || crossPoint_ >= bufferSamples_)
         {
-            int32_t r = crossPoint_ % loopLength_;
+            int32_t r = crossPoint_ % intLoopLength_;
             if (loopStart_ + r > bufferSamples_)
             {
                 crossPoint_ = r - (bufferSamples_ - loopStart_);
@@ -349,7 +336,7 @@ void Looper::CalculateCrossPoint()
         // Wrap the crossing point if it's outside of the buffer.
         if (crossPoint_ >= bufferSamples_)
         {
-            int32_t r = crossPoint_ % loopLength_;
+            int32_t r = crossPoint_ % intLoopLength_;
             if (loopStart_ + r > bufferSamples_)
             {
                 crossPoint_ = r - (bufferSamples_ - loopStart_);
@@ -435,7 +422,7 @@ void Looper::HandleFade()
  */
 int32_t Looper::GetRandomPosition()
 {
-    int32_t pos{loopStart_ + rand() % (loopLength_ - 1)};
+    int32_t pos{loopStart_ + rand() % (intLoopLength_ - 1)};
     if (IsGoingForward() && pos > loopEnd_)
     {
         pos = loopEnd_;

@@ -17,7 +17,7 @@ namespace wreath
         void StopBuffering();
         void SetReadRate(float rate);
         void SetWriteRate(float rate);
-        void SetLoopLength(int32_t length);
+        void SetLoopLength(float length);
         void SetMovement(Movement movement);
         void SetLooping(bool looping);
         bool Buffer(float value);
@@ -31,7 +31,7 @@ namespace wreath
         bool Start();
         bool Stop(bool now);
         bool Restart(bool resetPosition);
-        void SetLoopStart(int32_t pos);
+        void SetLoopStart(float pos);
         int32_t GetRandomPosition();
         void SetLoopEnd(int32_t pos);
         void SetDirection(Direction direction);
@@ -41,12 +41,12 @@ namespace wreath
         inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }
 
-        inline int32_t GetLoopStart() { return loopStart_; }
+        inline float GetLoopStart() { return loopStart_; }
         inline float GetLoopStartSeconds() { return loopStartSeconds_; }
 
-        inline int32_t GetLoopEnd() { return loopEnd_; }
+        inline float GetLoopEnd() { return loopEnd_; }
 
-        inline int32_t GetLoopLength() { return loopLength_; }
+        inline float GetLoopLength() { return loopLength_; }
         inline float GetLoopLengthSeconds() { return loopLengthSeconds_; }
 
         inline float GetReadPos() { return readPos_; }
@@ -85,9 +85,10 @@ namespace wreath
         float writeSpeed_{};        // Actual write speed
         int32_t bufferSamples_{};    // The written buffer length in samples
         int32_t writePos_{};         // The write position
-        int32_t loopStart_{};        // Loop start position
-        int32_t loopEnd_{};          // Loop end position
-        int32_t loopLength_{};       // Length of the loop in samples
+        float loopStart_{};        // Loop start position
+        float loopEnd_{};          // Loop end position
+        float loopLength_{};       // Length of the loop in samples
+        int32_t intLoopLength_{};
         int32_t headsDistance_{};
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};

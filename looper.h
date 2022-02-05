@@ -23,12 +23,12 @@ namespace wreath
         bool Buffer(float value);
         void SetReadPos(float position);
         void SetWritePos(float position);
-        float Read();
+        float Read(float input);
         void Write(float value);
         void UpdateReadPos();
         void UpdateWritePos();
         void HandleFade();
-        bool Start();
+        bool Start(bool now);
         bool Stop(bool now);
         bool Restart(bool resetPosition);
         void SetLoopStart(float start);

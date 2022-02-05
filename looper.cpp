@@ -67,8 +67,15 @@ void Looper::StopBuffering()
     loopLengthSeconds_ = loopLength_ / sampleRate_;
 }
 
-bool Looper::Start()
+bool Looper::Start(bool now)
 {
+    if (now)
+    {
+        heads_[READ].SetRunStatus(RunStatus::RUNNING);
+
+        return true;
+    }
+
     RunStatus status = heads_[READ].GetRunStatus();
     if (RunStatus::RUNNING != status && RunStatus::STARTING != status)
     {
@@ -126,7 +133,7 @@ bool Looper::Restart(bool resetPosition)
             crossPointFade_ = false;
         }
 
-        Start();
+        Start(false);
     }
     else if (RunStatus::RUNNING == status)
     {
@@ -247,9 +254,9 @@ void Looper::SetLooping(bool looping)
     looping_ = looping;
 }
 
-float Looper::Read()
+float Looper::Read(float input)
 {
-    return heads_[READ].Read();
+    return heads_[READ].Read(input);
 }
 
 void Looper::Write(float value)

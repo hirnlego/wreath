@@ -14,8 +14,8 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    constexpr int kBufferSeconds{150}; // 2:30 minutes max
-    //constexpr int kBufferSeconds{1}; // 2:30 minutes max
+    //constexpr int kBufferSeconds{150}; // 2:30 minutes max
+    constexpr int kBufferSeconds{2}; // 2:30 minutes max
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
     //constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
     constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
@@ -119,7 +119,6 @@ namespace wreath
         float dryLevel{1.f};
         float filterResonance{0.45f};
         FilterType filterType{FilterType::BP};
-        bool readingActive{true};
 
         void Reset()
         {
@@ -305,10 +304,8 @@ namespace wreath
             UpdateParameters();
 
             // Input gain stage.
-            float leftDry{leftIn * gain_};
-            float rightDry{rightIn * gain_};
-            leftDry = (leftDry > 0) ? 1 - expf(-leftDry) : -1 + expf(leftDry);
-            rightDry = (rightDry > 0) ? 1 - expf(-rightDry) : -1 + expf(rightDry);
+            float leftDry = SoftClip(leftIn * gain_);
+            float rightDry = SoftClip(rightIn * gain_);
 
             // Fill up the buffer for the first time.
             if (IsBuffering())
@@ -323,6 +320,9 @@ namespace wreath
                 leftWet = leftDry;
                 rightWet = rightDry;
             }
+
+            leftDry *= dryLevel;
+            rightDry *= dryLevel;
 
             if (IsRecording() || IsFrozen())
             {
@@ -378,11 +378,10 @@ namespace wreath
 
                 if (mustStart)
                 {
-                    bool doneLeft{loopers_[LEFT].Start()};
-                    bool doneRight{loopers_[RIGHT].Start()};
+                    bool doneLeft{loopers_[LEFT].Start(false)};
+                    bool doneRight{loopers_[RIGHT].Start(false)};
                     if (doneLeft && doneRight)
                     {
-                        readingActive = true;
                         mustStart = false;
                     }
                 }
@@ -393,16 +392,15 @@ namespace wreath
                     bool doneRight{loopers_[RIGHT].Stop(false)};
                     if (doneLeft && doneRight)
                     {
-                        readingActive = false;
                         mustStop = false;
                     }
                 }
 
-                leftWet = loopers_[LEFT].Read();
-                rightWet = loopers_[RIGHT].Read();
+                leftWet = loopers_[LEFT].Read(leftDry);
+                rightWet = loopers_[RIGHT].Read(rightDry);
 
-                float leftFeedback = leftWet * feedback_;
-                float rightFeedback = rightWet * feedback_;
+                float leftFeedback = (leftWet * feedback_);
+                float rightFeedback = (rightWet * feedback_);
                 if (filterValue_ >= 20.f)
                 {
                     if (freeze_ > 0.f)
@@ -417,8 +415,8 @@ namespace wreath
                     }
                 }
 
-                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
-                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
+                loopers_[LEFT].Write(leftDry + leftFeedback);
+                loopers_[RIGHT].Write(rightDry + rightFeedback);
 
                 loopers_[LEFT].UpdateReadPos();
                 loopers_[RIGHT].UpdateReadPos();
@@ -587,7 +585,7 @@ namespace wreath
 
         float Mix(float a, float b)
         {
-            return SoftLimit(a * 0.5f + b * 0.5f);
+            return SoftLimit(a + b);
             //return a + b - ((a * b) / 2.f);
             //return (1 / std::sqrt(2)) * (a + b);
         }

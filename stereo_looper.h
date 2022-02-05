@@ -76,7 +76,6 @@ namespace wreath
             float rate;
         };
 
-
         bool mustRestartRead{};
         bool mustResetLooper{};
         bool mustClearBuffer{};
@@ -95,9 +94,7 @@ namespace wreath
         int32_t nextLeftLoopStart{};
         int32_t nextRightLoopStart{};
 
-        bool mustSetLeftDirection{};
         Direction nextLeftDirection{};
-        bool mustSetRightDirection{};
         Direction nextRightDirection{};
 
         int32_t nextLeftLoopLength{};
@@ -180,14 +177,80 @@ namespace wreath
             filter->Process(value);
             switch (filterType)
             {
-                case FilterType::BP:
-                    return filter->Band();
-                case FilterType::HP:
-                    return filter->High();
-                case FilterType::LP:
-                    return filter->Low();
-                default:
-                    return filter->Band();
+            case FilterType::BP:
+                return filter->Band();
+            case FilterType::HP:
+                return filter->High();
+            case FilterType::LP:
+                return filter->Low();
+            default:
+                return filter->Band();
+            }
+        }
+
+        void UpdateParameters()
+        {
+            fonepole(feedback_, nextFeedback, kParamSlewCoeff);
+            fonepole(gain_, nextGain, kParamSlewCoeff);
+            fonepole(mix_, nextMix, kParamSlewCoeff);
+            fonepole(filterValue_, nextFilterValue, kParamSlewCoeff);
+            feedbackFilter_.SetFreq(filterValue_);
+            feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
+            feedbackFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
+            outputFilter_.SetFreq(filterValue_);
+            outputFilter_.SetDrive(filterValue_ * 0.0001f);
+            outputFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
+
+            if (nextLeftDirection != loopers_[LEFT].GetDirection())
+            {
+                loopers_[LEFT].SetDirection(nextLeftDirection);
+            }
+
+            if (nextRightDirection != loopers_[RIGHT].GetDirection())
+            {
+                loopers_[RIGHT].SetDirection(nextRightDirection);
+            }
+
+            float leftLoopLength = loopers_[LEFT].GetLoopLength();
+            if (leftLoopLength != nextLeftLoopLength)
+            {
+                fonepole(leftLoopLength, nextLeftLoopLength, kParamSlewCoeff);
+                loopers_[LEFT].SetLoopLength(leftLoopLength);
+            }
+
+            float rightLoopLength = loopers_[RIGHT].GetLoopLength();
+            if (rightLoopLength != nextRightLoopLength)
+            {
+                fonepole(rightLoopLength, nextRightLoopLength, kParamSlewCoeff);
+                loopers_[RIGHT].SetLoopLength(rightLoopLength);
+            }
+
+            float leftLoopStart = loopers_[LEFT].GetLoopStart();
+            if (leftLoopStart != nextLeftLoopStart)
+            {
+                fonepole(leftLoopStart, nextLeftLoopStart, kParamSlewCoeff);
+                loopers_[LEFT].SetLoopStart(leftLoopStart);
+            }
+
+            float rightLoopStart = loopers_[RIGHT].GetLoopStart();
+            if (rightLoopStart != nextRightLoopStart)
+            {
+                fonepole(rightLoopStart, nextRightLoopStart, kParamSlewCoeff);
+                loopers_[RIGHT].SetLoopStart(rightLoopStart);
+            }
+
+            float leftReadRate = loopers_[LEFT].GetReadRate();
+            if (leftReadRate != nextLeftReadRate)
+            {
+                fonepole(leftReadRate, nextLeftReadRate, kParamSlewCoeff);
+                loopers_[LEFT].SetReadRate(leftReadRate);
+            }
+
+            float rightReadRate = loopers_[RIGHT].GetReadRate();
+            if (rightReadRate != nextRightReadRate)
+            {
+                fonepole(rightReadRate, nextRightReadRate, kParamSlewCoeff);
+                loopers_[RIGHT].SetReadRate(rightReadRate);
             }
         }
 
@@ -195,6 +258,18 @@ namespace wreath
         {
             float leftWet{};
             float rightWet{};
+
+            // Wait a few samples to avoid potential clicking on module's startup.
+            if (IsStartingUp())
+            {
+                static int32_t fadeIndex{0};
+                if (fadeIndex > sampleRate_)
+                {
+                    fadeIndex = 0;
+                    state_ = State::BUFFERING;
+                }
+                fadeIndex++;
+            }
 
             if (mustClearBuffer)
             {
@@ -227,29 +302,7 @@ namespace wreath
                 state_ = State::RECORDING;
             }
 
-            // Wait a few samples to avoid potential clicking on module's startup.
-            if (IsStartingUp())
-            {
-                static int32_t fadeIndex{0};
-                if (fadeIndex > sampleRate_)
-                {
-                    fadeIndex = 0;
-                    state_ = State::BUFFERING;
-                }
-                fadeIndex++;
-            }
-
-            // Update parameters.
-            fonepole(feedback_, nextFeedback, kParamSlewCoeff);
-            fonepole(gain_, nextGain, kParamSlewCoeff);
-            fonepole(mix_, nextMix, kParamSlewCoeff);
-            fonepole(filterValue_, nextFilterValue, kParamSlewCoeff);
-            feedbackFilter_.SetFreq(filterValue_);
-            feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
-            feedbackFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
-            outputFilter_.SetFreq(filterValue_);
-            outputFilter_.SetDrive(filterValue_ * 0.0001f);
-            outputFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
+            UpdateParameters();
 
             // Input gain stage.
             float leftDry{leftIn * gain_};
@@ -266,61 +319,41 @@ namespace wreath
                 {
                     mustStopBuffering = true;
                 }
+                // Pass the audio through.
                 leftWet = leftDry;
                 rightWet = rightDry;
             }
 
             if (IsRecording() || IsFrozen())
             {
-                /*
-                if (mustRestartRead)
-                {
-                    mustRestartRead = false;
-                }
-                */
-
-                if (mustSetMode)
-                {
-                    mustSetMode = false;
-                    /*
-                    loopers_[RIGHT].SetMovement(loopers_[LEFT].GetMovement());
-                    loopers_[RIGHT].SetDirection(loopers_[LEFT].GetDirection());
-                    loopers_[RIGHT].SetReadRate(loopers_[LEFT].GetReadRate());
-                    loopers_[RIGHT].SetWriteRate(loopers_[LEFT].GetWriteRate());
-                    loopers_[RIGHT].SetLoopLength(loopers_[LEFT].GetLoopLength());
-                    loopers_[RIGHT].SetLoopStart(loopers_[LEFT].GetLoopStart());
-                    loopers_[RIGHT].SetReadPos(loopers_[LEFT].GetReadPos());
-                    */
-                }
-
                 if (mustSetTriggerMode)
                 {
                     mustSetTriggerMode = false;
                     switch (nextTriggerMode)
                     {
-                        case TriggerMode::GATE:
-                            dryLevel = 0.f;
-                            resetPosition = false;
-                            loopers_[LEFT].SetReadPos(loopers_[LEFT].GetWritePos());
-                            loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetWritePos());
-                            loopers_[LEFT].SetLooping(true);
-                            loopers_[RIGHT].SetLooping(true);
-                            mustRestart = true;
-                            break;
-                        case TriggerMode::TRIGGER:
-                            dryLevel = 1.f;
-                            resetPosition = true;
-                            loopers_[LEFT].SetLooping(false);
-                            loopers_[RIGHT].SetLooping(false);
-                            mustStop = true;
-                            break;
-                        case TriggerMode::LOOP:
-                            dryLevel = 1.f;
-                            resetPosition = true;
-                            loopers_[LEFT].SetLooping(true);
-                            loopers_[RIGHT].SetLooping(true);
-                            mustStart = true;
-                            break;
+                    case TriggerMode::GATE:
+                        dryLevel = 0.f;
+                        resetPosition = false;
+                        loopers_[LEFT].SetReadPos(loopers_[LEFT].GetWritePos());
+                        loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetWritePos());
+                        loopers_[LEFT].SetLooping(true);
+                        loopers_[RIGHT].SetLooping(true);
+                        mustRestart = true;
+                        break;
+                    case TriggerMode::TRIGGER:
+                        dryLevel = 1.f;
+                        resetPosition = true;
+                        loopers_[LEFT].SetLooping(false);
+                        loopers_[RIGHT].SetLooping(false);
+                        mustStop = true;
+                        break;
+                    case TriggerMode::LOOP:
+                        dryLevel = 1.f;
+                        resetPosition = true;
+                        loopers_[LEFT].SetLooping(true);
+                        loopers_[RIGHT].SetLooping(true);
+                        mustStart = true;
+                        break;
                     }
                 }
 
@@ -364,78 +397,6 @@ namespace wreath
                         mustStop = false;
                     }
                 }
-
-                if (mustSetLeftDirection)
-                {
-                    loopers_[LEFT].SetDirection(nextLeftDirection);
-                    mustSetLeftDirection = false;
-                }
-                if (mustSetRightDirection)
-                {
-                    loopers_[RIGHT].SetDirection(nextRightDirection);
-                    mustSetRightDirection = false;
-                }
-
-                float leftLoopLength = loopers_[LEFT].GetLoopLength();
-                if (leftLoopLength != nextLeftLoopLength)
-                {
-                    fonepole(leftLoopLength, nextLeftLoopLength, kParamSlewCoeff);
-                    loopers_[LEFT].SetLoopLength(leftLoopLength);
-                }
-
-                float rightLoopLength = loopers_[RIGHT].GetLoopLength();
-                if (rightLoopLength != nextRightLoopLength)
-                {
-                    fonepole(rightLoopLength, nextRightLoopLength, kParamSlewCoeff);
-                    loopers_[RIGHT].SetLoopLength(rightLoopLength);
-                }
-
-                float leftLoopStart = loopers_[LEFT].GetLoopStart();
-                if (leftLoopStart != nextLeftLoopStart)
-                {
-                    fonepole(leftLoopStart, nextLeftLoopStart, kParamSlewCoeff);
-                    loopers_[LEFT].SetLoopStart(leftLoopStart);
-                }
-
-                float rightLoopStart = loopers_[RIGHT].GetLoopStart();
-                if (rightLoopStart != nextRightLoopStart)
-                {
-                    fonepole(rightLoopStart, nextRightLoopStart, kParamSlewCoeff);
-                    loopers_[RIGHT].SetLoopStart(rightLoopStart);
-                }
-
-                float leftReadRate = loopers_[LEFT].GetReadRate();
-                if (leftReadRate != nextLeftReadRate)
-                {
-                    fonepole(leftReadRate, nextLeftReadRate, kParamSlewCoeff);
-                    loopers_[LEFT].SetReadRate(leftReadRate);
-                }
-
-                float rightReadRate = loopers_[RIGHT].GetReadRate();
-                if (rightReadRate != nextRightReadRate)
-                {
-                    fonepole(rightReadRate, nextRightReadRate, kParamSlewCoeff);
-                    loopers_[RIGHT].SetReadRate(rightReadRate);
-                }
-
-                /*
-                switch (mustSetChannelWriteRate)
-                {
-                case BOTH:
-                    loopers_[LEFT].SetWriteRate(nextWriteRate);
-                    loopers_[RIGHT].SetWriteRate(nextWriteRate);
-                    mustSetChannelWriteRate = NONE;
-                    break;
-                case LEFT:
-                case RIGHT:
-                    loopers_[mustSetChannelWriteRate].SetWriteRate(nextWriteRate);
-                    mustSetChannelWriteRate = NONE;
-                    break;
-
-                default:
-                    break;
-                }
-                */
 
                 leftWet = loopers_[LEFT].Read();
                 rightWet = loopers_[RIGHT].Read();
@@ -501,19 +462,6 @@ namespace wreath
             rightOut = cf_.Process(rightDry, stereoRight);
         }
 
-        void SetMode(Mode mode)
-        {
-            // When switching from dual mode to any mono mode, align the RIGHT
-            // looper to the LEFT one.
-            if (IsDualMode() && Mode::DUAL != mode)
-            {
-                mustSetMode = true;
-                nextMode = mode;
-            }
-
-            conf_.mode = mode;
-        }
-
         void SetTriggerMode(TriggerMode mode)
         {
             mustSetTriggerMode = true;
@@ -529,7 +477,8 @@ namespace wreath
                 loopers_[RIGHT].SetMovement(movement);
                 conf_.movement = movement;
             }
-            else{
+            else
+            {
                 loopers_[channel].SetMovement(movement);
             }
         }
@@ -539,13 +488,11 @@ namespace wreath
             {
                 //conf_.direction = direction;
                 nextLeftDirection = direction;
-                mustSetLeftDirection = true;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 //conf_.direction = direction;
                 nextRightDirection = direction;
-                mustSetRightDirection = true;
             }
         }
         void SetLoopStart(int channel, float value)
@@ -582,12 +529,12 @@ namespace wreath
             if (LEFT == channel || BOTH == channel)
             {
                 nextLeftLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[LEFT].GetBufferSamples()));
-                //noteModeLeft = length == kMinSamplesForTone;
+                noteModeLeft = length == kMinSamplesForTone;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 nextRightLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[RIGHT].GetBufferSamples()));
-                //noteModeRight = length == kMinSamplesForTone;
+                noteModeRight = length == kMinSamplesForTone;
             }
         }
 
@@ -598,7 +545,7 @@ namespace wreath
         inline float GetReadPosSeconds(int channel) { return loopers_[channel].GetReadPosSeconds(); }
         inline float GetLoopStart(int channel) { return loopers_[channel].GetLoopStart(); }
         inline float GetLoopEnd(int channel) { return loopers_[channel].GetLoopEnd(); }
-        inline float  GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
+        inline float GetLoopLength(int channel) { return loopers_[channel].GetLoopLength(); }
         inline float GetReadPos(int channel) { return loopers_[channel].GetReadPos(); }
         inline float GetWritePos(int channel) { return loopers_[channel].GetWritePos(); }
         inline float GetReadRate(int channel) { return loopers_[channel].GetReadRate(); }
@@ -616,6 +563,7 @@ namespace wreath
         inline bool IsDualMode() { return Mode::DUAL == conf_.mode; }
         inline Mode GetMode() { return conf_.mode; }
         inline TriggerMode GetTriggerMode() { return conf_.triggerMode; }
+        inline bool IsGateMode() { return TriggerMode::GATE == conf_.triggerMode; }
         inline float GetGain() { return gain_; }
         inline float GetMix() { return mix_; }
         inline float GetFeedBack() { return feedback_; }
@@ -639,7 +587,7 @@ namespace wreath
 
         float Mix(float a, float b)
         {
-            return SoftLimit(a + b);
+            return SoftLimit(a * 0.5f + b * 0.5f);
             //return a + b - ((a * b) / 2.f);
             //return (1 / std::sqrt(2)) * (a + b);
         }

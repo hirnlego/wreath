@@ -125,7 +125,7 @@ namespace wreath
                     }
                     // When the head is not looping, and while it's not already
                     // stopping, stop it and allow for a fade out.
-                    else if (RunStatus::STOPPING != runStatus_ && !looping_ && intIndex_ > intLoopEnd_ - SamplesToFade())
+                    else if (RunStatus::RUNNING == runStatus_ && !looping_ && intIndex_ > intLoopEnd_ - SamplesToFade())
                     {
                         return Action::STOP;
                     }

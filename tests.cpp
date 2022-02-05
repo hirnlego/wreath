@@ -121,7 +121,7 @@ void TestBoundaries()
         float index = scenario.index;
         looper.SetReadPos(index);
         std::cout << "Current index: " << index << "\n";
-        looper.UpdateReadPos();
+        looper.UpdatePos();
         index = looper.GetReadPos();
         std::cout << "Next index (float): " << index << " (expected " << scenario.result << ")\n";
         int32_t intIndex = static_cast<int32_t>(std::floor(index));

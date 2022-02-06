@@ -527,12 +527,12 @@ namespace wreath
             if (LEFT == channel || BOTH == channel)
             {
                 nextLeftLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[LEFT].GetBufferSamples()));
-                noteModeLeft = length == kMinSamplesForTone;
+                noteModeLeft = length <= kMinSamplesForTone;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 nextRightLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[RIGHT].GetBufferSamples()));
-                noteModeRight = length == kMinSamplesForTone;
+                noteModeRight = length <= kMinSamplesForTone;
             }
         }
 

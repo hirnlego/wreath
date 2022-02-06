@@ -396,6 +396,7 @@ void Looper::HandleFade()
     int32_t intReadPos = heads_[READ].GetIntPosition();
     int32_t intFadePos = readFadePos_;
 
+    /*
     // Grow
     if (mustFadeStart_ && intReadPos == intFadePos)
     {
@@ -411,6 +412,7 @@ void Looper::HandleFade()
         heads_[READ].SetSwitchAndRamp(loopEnd_ + 1);
         heads_[READ].Start();
     }
+    */
 
     if (loopLength_ < kMinLoopLengthSamples || !writingActive_)
     {

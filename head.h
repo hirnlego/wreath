@@ -547,6 +547,12 @@ namespace wreath
             currentValue_ = ReadAt(index_);
             //value = value * (1.f - writeBalance_) + currentValue_ * writeBalance_;
 
+            if (loopLength_ < bufferSamples_ && index_ == loopEnd_ - samplesToFade_)
+            {
+                float i = samplesToFade_ - (loopEnd_ - index_);
+                input = CrossFade(input, currentValue_, i * (1.f / samplesToFade_));
+            }
+
             // Gradually start writing, fading from the buffered value to the input
             // signal.
             if (RunStatus::STARTING == runStatus_)

@@ -60,6 +60,9 @@ namespace wreath
         const Type type_;
         float *buffer_;
 
+        float *fadeBuffer_;
+        int32_t fadeBufferIndex_{};
+
         int32_t maxBufferSamples_{}; // The whole buffer length in samples
         int32_t bufferSamples_{};    // The written buffer length in samples
 
@@ -445,6 +448,22 @@ namespace wreath
             fadeIndex_ = 0;
         }
 
+        float fadePos_{};
+        bool copyFadeBuffer_{};
+        void CopyFadeBuffer(float pos)
+        {
+            fadePos_ = pos;
+            copyFadeBuffer_ = true;
+            fadeBufferIndex_ = 0;
+        }
+        bool pasteFadeBuffer_{};
+        void PasteFadeBuffer(float pos)
+        {
+            fadePos_ = pos;
+            pasteFadeBuffer_ = true;
+            fadeBufferIndex_ = 0;
+        }
+
         void SwitchAndRamp()
         {
             snapshotValue_ = previousValue_;
@@ -464,6 +483,18 @@ namespace wreath
             previousValue_ = currentValue_;
             float value = ReadAt(index_);
             currentValue_ = value;
+
+            // Copy some samples in the buffer used for fading.
+            if (copyFadeBuffer_)
+            {
+                float samplesToFade = kSamplesToFade;
+                fadeBuffer_[fadeBufferIndex_] = ReadAt(fadePos_ + fadeBufferIndex_);
+                if (fadeBufferIndex_ == samplesToFade - 1)
+                {
+                    copyFadeBuffer_ = false;
+                }
+                fadeBufferIndex_++;
+            }
 
             // Gradually start reading, fading from the input signal to the
             // buffered value.
@@ -485,10 +516,26 @@ namespace wreath
             // input signal.
             else if (RunStatus::STOPPING == runStatus_)
             {
-                value = CrossFade(value, valueToFade, fadeIndex_ * (1.f / samplesToFade_));
+                /*
+                if (switchAndRamp_)
+                {
+                    // Read from the fade buffer.
+                    value = CrossFade(value, fadeBuffer_[static_cast<int32_t>(fadeIndex_)], fadeIndex_ * (1.f / samplesToFade_));
+                }
+                else
+                {
+                    value = CrossFade(value, valueToFade, fadeIndex_ * (1.f / samplesToFade_));
+                }
+                */
+
                 if (fadeIndex_ >= samplesToFade_)
                 {
                     runStatus_ = RunStatus::STOPPED;
+                    if (switchAndRamp_)
+                    {
+                        switchAndRamp_ = false;
+                        runStatus_ = RunStatus::RUNNING;
+                    }
                 }
                 fadeIndex_ += rate_;
             }
@@ -506,7 +553,7 @@ namespace wreath
                     //SwitchAndRamp();
                 }
                 */
-/*
+
                 if (switchAndRamp_)
                 {
                     float delta = snapshotValue_ - value;
@@ -519,7 +566,6 @@ namespace wreath
                     }
                     fadeIndex_ += rate_;
                 }
-                */
             }
 
             return value;
@@ -547,10 +593,18 @@ namespace wreath
             currentValue_ = ReadAt(index_);
             //value = value * (1.f - writeBalance_) + currentValue_ * writeBalance_;
 
-            if (loopLength_ < bufferSamples_ && index_ == loopEnd_ - samplesToFade_)
+            // Crossfade the samples of the fade buffer.
+            if (pasteFadeBuffer_)
             {
-                float i = samplesToFade_ - (loopEnd_ - index_);
-                input = CrossFade(input, currentValue_, i * (1.f / samplesToFade_));
+                float samplesToFade = kSamplesToFade;
+                float value = ReadAt(fadePos_ + fadeBufferIndex_);
+                int32_t pos = fadePos_ + fadeBufferIndex_;
+                buffer_[pos] = CrossFade(value, fadeBuffer_[fadeBufferIndex_], fadeBufferIndex_ * (1.f / samplesToFade));
+                if (fadeBufferIndex_ == samplesToFade - 1)
+                {
+                    pasteFadeBuffer_ = false;
+                }
+                fadeBufferIndex_++;
             }
 
             // Gradually start writing, fading from the buffered value to the input
@@ -578,7 +632,7 @@ namespace wreath
 
             if (RunStatus::STOPPED != runStatus_)
             {
-                buffer_[WrapIndex(intIndex_)] = input;
+                buffer_[intIndex_] = input;
             }
         }
 

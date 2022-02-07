@@ -102,9 +102,14 @@ namespace wreath
         bool crossPointFade_{};
         int32_t crossPoint_{};
         bool crossPointFound_{};
-        float readFadePos_{};
-        bool mustFadeStart_{};
-        bool mustFadeEnd_{};
+        float fadeBufferPos_{};
+        bool mustPasteFadeBuffer_{};
+        bool mustCopyFadeBuffer_{};
+
+        float fadePos_{};
+        bool mustPaste_{};
+
+        float fadeBuffer[static_cast<int32_t>(kSamplesToFade)]{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

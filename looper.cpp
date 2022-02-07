@@ -173,9 +173,6 @@ void Looper::SetLoopLength(float length)
         return;
     }
 
-    float currentLength = loopLength_;
-    float currentEnd = loopEnd_;
-
     loopLength_ = heads_[READ].SetLoopLength(length);
     intLoopLength_ = loopLength_;
     if (looping_)
@@ -185,20 +182,17 @@ void Looper::SetLoopLength(float length)
     loopLengthSeconds_ = loopLength_ / sampleRate_;
     loopEnd_ = heads_[READ].GetLoopEnd();
 
-    // When the length grows, save the current loop end (before the change) as
-    // the point in which the fade from the values at the start at the loop
-    // must begin.
-    if (loopLength_ > currentLength)
+    if (loopLength_ > kSamplesToFade)
     {
-        readFadePos_ = currentEnd + 1;
-        mustFadeStart_ = true;
-    }
-    // When the length shrinks, set the fade from the values at the end of the
-    // loop to start when the loop starts.
-    else
-    {
-        readFadePos_ = loopEnd_;
-        mustFadeEnd_ = true;
+        if (mustPaste_)
+        {
+            heads_[WRITE].PasteFadeBuffer(fadePos_);
+            mustPaste_ = false;
+        }
+
+        fadePos_ = loopEnd_ - kSamplesToFade + 1;
+        heads_[READ].CopyFadeBuffer(fadePos_);
+        mustPaste_ = true;
     }
 
     crossPointFound_ = false;
@@ -394,25 +388,21 @@ void Looper::CalculateCrossPoint()
 void Looper::HandleFade()
 {
     int32_t intReadPos = heads_[READ].GetIntPosition();
-    int32_t intFadePos = readFadePos_;
+    int32_t intFadePos = fadeBufferPos_;
 
-    /*
-    // Grow
-    if (mustFadeStart_ && intReadPos == intFadePos)
+
+    if (mustCopyFadeBuffer_)
     {
-        mustFadeStart_ = false;
-        heads_[READ].SetSwitchAndRamp(loopStart_);
-        heads_[READ].Start();
+        mustCopyFadeBuffer_ = false;
+        //heads_[WRITE].CopyFadeBuffer(fadeBufferPos_);
     }
-    // Shrink
-    else if (mustFadeEnd_ && intReadPos == loopStart_ && loopEnd_ < bufferSamples_ - 1)
+    // When the loop grows:
+    // 1) crossfade the copied buffer starting from where it was copied from.
+    else if (mustPasteFadeBuffer_)
     {
-        mustFadeEnd_ = false;
-        heads_[READ].SetFade(std::min(kSamplesToFade, (bufferSamples_ - 1) - loopEnd_), readRate_);
-        heads_[READ].SetSwitchAndRamp(loopEnd_ + 1);
-        heads_[READ].Start();
+        mustPasteFadeBuffer_ = false;
+        //heads_[WRITE].PasteFadeBuffer(fadeBufferPos_);
     }
-    */
 
     if (loopLength_ < kMinLoopLengthSamples || !writingActive_)
     {

@@ -15,10 +15,10 @@ namespace wreath
 
     constexpr int32_t kSampleRate{48000};
     //constexpr int kBufferSeconds{150}; // 2:30 minutes max
-    constexpr int kBufferSeconds{2}; // 2:30 minutes max
+    constexpr int kBufferSeconds{1};
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
     //constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
-    constexpr float kParamSlewCoeff{0.002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
+    constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightBuffer_[kBufferSamples];
@@ -83,10 +83,11 @@ namespace wreath
         bool resetPosition{true};
         bool hasCvRestart{};
 
-        float nextGain{1.f};
-        float nextMix{1.f};
-        float nextFeedback{0.f};
-        float nextFilterValue{};
+        float gain{1.f};
+        float mix{0.5f};
+        float feedback{0.f};
+        float filterValue{0.f};
+        float rateSlew{1.f}; // No slew
 
         bool noteModeLeft{};
         bool noteModeRight{};
@@ -141,9 +142,9 @@ namespace wreath
             state_ = State::INIT;
             cf_.Init(CROSSFADE_CPOW);
             feedbackFilter_.Init(sampleRate_);
-            feedbackFilter_.SetFreq(filterValue_);
+            feedbackFilter_.SetFreq(filterValue);
             outputFilter_.Init(sampleRate_);
-            outputFilter_.SetFreq(filterValue_);
+            outputFilter_.SetFreq(filterValue);
 
             // Process configuration and reset the looper.
             conf_ = conf;
@@ -189,16 +190,12 @@ namespace wreath
 
         void UpdateParameters()
         {
-            fonepole(feedback_, nextFeedback, kParamSlewCoeff);
-            fonepole(gain_, nextGain, kParamSlewCoeff);
-            fonepole(mix_, nextMix, kParamSlewCoeff);
-            fonepole(filterValue_, nextFilterValue, kParamSlewCoeff);
-            feedbackFilter_.SetFreq(filterValue_);
-            feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
-            feedbackFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
-            outputFilter_.SetFreq(filterValue_);
-            outputFilter_.SetDrive(filterValue_ * 0.0001f);
-            outputFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
+            feedbackFilter_.SetFreq(filterValue);
+            feedbackFilter_.SetDrive(filterValue * 0.0001f);
+            feedbackFilter_.SetRes(filterResonance + filterValue * 0.0005f);
+            outputFilter_.SetFreq(filterValue);
+            outputFilter_.SetDrive(filterValue * 0.0001f);
+            outputFilter_.SetRes(filterResonance + filterValue * 0.0005f);
 
             if (nextLeftDirection != loopers_[LEFT].GetDirection())
             {
@@ -241,14 +238,14 @@ namespace wreath
             float leftReadRate = loopers_[LEFT].GetReadRate();
             if (leftReadRate != nextLeftReadRate)
             {
-                fonepole(leftReadRate, nextLeftReadRate, kParamSlewCoeff);
+                fonepole(leftReadRate, nextLeftReadRate, rateSlew);
                 loopers_[LEFT].SetReadRate(leftReadRate);
             }
 
             float rightReadRate = loopers_[RIGHT].GetReadRate();
             if (rightReadRate != nextRightReadRate)
             {
-                fonepole(rightReadRate, nextRightReadRate, kParamSlewCoeff);
+                fonepole(rightReadRate, nextRightReadRate, rateSlew);
                 loopers_[RIGHT].SetReadRate(rightReadRate);
             }
         }
@@ -304,8 +301,8 @@ namespace wreath
             UpdateParameters();
 
             // Input gain stage.
-            float leftDry = SoftClip(leftIn * gain_);
-            float rightDry = SoftClip(rightIn * gain_);
+            float leftDry = SoftClip(leftIn * gain);
+            float rightDry = SoftClip(rightIn * gain);
 
             // Fill up the buffer for the first time.
             if (IsBuffering())
@@ -399,9 +396,9 @@ namespace wreath
                 leftWet = loopers_[LEFT].Read(leftDry);
                 rightWet = loopers_[RIGHT].Read(rightDry);
 
-                float leftFeedback = (leftWet * feedback_);
-                float rightFeedback = (rightWet * feedback_);
-                if (filterValue_ >= 20.f)
+                float leftFeedback = (leftWet * feedback);
+                float rightFeedback = (rightWet * feedback);
+                if (filterValue >= 20.f)
                 {
                     if (freeze_ > 0.f)
                     {
@@ -415,8 +412,8 @@ namespace wreath
                     }
                 }
 
-                loopers_[LEFT].Write(leftDry + leftFeedback);
-                loopers_[RIGHT].Write(rightDry + rightFeedback);
+                loopers_[LEFT].Write(Mix(leftDry, leftFeedback));
+                loopers_[RIGHT].Write(Mix(rightDry, rightFeedback));
 
                 loopers_[LEFT].UpdateReadPos();
                 loopers_[RIGHT].UpdateReadPos();
@@ -455,7 +452,7 @@ namespace wreath
             float stereoLeft = leftWet * stereoImage + rightWet * (1.f - stereoImage);
             float stereoRight = rightWet * stereoImage + leftWet * (1.f - stereoImage);
 
-            cf_.SetPos(fclamp(mix_, 0.f, 1.f));
+            cf_.SetPos(fclamp(mix, 0.f, 1.f));
             leftOut = cf_.Process(leftDry, stereoLeft);
             rightOut = cf_.Process(rightDry, stereoRight);
         }
@@ -527,12 +524,12 @@ namespace wreath
             if (LEFT == channel || BOTH == channel)
             {
                 nextLeftLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[LEFT].GetBufferSamples()));
-                noteModeLeft = length <= kMinSamplesForTone;
+                noteModeLeft = length <= kMinSamplesForFlanger;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 nextRightLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[RIGHT].GetBufferSamples()));
-                noteModeRight = length <= kMinSamplesForTone;
+                noteModeRight = length <= kMinSamplesForFlanger;
             }
         }
 
@@ -562,17 +559,9 @@ namespace wreath
         inline Mode GetMode() { return conf_.mode; }
         inline TriggerMode GetTriggerMode() { return conf_.triggerMode; }
         inline bool IsGateMode() { return TriggerMode::GATE == conf_.triggerMode; }
-        inline float GetGain() { return gain_; }
-        inline float GetMix() { return mix_; }
-        inline float GetFeedBack() { return feedback_; }
-        inline float GetFilter() { return filterValue_; }
 
     private:
         Looper loopers_[2];
-        float gain_{};
-        float mix_{};
-        float feedback_{};
-        float filterValue_{};
         State state_{}; // The current state of the looper
         CrossFade cf_;
         Svf feedbackFilter_;
@@ -585,7 +574,7 @@ namespace wreath
 
         float Mix(float a, float b)
         {
-            return SoftLimit(a + b);
+            return SoftClip(a + b);
             //return a + b - ((a * b) / 2.f);
             //return (1 / std::sqrt(2)) * (a + b);
         }

@@ -181,7 +181,7 @@ void Looper::SetLoopLength(float length)
     }
     loopLengthSeconds_ = loopLength_ / sampleRate_;
     loopEnd_ = heads_[READ].GetLoopEnd();
-
+/*
     if (loopLength_ > kSamplesToFade)
     {
         if (mustPaste_)
@@ -194,7 +194,7 @@ void Looper::SetLoopLength(float length)
         heads_[READ].CopyFadeBuffer(fadePos_);
         mustPaste_ = true;
     }
-
+*/
     crossPointFound_ = false;
     crossPointFade_ = false;
 }
@@ -388,21 +388,6 @@ void Looper::CalculateCrossPoint()
 void Looper::HandleFade()
 {
     int32_t intReadPos = heads_[READ].GetIntPosition();
-    int32_t intFadePos = fadeBufferPos_;
-
-
-    if (mustCopyFadeBuffer_)
-    {
-        mustCopyFadeBuffer_ = false;
-        //heads_[WRITE].CopyFadeBuffer(fadeBufferPos_);
-    }
-    // When the loop grows:
-    // 1) crossfade the copied buffer starting from where it was copied from.
-    else if (mustPasteFadeBuffer_)
-    {
-        mustPasteFadeBuffer_ = false;
-        //heads_[WRITE].PasteFadeBuffer(fadeBufferPos_);
-    }
 
     if (loopLength_ < kMinLoopLengthSamples || !writingActive_)
     {

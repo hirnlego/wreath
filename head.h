@@ -12,10 +12,12 @@
 
 namespace wreath
 {
-    constexpr float kMinLoopLengthSamples{48.f};
-    constexpr int kMinLoopLengthForFade{4800};
-    constexpr float kMinSamplesForTone{1440}; // 30ms @ 48KHz
-    constexpr float kSamplesToFade{1200.f};
+    constexpr float kMinLoopLengthSamples{48.f};  // 1ms @ 48KHz
+    constexpr float kSamplesToFade{1200.f}; // 25ms @ 48KHz
+    constexpr float kMinSamplesForTone{2400}; // 50ms @ 48KHz
+    constexpr float kMinSamplesForFlanger{4800}; // 100ms @ 48KHz
+    // > 15ms chorus
+    // <= 15ms flanger
     constexpr float kSwitchAndRampThresh{0.2f};
 
     enum Type

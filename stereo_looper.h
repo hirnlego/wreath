@@ -86,7 +86,6 @@ namespace wreath
         float gain{1.f};
         float mix{0.5f};
         float feedback{0.f};
-        float filterValue{0.f};
         float rateSlew{1.f}; // No slew
 
         bool noteModeLeft{};
@@ -142,9 +141,7 @@ namespace wreath
             state_ = State::INIT;
             cf_.Init(CROSSFADE_CPOW);
             feedbackFilter_.Init(sampleRate_);
-            feedbackFilter_.SetFreq(filterValue);
             outputFilter_.Init(sampleRate_);
-            outputFilter_.SetFreq(filterValue);
 
             // Process configuration and reset the looper.
             conf_ = conf;
@@ -188,15 +185,19 @@ namespace wreath
             }
         }
 
+        void SetFilterValue(float value)
+        {
+            filterValue_ = value;
+            feedbackFilter_.SetFreq(filterValue_);
+            feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
+            feedbackFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
+            outputFilter_.SetFreq(filterValue_);
+            outputFilter_.SetDrive(filterValue_ * 0.0001f);
+            outputFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
+        }
+
         void UpdateParameters()
         {
-            feedbackFilter_.SetFreq(filterValue);
-            feedbackFilter_.SetDrive(filterValue * 0.0001f);
-            feedbackFilter_.SetRes(filterResonance + filterValue * 0.0005f);
-            outputFilter_.SetFreq(filterValue);
-            outputFilter_.SetDrive(filterValue * 0.0001f);
-            outputFilter_.SetRes(filterResonance + filterValue * 0.0005f);
-
             if (nextLeftDirection != loopers_[LEFT].GetDirection())
             {
                 loopers_[LEFT].SetDirection(nextLeftDirection);
@@ -398,7 +399,7 @@ namespace wreath
 
                 float leftFeedback = (leftWet * feedback);
                 float rightFeedback = (rightWet * feedback);
-                if (filterValue >= 20.f)
+                if (filterValue_ >= 20.f)
                 {
                     if (freeze_ > 0.f)
                     {
@@ -571,6 +572,7 @@ namespace wreath
         bool hasChangedRight_{};
         Conf conf_{};
         float freeze_{};
+        float filterValue_{};
 
         float Mix(float a, float b)
         {

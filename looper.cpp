@@ -117,20 +117,19 @@ bool Looper::Restart(bool resetPosition)
     if (!isRestarting_)
     {
         isRestarting_ = true;
-        Stop(false);
+        Stop(true);
     }
     else if (RunStatus::STOPPED == status)
     {
         if (resetPosition)
         {
             heads_[READ].ResetPosition();
+            heads_[WRITE].ResetPosition();
             // Invert direction when in pendulum.
             if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
             {
                 direction_ = heads_[READ].ToggleDirection();
             }
-            crossPointFound_ = false;
-            crossPointFade_ = false;
         }
 
         Start(false);
@@ -158,7 +157,6 @@ void Looper::SetLoopStart(float start)
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
     crossPointFound_ = false;
-    crossPointFade_ = false;
 };
 
 void Looper::SetLoopEnd(float end)
@@ -196,7 +194,6 @@ void Looper::SetLoopLength(float length)
     }
 */
     crossPointFound_ = false;
-    crossPointFade_ = false;
 }
 
 void Looper::SetReadRate(float rate)
@@ -206,7 +203,6 @@ void Looper::SetReadRate(float rate)
     readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
     crossPointFound_ = false;
-    crossPointFade_ = false;
 }
 
 void Looper::SetWriteRate(float rate)
@@ -215,7 +211,6 @@ void Looper::SetWriteRate(float rate)
     writeRate_ = rate;
     writeSpeed_ = sampleRate_ * writeRate_;
     crossPointFound_ = false;
-    crossPointFade_ = false;
 }
 
 void Looper::SetMovement(Movement movement)
@@ -228,24 +223,28 @@ void Looper::SetDirection(Direction direction)
 {
     heads_[READ].SetDirection(direction);
     direction_ = direction;
+    crossPointFound_ = false;
 }
 
 void Looper::SetReadPos(float position)
 {
     heads_[READ].SetIndex(position);
     readPos_ = position;
+    crossPointFound_ = false;
 }
 
 void Looper::SetWritePos(float position)
 {
     heads_[WRITE].SetIndex(position);
     writePos_ = position;
+    crossPointFound_ = false;
 }
 
 void Looper::SetLooping(bool looping)
 {
     heads_[READ].SetLooping(looping);
     looping_ = looping;
+    crossPointFound_ = false;
 }
 
 float Looper::Read(float input)
@@ -389,7 +388,23 @@ void Looper::HandleFade()
 {
     int32_t intReadPos = heads_[READ].GetIntPosition();
 
-    if (loopLength_ < kMinLoopLengthSamples || !writingActive_)
+    if (isFading_)
+    {
+        // When the write head stopped we may restart it.
+        if (RunStatus::STOPPED == heads_[WRITE].GetRunStatus())
+        {
+            heads_[WRITE].Start();
+        }
+        // Finally, remove any trace of the fade operation.
+        if (RunStatus::RUNNING == heads_[WRITE].GetRunStatus())
+        {
+            crossPointFound_ = false;
+            isFading_ = false;
+        }
+    }
+
+    // Fading is not needed when frozen.
+    if (!writingActive_)
     {
         return;
     }
@@ -406,38 +421,20 @@ void Looper::HandleFade()
             CalculateCrossPoint();
         }
 
-        if (crossPointFound_)
+        if (crossPointFound_ && !isFading_)
         {
-            if (!crossPointFade_)
+            // Calculate the correct point to start the write head's fade,
+            // that is the minimum distance from the cross point of the read
+            // and write heads.
+            // The fade samples and rate are calculated taking into account
+            // the heads' speeds and the direction.
+            int32_t samples = (writeSpeed_ < readSpeed_) ? CalculateDistance(intReadPos, crossPoint_, readSpeed_, 0) : CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0);
+            // If the condition are met, start the fade out of the write head.
+            if (samples > 0 && samples <= heads_[READ].SamplesToFade())
             {
-                // Calculate the correct point to start the write head's fade,
-                // that is the minimum distance from the cross point of the read
-                // and write heads.
-                // The fade samples and rate are calculated taking into account
-                // the heads' speeds and the direction.
-                int32_t samples = (writeSpeed_ < readSpeed_) ? CalculateDistance(intReadPos, crossPoint_, readSpeed_, 0) : CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0);
-                // If the condition are met, start the fade out of the write head.
-                if (samples > 0 && samples <= heads_[READ].SamplesToFade())
-                {
-                    heads_[WRITE].SetFade(samples, std::max(1.f, readRate_));
-                    heads_[WRITE].Stop();
-                    crossPointFade_ = true;
-                }
-            }
-
-            if (crossPointFade_)
-            {
-                // When the write head stopped we may restart it.
-                if (RunStatus::STOPPED == heads_[WRITE].GetRunStatus())
-                {
-                    heads_[WRITE].Start();
-                }
-                // Finally, remove any trace of the fade operation.
-                if (RunStatus::RUNNING == heads_[WRITE].GetRunStatus())
-                {
-                    crossPointFound_ = false;
-                    crossPointFade_ = false;
-                }
+                heads_[WRITE].SetFade(samples, std::max(1.f, readRate_));
+                heads_[WRITE].Stop();
+                isFading_ = true;
             }
         }
     }

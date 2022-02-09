@@ -99,7 +99,7 @@ namespace wreath
         int32_t sampleRateSpeed_{};
         bool looping_{};
         bool isRestarting_{};
-        bool crossPointFade_{};
+        bool isFading_{};
         int32_t crossPoint_{};
         bool crossPointFound_{};
         float fadeBufferPos_{};

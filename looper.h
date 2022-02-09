@@ -11,6 +11,13 @@ namespace wreath
         Looper() {}
         ~Looper() {}
 
+        enum TriggerMode
+        {
+            TRIGGER,
+            GATE,
+            LOOP,
+        };
+
         void Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples);
         void Reset();
         void ClearBuffer();
@@ -38,6 +45,7 @@ namespace wreath
         void SetDirection(Direction direction);
         void ToggleDirection();
         void SetWriting(float amount);
+        void SetTriggerMode(TriggerMode mode);
 
         inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }
@@ -63,6 +71,7 @@ namespace wreath
         inline Direction GetDirection() { return direction_; }
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
         inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
+        inline TriggerMode GetTriggerMode() { return triggerMode_; }
 
         inline void SetReading(bool active) { readingActive_ = active; }
 
@@ -106,6 +115,8 @@ namespace wreath
         float fadeBufferPos_{};
         bool mustPasteFadeBuffer_{};
         bool mustCopyFadeBuffer_{};
+
+        TriggerMode triggerMode_{};
 
         float fadePos_{};
         bool mustPaste_{};

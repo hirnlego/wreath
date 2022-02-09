@@ -402,15 +402,15 @@ namespace wreath
         {
             if (RunStatus::STOPPED == runStatus_)
             {
-                //return index_;
+                return index_;
             }
 
             float index = index_ + (rate_ * direction_);
             SetIndex(index);
             Action action = HandleLoopAction();
 
-            if (READ == type_)
-            {
+            //if (READ == type_)
+            //{
                 switch (action)
                 {
                 case STOP:
@@ -427,7 +427,7 @@ namespace wreath
                 default:
                     break;
                 }
-            }
+            //}
 
             return index_;
         }
@@ -486,10 +486,12 @@ namespace wreath
             float value = ReadAt(index_);
             currentValue_ = value;
 
+            valueToFade = switchAndRamp_ ? valueToFade : 0;
+
             // Copy some samples in the buffer used for fading.
             if (copyFadeBuffer_)
             {
-                float samplesToFade = kSamplesToFade;
+                float samplesToFade = SamplesToFade();
                 fadeBuffer_[fadeBufferIndex_] = ReadAt(fadePos_ + fadeBufferIndex_);
                 if (fadeBufferIndex_ == samplesToFade - 1)
                 {
@@ -502,14 +504,16 @@ namespace wreath
             // buffered value.
             if (RunStatus::STARTING == runStatus_)
             {
-                valueToFade = switchAndRamp_ ? ReadAt(switchAndRampPos_ + fadeIndex_) : valueToFade;
+                //valueToFade = switchAndRamp_ ? ReadAt(switchAndRampPos_ + fadeIndex_) : valueToFade;
                 value = CrossFade(valueToFade, value, fadeIndex_ * (1.f / samplesToFade_));
                 if (fadeIndex_ >= samplesToFade_)
                 {
+                    /*
                     if (switchAndRamp_)
                     {
                         switchAndRamp_ = false;
                     }
+                    */
                     runStatus_ = RunStatus::RUNNING;
                 }
                 fadeIndex_ += rate_;
@@ -526,18 +530,20 @@ namespace wreath
                 }
                 else
                 {
-                    value = CrossFade(value, valueToFade, fadeIndex_ * (1.f / samplesToFade_));
                 }
                 */
+                value = CrossFade(value, valueToFade, fadeIndex_ * (1.f / samplesToFade_));
 
                 if (fadeIndex_ >= samplesToFade_)
                 {
                     runStatus_ = RunStatus::STOPPED;
+                    /*
                     if (switchAndRamp_)
                     {
                         switchAndRamp_ = false;
                         runStatus_ = RunStatus::RUNNING;
                     }
+                    */
                 }
                 fadeIndex_ += rate_;
             }
@@ -550,7 +556,7 @@ namespace wreath
 
                 // FIX: this generates artefacts with high frequency signals
                 /*
-                if (!switchAndRamp_ && std::abs(previousValue_ - value) > kSwitchAndRampThresh && loopLength_ > kMinSamplesForTone)
+                if (!switchAndRamp_ && std::abs(previousValue_ - value) > kSwitchAndRampThresh && loopLength_ > SamplesToFade())
                 {
                     //SwitchAndRamp();
                 }
@@ -598,7 +604,7 @@ namespace wreath
             // Crossfade the samples of the fade buffer.
             if (pasteFadeBuffer_)
             {
-                float samplesToFade = kSamplesToFade;
+                float samplesToFade = SamplesToFade();
                 float value = ReadAt(fadePos_ + fadeBufferIndex_);
                 int32_t pos = fadePos_ + fadeBufferIndex_;
                 buffer_[pos] = CrossFade(value, fadeBuffer_[fadeBufferIndex_], fadeBufferIndex_ * (1.f / samplesToFade));
@@ -646,15 +652,15 @@ namespace wreath
         bool Buffer(float value)
         {
             buffer_[intIndex_] = value;
+            bufferSamples_ = intIndex_ + 1;
 
             // End of available buffer?
-            if (intIndex_ == maxBufferSamples_ - 1)
+            if (intIndex_ >= maxBufferSamples_ - 1)
             {
                 return true;
             }
 
             intIndex_++;
-            bufferSamples_ = intIndex_;
 
             return false;
         }
@@ -698,7 +704,7 @@ namespace wreath
         {
             // Start right away if the loop length is smaller than the minimum
             // number of samples needed for a tone.
-            RunStatus status = loopLength_ > kMinSamplesForTone ? RunStatus::STARTING : RunStatus::RUNNING;
+            RunStatus status = loopLength_ > SamplesToFade() ? RunStatus::STARTING : RunStatus::RUNNING;
             SetRunStatus(status);
 
             return status;
@@ -708,7 +714,7 @@ namespace wreath
         {
             // Stop right away if the loop length is smaller than the minimum
             // number of samples needed for a tone.
-            RunStatus status = loopLength_ > kMinSamplesForTone ? RunStatus::STOPPING : RunStatus::STOPPED;
+            RunStatus status = loopLength_ > SamplesToFade() ? RunStatus::STOPPING : RunStatus::STOPPED;
             SetRunStatus(status);
 
             return status;

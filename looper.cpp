@@ -120,7 +120,9 @@ void Looper::Trigger()
     }
     heads_[READ].ResetPosition();
     heads_[WRITE].ResetPosition();
-    Start(false);
+    //heads_[WRITE].SetRunStatus(RunStatus::STARTING);
+    heads_[READ].Start();
+    heads_[WRITE].Start();
 }
 
 bool Looper::Restart(bool resetPosition)
@@ -302,6 +304,25 @@ void Looper::SetWriting(float amount)
 
     // TODO: variable amount should determine how many samples are written (1 = all, 0 = none).
     heads_[WRITE].SetWriteBalance(amount);
+}
+
+void Looper::SetTriggerMode(TriggerMode mode)
+{
+    switch (mode)
+    {
+    case TriggerMode::GATE:
+        SetReadPos(GetWritePos());
+        SetLooping(true);
+        break;
+    case TriggerMode::TRIGGER:
+        SetLooping(false);
+        break;
+    case TriggerMode::LOOP:
+        SetLooping(true);
+        break;
+    }
+
+    triggerMode_ = mode;
 }
 
 int32_t Looper::CalculateDistance(int32_t a, int32_t b, float aSpeed, float bSpeed)

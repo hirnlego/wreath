@@ -31,6 +31,7 @@ namespace wreath
         bool Start(bool now);
         bool Stop(bool now);
         bool Restart(bool resetPosition);
+        void Trigger();
         void SetLoopStart(float start);
         int32_t GetRandomPosition();
         void SetLoopEnd(float end);

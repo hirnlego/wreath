@@ -111,6 +111,18 @@ bool Looper::Stop(bool now)
     return false;
 }
 
+void Looper::Trigger()
+{
+    // Invert direction when in pendulum or drunk mode.
+    if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
+    {
+        direction_ = heads_[READ].ToggleDirection();
+    }
+    heads_[READ].ResetPosition();
+    heads_[WRITE].ResetPosition();
+    Start(false);
+}
+
 bool Looper::Restart(bool resetPosition)
 {
     RunStatus status = heads_[READ].GetRunStatus();

@@ -185,6 +185,11 @@ namespace wreath
             }
         }
 
+        float GetFilterValue()
+        {
+            return filterValue_;
+        }
+
         void SetFilterValue(float value)
         {
             filterValue_ = value;
@@ -357,6 +362,7 @@ namespace wreath
 
                 if (mustRestart)
                 {
+                    /*
                     static bool dl{};
                     static bool dr{};
                     if (!dl)
@@ -372,6 +378,10 @@ namespace wreath
                         dl = dr = false;
                         mustRestart = false;
                     }
+                    */
+                    loopers_[LEFT].Trigger();
+                    loopers_[RIGHT].Trigger();
+                    mustRestart = false;
                 }
 
                 if (mustStart)

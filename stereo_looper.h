@@ -164,6 +164,12 @@ namespace wreath
             SetFreeze(!frozen);
         }
 
+        void SetSamplesToFade(float samples)
+        {
+            loopers_[LEFT].SetSamplesToFade(samples);
+            loopers_[RIGHT].SetSamplesToFade(samples);
+        }
+
         void SetFreeze(float value)
         {
             if (value < 0.5f && IsFrozen())
@@ -300,8 +306,6 @@ namespace wreath
 
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
         {
-            UpdateParameters();
-
             // Input gain stage.
             float leftDry = SoftClip(leftIn * gain);
             float rightDry = SoftClip(rightIn * gain);
@@ -355,6 +359,8 @@ namespace wreath
             case State::RECORDING:
             case State::FROZEN:
             {
+                UpdateParameters();
+
                 leftDry *= dryLevel;
                 rightDry *= dryLevel;
 

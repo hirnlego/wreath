@@ -47,6 +47,10 @@ namespace wreath
         void SetWriting(float amount);
         void SetTriggerMode(TriggerMode mode);
 
+        void SetSamplesToFade(float samples);
+
+        inline float GetSamplesToFade() { return heads_[READ].GetSamplesToFade(); }
+
         inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }
 
@@ -121,7 +125,7 @@ namespace wreath
         float fadePos_{};
         bool mustPaste_{};
 
-        float fadeBuffer[static_cast<int32_t>(kSamplesToFade)]{};
+        float fadeBuffer[static_cast<int32_t>(kMaxSamplesToFade)]{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

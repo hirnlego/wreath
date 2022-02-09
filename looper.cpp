@@ -122,7 +122,7 @@ void Looper::Trigger()
     heads_[WRITE].ResetPosition();
     //heads_[WRITE].SetRunStatus(RunStatus::STARTING);
     heads_[READ].Start();
-    heads_[WRITE].Start();
+    //heads_[WRITE].Start();
 }
 
 bool Looper::Restart(bool resetPosition)
@@ -156,6 +156,12 @@ bool Looper::Restart(bool resetPosition)
     }
 
     return false;
+}
+
+void Looper::SetSamplesToFade(float samples)
+{
+    heads_[READ].SetSamplesToFade(samples);
+    heads_[WRITE].SetSamplesToFade(samples);
 }
 
 void Looper::SetLoopStart(float start)
@@ -194,7 +200,7 @@ void Looper::SetLoopLength(float length)
     loopLengthSeconds_ = loopLength_ / sampleRate_;
     loopEnd_ = heads_[READ].GetLoopEnd();
 /*
-    if (loopLength_ > kSamplesToFade)
+    if (loopLength_ > kMaxSamplesToFade)
     {
         if (mustPaste_)
         {
@@ -202,7 +208,7 @@ void Looper::SetLoopLength(float length)
             mustPaste_ = false;
         }
 
-        fadePos_ = loopEnd_ - kSamplesToFade + 1;
+        fadePos_ = loopEnd_ - kMaxSamplesToFade + 1;
         heads_[READ].CopyFadeBuffer(fadePos_);
         mustPaste_ = true;
     }
@@ -449,7 +455,7 @@ void Looper::HandleFade()
         headsDistance_ = CalculateDistance(intReadPos, writePos_, readSpeed_, writeSpeed_);
 
         // Calculate the cross point.
-        if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].SamplesToFade() * 2)
+        if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].GetSamplesToFade() * 2)
         {
             CalculateCrossPoint();
         }
@@ -463,7 +469,7 @@ void Looper::HandleFade()
             // the heads' speeds and the direction.
             int32_t samples = (writeSpeed_ < readSpeed_) ? CalculateDistance(intReadPos, crossPoint_, readSpeed_, 0) : CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0);
             // If the condition are met, start the fade out of the write head.
-            if (samples > 0 && samples <= heads_[READ].SamplesToFade())
+            if (samples > 0 && samples <= heads_[READ].GetSamplesToFade())
             {
                 heads_[WRITE].SetFade(samples, std::max(1.f, readRate_));
                 heads_[WRITE].Stop();

@@ -13,7 +13,7 @@
 namespace wreath
 {
     constexpr float kMinLoopLengthSamples{48.f};  // 1ms @ 48KHz
-    constexpr float kSamplesToFade{1200.f}; // 25ms @ 48KHz
+    constexpr float kMaxSamplesToFade{2400.f}; // 50ms @ 48KHz
     constexpr float kMinSamplesForTone{2400}; // 50ms @ 48KHz
     constexpr float kMinSamplesForFlanger{4800}; // 100ms @ 48KHz
     // > 15ms chorus
@@ -94,7 +94,7 @@ namespace wreath
         float currentValue_{};
         float writeBalance_{}; // Balance between new and old value when writing
 
-        float samplesToFade_{kSamplesToFade};
+        float samplesToFade_{kMaxSamplesToFade};
         float fadeRate_{1.f};
 
         Action HandleLoopAction()
@@ -370,7 +370,7 @@ namespace wreath
 
         float SamplesToFade()
         {
-            return std::min(kSamplesToFade, loopLength_);
+            return std::min(samplesToFade_, loopLength_);
         }
 
         inline void SetWriteBalance(float amount) { writeBalance_ = amount; }
@@ -409,8 +409,8 @@ namespace wreath
             SetIndex(index);
             Action action = HandleLoopAction();
 
-            //if (READ == type_)
-            //{
+            if (READ == type_)
+            {
                 switch (action)
                 {
                 case STOP:
@@ -427,7 +427,7 @@ namespace wreath
                 default:
                     break;
                 }
-            //}
+            }
 
             return index_;
         }
@@ -435,6 +435,16 @@ namespace wreath
         bool IsFading()
         {
             return switchAndRamp_;
+        }
+
+        float GetSamplesToFade()
+        {
+            return samplesToFade_;
+        }
+
+        void SetSamplesToFade(float samples)
+        {
+            samplesToFade_ = samples;
         }
 
         void SetFade(float samples, float rate)

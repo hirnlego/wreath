@@ -14,14 +14,18 @@ namespace wreath
     using namespace daisysp;
 
     constexpr int32_t kSampleRate{48000};
-    // constexpr int kBufferSeconds{150}; // 2:30 minutes max
-    constexpr int kBufferSeconds{1};
+    // constexpr int kBufferSeconds{150}; // 2:30 minutes max, with 2 buffers
+    //constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
+    constexpr int kBufferSeconds{2}; // 1:20 minutes, max with 4 buffers
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
     // constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
     constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightBuffer_[kBufferSamples];
+
+    float DSY_SDRAM_BSS leftBuffer2_[kBufferSamples];
+    float DSY_SDRAM_BSS rightBuffer2_[kBufferSamples];
 
     class StereoLooper
     {
@@ -64,7 +68,7 @@ namespace wreath
         struct Conf
         {
             Mode mode;
-            Looper::TriggerMode leftTriggerMode;
+            Looper::TriggerMode triggerMode;
             Movement movement;
             Direction direction;
             float rate;
@@ -77,10 +81,11 @@ namespace wreath
         bool resetPosition{true};
         bool hasCvRestart{};
 
-        float gain{1.f};
-        float mix{0.5f};
+        float inputGain{1.f};
+        float outputGain{1.f};
+        float dryWetMix{0.5f};
         float feedback{0.f};
-        float rateSlew{1.f}; // No slew
+        float rateSlew{0.f};
 
         bool noteModeLeft{};
         bool noteModeRight{};
@@ -96,6 +101,9 @@ namespace wreath
 
         float nextLeftReadRate{};
         float nextRightReadRate{};
+
+        float nextLeftFreeze{};
+        float nextRightFreeze{};
 
         int mustSetChannelWriteRate{NONE};
         float nextWriteRate{};
@@ -146,8 +154,8 @@ namespace wreath
         void Init(int32_t sampleRate, Conf conf)
         {
             sampleRate_ = sampleRate;
-            loopers_[LEFT].Init(sampleRate_, leftBuffer_, kBufferSamples);
-            loopers_[RIGHT].Init(sampleRate_, rightBuffer_, kBufferSamples);
+            loopers_[LEFT].Init(sampleRate_, leftBuffer_, leftBuffer2_, kBufferSamples);
+            loopers_[RIGHT].Init(sampleRate_, rightBuffer_, rightBuffer2_, kBufferSamples);
             state_ = State::STARTUP;
             cf_.Init(CROSSFADE_CPOW);
             feedbackFilter_.Init(sampleRate_);
@@ -155,34 +163,20 @@ namespace wreath
 
             // Process configuration and reset the looper.
             conf_ = conf;
-            Reset();
+            loopers_[LEFT].Reset();
+            loopers_[RIGHT].Reset();
         }
 
         void ToggleFreeze()
         {
             bool frozen = IsFrozen();
-            SetFreeze(!frozen);
+            SetFreeze(BOTH, !frozen);
         }
 
         void SetSamplesToFade(float samples)
         {
             loopers_[LEFT].SetSamplesToFade(samples);
             loopers_[RIGHT].SetSamplesToFade(samples);
-        }
-
-        void SetFreeze(float value)
-        {
-            if (value < 0.5f && IsFrozen())
-            {
-                state_ = State::RECORDING;
-            }
-            else if (value >= 0.5f && !IsFrozen())
-            {
-                state_ = State::FROZEN;
-            }
-            loopers_[LEFT].SetWriting(value);
-            loopers_[RIGHT].SetWriting(value);
-            freeze_ = value;
         }
 
         float GetFilterValue()
@@ -210,7 +204,7 @@ namespace wreath
             case Looper::TriggerMode::GATE:
                 dryLevel = 0.f;
                 resetPosition = false;
-                mustRestart = true;
+                mustStart = true;
                 break;
             case Looper::TriggerMode::TRIGGER:
                 dryLevel = 1.f;
@@ -223,6 +217,7 @@ namespace wreath
                 mustStart = true;
                 break;
             }
+            conf_.triggerMode = mode;
         }
 
         void SetMovement(int channel, Movement movement)
@@ -243,13 +238,15 @@ namespace wreath
         {
             if (LEFT == channel || BOTH == channel)
             {
-                // conf_.direction = direction;
                 leftDirection = direction;
             }
             if (RIGHT == channel || BOTH == channel)
             {
-                // conf_.direction = direction;
                 rightDirection = direction;
+            }
+            if (BOTH == channel)
+            {
+                conf_.direction = direction;
             }
         }
 
@@ -265,17 +262,33 @@ namespace wreath
             }
         }
 
+        void SetFreeze(int channel, float amount)
+        {
+            state_ = amount == 1.f ? State::FROZEN : State::RECORDING;
+
+            if (LEFT == channel || BOTH == channel)
+            {
+                nextLeftFreeze = amount;
+            }
+            if (RIGHT == channel || BOTH == channel)
+            {
+                nextRightFreeze = amount;
+            }
+        }
+
         void SetReadRate(int channel, float rate)
         {
             if (LEFT == channel || BOTH == channel)
             {
-                // conf_.rate = rate;
                 nextLeftReadRate = rate;
             }
             if (RIGHT == channel || BOTH == channel)
             {
-                // conf_.rate = rate;
                 nextRightReadRate = rate;
+            }
+            if (BOTH == channel)
+            {
+                conf_.rate = rate;
             }
         }
 
@@ -290,12 +303,12 @@ namespace wreath
             if (LEFT == channel || BOTH == channel)
             {
                 nextLeftLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[LEFT].GetBufferSamples()));
-                noteModeLeft = length <= kMinSamplesForFlanger;
+                noteModeLeft = length <= kMinLoopLengthSamples;
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 nextRightLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[RIGHT].GetBufferSamples()));
-                noteModeRight = length <= kMinSamplesForFlanger;
+                noteModeRight = length <= kMinLoopLengthSamples;
             }
         }
 
@@ -307,8 +320,8 @@ namespace wreath
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
         {
             // Input gain stage.
-            float leftDry = SoftClip(leftIn * gain);
-            float rightDry = SoftClip(rightIn * gain);
+            float leftDry = SoftClip(leftIn * inputGain);
+            float rightDry = SoftClip(rightIn * inputGain);
 
             float leftWet{};
             float rightWet{};
@@ -325,7 +338,8 @@ namespace wreath
                 }
                 fadeIndex++;
 
-                break;
+                // Return now, so we don't emit any sound.
+                return;
             }
             case State::BUFFERING:
             {
@@ -336,6 +350,7 @@ namespace wreath
                     mustStopBuffering = false;
                     loopers_[LEFT].StopBuffering();
                     loopers_[RIGHT].StopBuffering();
+
                     state_ = State::READY;
                 }
 
@@ -353,6 +368,8 @@ namespace wreath
                 nextRightLoopStart = loopers_[RIGHT].GetLoopStart();
                 nextLeftReadRate = 1.f;
                 nextRightReadRate = 1.f;
+                nextLeftFreeze = 0.f;
+                nextRightFreeze = 0.f;
 
                 break;
             }
@@ -378,6 +395,8 @@ namespace wreath
                     loopers_[RIGHT].Stop(true);
                     Reset();
                     state_ = State::BUFFERING;
+
+                    break;
                 }
 
                 if (mustRestart)
@@ -429,19 +448,14 @@ namespace wreath
 
                 float leftFeedback = (leftWet * feedback);
                 float rightFeedback = (rightWet * feedback);
-                if (filterValue_ >= 20.f)
-                {
-                    if (freeze_ > 0.f)
-                    {
-                        leftWet = Mix(leftWet, Filter(&outputFilter_, leftWet) * freeze_);
-                        rightWet = Mix(rightWet, Filter(&outputFilter_, rightWet) * freeze_);
-                    }
-                    if (freeze_ < 1.f)
-                    {
-                        leftFeedback = Mix(leftFeedback, Filter(&feedbackFilter_, leftDry) * (1.f - freeze_));
-                        rightFeedback = Mix(rightFeedback, Filter(&feedbackFilter_, rightDry) * (1.f - freeze_));
-                    }
-                }
+
+                // Mix the filtered dry signal with the feedback signal.
+                leftFeedback = Mix(leftFeedback, Filter(&feedbackFilter_, leftDry) * (1.f - freeze_));
+                rightFeedback = Mix(rightFeedback, Filter(&feedbackFilter_, rightDry) * (1.f - freeze_));
+
+                // Mix the wet signal with the filterd version.
+                //leftWet = Mix(leftWet, Filter(&outputFilter_, leftWet) * freeze_);
+                //rightWet = Mix(rightWet, Filter(&outputFilter_, rightWet) * freeze_);
 
                 loopers_[LEFT].Write(Mix(leftDry, leftFeedback));
                 loopers_[RIGHT].Write(Mix(rightDry, rightFeedback));
@@ -483,12 +497,14 @@ namespace wreath
                 break;
             }
 
+            // Stereo image.
             float stereoLeft = leftWet * stereoImage + rightWet * (1.f - stereoImage);
             float stereoRight = rightWet * stereoImage + leftWet * (1.f - stereoImage);
 
-            cf_.SetPos(fclamp(mix, 0.f, 1.f));
-            leftOut = cf_.Process(leftDry, stereoLeft);
-            rightOut = cf_.Process(rightDry, stereoRight);
+            // Output gain stage.
+            cf_.SetPos(fclamp(dryWetMix, 0.f, 1.f));
+            leftOut = SoftClip(cf_.Process(leftDry, stereoLeft) * outputGain);
+            rightOut = SoftClip(cf_.Process(rightDry, stereoRight) * outputGain);
         }
 
     private:
@@ -509,12 +525,12 @@ namespace wreath
             loopers_[LEFT].Reset();
             loopers_[RIGHT].Reset();
 
-            // SetMode(conf_.mode);
-            // SetTriggerMode(conf_.leftTriggerMode);
-            // SetMovement(BOTH, conf_.movement);
-            // SetDirection(BOTH, conf_.direction);
-            // SetReadRate(BOTH, conf_.rate);
-            // SetWriteRate(BOTH, conf_.rate);
+            //SetMode(conf_.mode);
+            SetTriggerMode(conf_.triggerMode);
+            SetMovement(BOTH, conf_.movement);
+            SetDirection(BOTH, conf_.direction);
+            SetReadRate(BOTH, conf_.rate);
+            SetWriteRate(BOTH, conf_.rate);
         }
 
         float Mix(float a, float b)
@@ -589,14 +605,30 @@ namespace wreath
             float leftReadRate = loopers_[LEFT].GetReadRate();
             if (leftReadRate != nextLeftReadRate)
             {
-                fonepole(leftReadRate, nextLeftReadRate, rateSlew);
+                float coeff = rateSlew > 0 ? 1.f / (rateSlew * sampleRate_) : 1.f;
+                fonepole(leftReadRate, nextLeftReadRate, coeff);
                 loopers_[LEFT].SetReadRate(leftReadRate);
             }
             float rightReadRate = loopers_[RIGHT].GetReadRate();
             if (rightReadRate != nextRightReadRate)
             {
-                fonepole(rightReadRate, nextRightReadRate, rateSlew);
+                float coeff = rateSlew > 0 ? 1.f / (rateSlew * sampleRate_) : 1.f;
+                fonepole(rightReadRate, nextRightReadRate, coeff);
                 loopers_[RIGHT].SetReadRate(rightReadRate);
+            }
+
+            float leftFreeze = loopers_[LEFT].GetFreeze();
+            if (leftFreeze != nextLeftFreeze)
+            {
+                fonepole(leftFreeze, nextLeftFreeze, kParamSlewCoeff);
+                loopers_[LEFT].SetFreeze(leftFreeze);
+            }
+
+            float rightFreeze = loopers_[RIGHT].GetFreeze();
+            if (rightFreeze != nextRightFreeze)
+            {
+                fonepole(rightFreeze, nextRightFreeze, kParamSlewCoeff);
+                loopers_[RIGHT].SetFreeze(rightFreeze);
             }
         }
     };

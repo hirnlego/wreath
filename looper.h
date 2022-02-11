@@ -18,7 +18,7 @@ namespace wreath
             LOOP,
         };
 
-        void Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples);
+        void Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t maxBufferSamples);
         void Reset();
         void ClearBuffer();
         void StopBuffering();
@@ -44,7 +44,7 @@ namespace wreath
         void SetLoopEnd(float end);
         void SetDirection(Direction direction);
         void ToggleDirection();
-        void SetWriting(float amount);
+        void SetFreeze(float amount);
         void SetTriggerMode(TriggerMode mode);
 
         void SetSamplesToFade(float samples);
@@ -64,6 +64,8 @@ namespace wreath
 
         inline float GetReadPos() { return readPos_; }
         inline float GetReadPosSeconds() { return readPosSeconds_; }
+
+        inline float GetFreeze() { return freeze_; }
 
         inline int32_t GetWritePos() { return writePos_; }
 
@@ -88,6 +90,7 @@ namespace wreath
         void CalculateCrossPoint();
 
         float *buffer_{};           // The buffer
+        float *buffer2_{};           // The buffer
         float bufferSeconds_{};     // Written buffer length in seconds
         float readPos_{};           // The read position
         float readPosSeconds_{};    // Read position in seconds
@@ -109,7 +112,7 @@ namespace wreath
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};
         bool readingActive_{true};
-        bool writingActive_{true};
+        float freeze_{};
         int32_t sampleRateSpeed_{};
         bool looping_{};
         bool isRestarting_{};
@@ -125,7 +128,7 @@ namespace wreath
         float fadePos_{};
         bool mustPaste_{};
 
-        float fadeBuffer[static_cast<int32_t>(kMaxSamplesToFade)]{};
+        float fadeBuffer[static_cast<int32_t>(kSamplesToFade)]{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

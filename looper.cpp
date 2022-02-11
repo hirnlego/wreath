@@ -11,11 +11,11 @@ using namespace daisysp;
  * @param buffer
  * @param maxBufferSamples
  */
-void Looper::Init(int32_t sampleRate, float *buffer, int32_t maxBufferSamples)
+void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t maxBufferSamples)
 {
     sampleRate_ = sampleRate;
-    heads_[READ].Init(buffer, maxBufferSamples);
-    heads_[WRITE].Init(buffer, maxBufferSamples);
+    heads_[READ].Init(buffer, buffer2, maxBufferSamples);
+    heads_[WRITE].Init(buffer, buffer2, maxBufferSamples);
     Reset();
     movement_ = Movement::NORMAL;
     direction_ = Direction::FORWARD;
@@ -166,11 +166,6 @@ void Looper::SetSamplesToFade(float samples)
 
 void Looper::SetLoopStart(float start)
 {
-    if (start == loopStart_)
-    {
-        return;
-    }
-
     loopStart_ = heads_[READ].SetLoopStart(start);
     intLoopStart_ = loopStart_;
     heads_[WRITE].SetLoopStart(loopStart_);
@@ -186,11 +181,6 @@ void Looper::SetLoopEnd(float end)
 
 void Looper::SetLoopLength(float length)
 {
-    if (length == loopLength_)
-    {
-        return;
-    }
-
     loopLength_ = heads_[READ].SetLoopLength(length);
     intLoopLength_ = loopLength_;
     if (looping_)
@@ -294,22 +284,11 @@ void Looper::ToggleDirection()
     direction_ = heads_[READ].ToggleDirection();
 }
 
-void Looper::SetWriting(float amount)
+void Looper::SetFreeze(float amount)
 {
-    if (amount < 0.5f && !writingActive_)
-    {
-        heads_[WRITE].SetIndex(heads_[READ].GetIntPosition());
-        heads_[WRITE].Start();
-        writingActive_ = true;
-    }
-    else if (amount >= 0.5f && writingActive_)
-    {
-        heads_[WRITE].Stop();
-        writingActive_ = false;
-    }
-
-    // TODO: variable amount should determine how many samples are written (1 = all, 0 = none).
-    heads_[WRITE].SetWriteBalance(amount);
+    freeze_ = amount;
+    heads_[READ].SetFreeze(amount);
+    heads_[WRITE].SetFreeze(amount);
 }
 
 void Looper::SetTriggerMode(TriggerMode mode)
@@ -443,7 +422,7 @@ void Looper::HandleFade()
     }
 
     // Fading is not needed when frozen.
-    if (!writingActive_)
+    if (freeze_ == 1)
     {
         return;
     }
@@ -484,6 +463,7 @@ void Looper::HandleFade()
  *
  * @return int32_t
  */
+/*
 int32_t Looper::GetRandomPosition()
 {
     int32_t pos{loopStart_ + rand() % (intLoopLength_ - 1)};
@@ -498,3 +478,4 @@ int32_t Looper::GetRandomPosition()
 
     return pos;
 }
+*/

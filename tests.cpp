@@ -9,9 +9,10 @@ using namespace wreath;
 
 const double pi() { return std::atan(1) * 4; }
 
-constexpr int32_t bufferSamples = 100;
+constexpr int32_t bufferSamples = 48000;
 
 float buffer[48000];
+float buffer2[48000];
 Looper looper;
 
 bool Compare (float a, float b)
@@ -34,11 +35,44 @@ void Buffer(bool broken)
         {
             value = Sine(f, i + 0.25f);
         }
-        std::cout << i << ": " << value << "\n";
+        //std::cout << i << ": " << value << "\n";
         looper.Buffer(value);
     }
-    std::cout << "\n";
+    //std::cout << "\n";
     looper.StopBuffering();
+}
+
+std::string MapMovement(Movement movement)
+{
+    switch (movement)
+    {
+    case Movement::NORMAL:
+        return "Normal";
+        break;
+    case Movement::DRUNK:
+        return "Drunk";
+        break;
+    case Movement::PENDULUM:
+        return "Pendulum";
+        break;
+    default:
+        break;
+    }
+}
+
+std::string MapDirection(Direction direction)
+{
+    switch (direction)
+    {
+    case Direction::FORWARD:
+        return "Forward";
+        break;
+    case Direction::BACKWARDS:
+        return "Backwards";
+        break;
+    default:
+        break;
+    }
 }
 
 void TestBoundaries()
@@ -48,8 +82,8 @@ void TestBoundaries()
     struct Scenario
     {
         std::string desc{};
-        int32_t loopLength{100};
-        int32_t loopStart{};
+        float loopLength{100.f};
+        float loopStart{};
         float index{};
         float rate{1.f};
         Movement movement{NORMAL};
@@ -93,7 +127,7 @@ void TestBoundaries()
         { "6d - Inverted, 3.6x speed, normal, backwards, start loop", 10000, 40000, 40000, 3.6f, NORMAL, BACKWARDS, 1996.4f, 1996 },
 
         { "7a - Regular, 49.7x speed, normal, forward, start", 100, 0, 0, 49.7f, NORMAL, FORWARD, 49.7f, 49 },
-        { "7b - Regular, 49.7x speed, normal, forward, almost end", 100, 0, 99.4f, 49.7f, NORMAL, FORWARD, 49.1f, 49 },
+        { "7b - Regular, 49.7x speed, normal, forward, almost end", 100, 0.f, 99.4f, 49.7f, NORMAL, FORWARD, 49.1f, 49 },
         { "7c - Regular, 49.7x speed, normal, backwards, end", 100, 0, 99, 49.7f, NORMAL, BACKWARDS, 49.3, 49 },
         { "7d - Regular, 49.7x speed, normal, backwards, almost start", 100, 0, 11.2f, 49.7f, NORMAL, BACKWARDS, 61.5f, 61 },
 
@@ -106,6 +140,8 @@ void TestBoundaries()
     for (Scenario scenario : scenarios)
     {
         looper.Reset();
+        looper.SetTriggerMode(Looper::TriggerMode::LOOP);
+        looper.Start(true);
         std::cout << "Scenario " << scenario.desc << "\n";
         looper.SetLoopStart(scenario.loopStart);
         std::cout << "Loop start: " << scenario.loopStart << "\n";
@@ -115,13 +151,14 @@ void TestBoundaries()
         looper.SetReadRate(scenario.rate);
         std::cout << "Rate: " << scenario.rate << "\n";
         looper.SetMovement(scenario.movement);
-        std::cout << "Movement: " << scenario.movement << "\n";
+        std::cout << "Movement: " << MapMovement(scenario.movement) << "\n";
         looper.SetDirection(scenario.direction);
-        std::cout << "Direction: " << scenario.direction << "\n";
+        std::cout << "Direction: " << MapDirection(scenario.direction) << "\n";
         float index = scenario.index;
         looper.SetReadPos(index);
         std::cout << "Current index: " << index << "\n";
-        looper.UpdatePos();
+        std::cout << "Next index (before fix): " << index + (scenario.rate * scenario.direction) << "\n";
+        looper.UpdateReadPos();
         index = looper.GetReadPos();
         std::cout << "Next index (float): " << index << " (expected " << scenario.result << ")\n";
         int32_t intIndex = static_cast<int32_t>(std::floor(index));
@@ -139,23 +176,22 @@ void TestRead()
     float index = bufferSamples - 1;
 
     looper.SetReadPos(index);
-    float value = looper.Read();
+    float value = looper.Read(0);
     std::cout << "Value at " << index << ": " << value << "\n";
 }
 
 void TestFade()
 {
     Buffer(false);
-
 }
 
 int main()
 {
-    looper.Init(48000, buffer, 48000);
+    looper.Init(48000, buffer, buffer2, 48000);
 
-    //TestBoundaries();
+    TestBoundaries();
     //TestRead();
-    TestFade();
+    //TestFade();
 
     return 0;
 }

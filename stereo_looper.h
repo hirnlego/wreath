@@ -15,8 +15,7 @@ namespace wreath
 
     constexpr int32_t kSampleRate{48000};
     // constexpr int kBufferSeconds{150}; // 2:30 minutes max, with 2 buffers
-    //constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
-    constexpr int kBufferSeconds{2}; // 1:20 minutes, max with 4 buffers
+    constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
     // constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
     constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
@@ -117,7 +116,7 @@ namespace wreath
         bool mustStart{};
         bool mustStop{};
         bool mustRestart{};
-        float stereoImage{1.f};
+        float stereoWidth{1.f};
         float dryLevel{1.f};
         float filterResonance{0.45f};
         FilterType filterType{FilterType::BP};
@@ -167,6 +166,19 @@ namespace wreath
             loopers_[RIGHT].Reset();
         }
 
+        bool overdub_{};
+        void SetOverdub(bool overdub)
+        {
+            overdub_ = overdub;
+            loopers_[LEFT].SetOverdub(overdub);
+            loopers_[RIGHT].SetOverdub(overdub);
+        }
+
+        bool GetOverdub()
+        {
+            return overdub_;
+        }
+
         void ToggleFreeze()
         {
             bool frozen = IsFrozen();
@@ -193,6 +205,12 @@ namespace wreath
             outputFilter_.SetFreq(filterValue_);
             outputFilter_.SetDrive(filterValue_ * 0.0001f);
             outputFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
+        }
+
+        void OffsetLoopers(float value)
+        {
+            float pos = fclamp(loopers_[LEFT].GetReadPos() + value, 0, loopers_[RIGHT].GetLoopEnd());
+            loopers_[RIGHT].SetReadPos(pos);
         }
 
         void SetTriggerMode(Looper::TriggerMode mode)
@@ -265,6 +283,7 @@ namespace wreath
         void SetFreeze(int channel, float amount)
         {
             state_ = amount == 1.f ? State::FROZEN : State::RECORDING;
+            freeze_ = amount;
 
             if (LEFT == channel || BOTH == channel)
             {
@@ -286,10 +305,7 @@ namespace wreath
             {
                 nextRightReadRate = rate;
             }
-            if (BOTH == channel)
-            {
-                conf_.rate = rate;
-            }
+            conf_.rate = rate;
         }
 
         void SetWriteRate(int channel, float rate)
@@ -450,12 +466,12 @@ namespace wreath
                 float rightFeedback = (rightWet * feedback);
 
                 // Mix the filtered dry signal with the feedback signal.
-                leftFeedback = Mix(leftFeedback, Filter(&feedbackFilter_, leftDry) * (1.f - freeze_));
-                rightFeedback = Mix(rightFeedback, Filter(&feedbackFilter_, rightDry) * (1.f - freeze_));
+                leftFeedback = Mix(leftFeedback, Filter(&feedbackFilter_, leftDry));
+                rightFeedback = Mix(rightFeedback, Filter(&feedbackFilter_, rightDry));
 
                 // Mix the wet signal with the filterd version.
-                //leftWet = Mix(leftWet, Filter(&outputFilter_, leftWet) * freeze_);
-                //rightWet = Mix(rightWet, Filter(&outputFilter_, rightWet) * freeze_);
+                leftWet = Mix(leftWet, Filter(&outputFilter_, leftWet));
+                rightWet = Mix(rightWet, Filter(&outputFilter_, rightWet));
 
                 loopers_[LEFT].Write(Mix(leftDry, leftFeedback));
                 loopers_[RIGHT].Write(Mix(rightDry, rightFeedback));
@@ -497,9 +513,11 @@ namespace wreath
                 break;
             }
 
-            // Stereo image.
-            float stereoLeft = leftWet * stereoImage + rightWet * (1.f - stereoImage);
-            float stereoRight = rightWet * stereoImage + leftWet * (1.f - stereoImage);
+            // Mid-side processing for stereo widening.
+            float mid = ((leftWet + rightWet) / fastroot(2, 10));
+            float side = ((leftWet - rightWet) / fastroot(2, 10)) * stereoWidth;
+            float stereoLeft = (mid + side) / fastroot(2, 10);
+            float stereoRight = (mid - side) / fastroot(2, 10);
 
             // Output gain stage.
             cf_.SetPos(fclamp(dryWetMix, 0.f, 1.f));

@@ -795,6 +795,7 @@ namespace wreath
 
         inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetLoopEnd() { return loopEnd_; }
+        inline float GetLoopLength() { return loopLength_; }
         inline float GetRate() { return rate_; }
         inline float GetPosition() { return index_; }
         inline int32_t GetIntPosition() { return intIndex_; }

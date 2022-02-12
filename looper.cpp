@@ -183,7 +183,7 @@ void Looper::SetLoopLength(float length)
 {
     loopLength_ = heads_[READ].SetLoopLength(length);
     intLoopLength_ = loopLength_;
-    if (looping_)
+    if (!overdub_)
     {
         heads_[WRITE].SetLoopLength(loopLength_);
     }
@@ -253,7 +253,20 @@ void Looper::SetWritePos(float position)
 void Looper::SetLooping(bool looping)
 {
     heads_[READ].SetLooping(looping);
-    looping_ = looping;
+    SetOverdub(looping);
+}
+
+void Looper::SetOverdub(bool overdub)
+{
+    if (overdub_ && !overdub)
+    {
+        heads_[WRITE].SetLoopLength(loopLength_);
+    }
+    else if (!overdub_ && overdub)
+    {
+        heads_[WRITE].SetLoopLength(bufferSamples_);
+    }
+    overdub_ = overdub;
     crossPointFound_ = false;
 }
 

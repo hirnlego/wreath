@@ -166,17 +166,17 @@ namespace wreath
             loopers_[RIGHT].Reset();
         }
 
-        bool overdub_{};
-        void SetOverdub(bool overdub)
+        bool loopSync_{};
+        void SetLoopSync(bool loopSync)
         {
-            overdub_ = overdub;
-            loopers_[LEFT].SetOverdub(overdub);
-            loopers_[RIGHT].SetOverdub(overdub);
+            loopSync_ = loopSync;
+            loopers_[LEFT].SetLoopSync(loopSync);
+            loopers_[RIGHT].SetLoopSync(loopSync);
         }
 
-        bool GetOverdub()
+        bool GetloopSync()
         {
-            return overdub_;
+            return loopSync_;
         }
 
         void ToggleFreeze()

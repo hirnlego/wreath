@@ -27,7 +27,7 @@ namespace wreath
         void SetLoopLength(float length);
         void SetMovement(Movement movement);
         void SetLooping(bool looping);
-        void SetOverdub(bool overdub);
+        void SetLoopSync(bool overdub);
         bool Buffer(float value);
         void SetReadPos(float position);
         void SetWritePos(float position);
@@ -115,7 +115,7 @@ namespace wreath
         bool readingActive_{true};
         float freeze_{};
         int32_t sampleRateSpeed_{};
-        bool overdub_{};
+        bool loopSync_{};
         bool isRestarting_{};
         bool isFading_{};
         int32_t crossPoint_{};

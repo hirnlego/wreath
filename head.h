@@ -20,7 +20,6 @@ namespace wreath
     constexpr float kSwitchAndRampThresh{0.2f};
     constexpr float kFreezeResolution{0.0001f};
 
-
     enum Type
     {
         READ,
@@ -315,14 +314,6 @@ namespace wreath
             intLoopEnd_ = loopEnd_;
         }
 
-        float CrossFade(float from, float to, float pos)
-        {
-            float in = std::sin(1.570796326794897 * pos);
-            float out = std::cos(1.570796326794897 * pos);
-
-            return from * out + to * in;
-        }
-
     public:
         Head(Type type) : type_{type} {}
         ~Head() {}
@@ -333,6 +324,14 @@ namespace wreath
             index_ = 0.f;
             intLoopStart_ = 0;
             intLoopEnd_ = 0;
+        }
+
+        static float CrossFade(float from, float to, float pos)
+        {
+            float in = std::sin(1.570796326794897 * pos);
+            float out = std::cos(1.570796326794897 * pos);
+
+            return from * out + to * in;
         }
 
         void Init(float *buffer, float *buffer2, int32_t maxBufferSamples)
@@ -470,7 +469,7 @@ namespace wreath
             samplesToFade_ = loopLength_ ? std::min(samples, loopLength_) : samples;
         }
 
-        void SetFade(float samples, float rate)
+        void SetWriteFade(float samples, float rate)
         {
             samplesToFade_ = samples;
             fadeRate_ = rate;

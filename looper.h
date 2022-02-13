@@ -87,6 +87,14 @@ namespace wreath
         inline bool CrossPointFound() { return crossPointFound_; }
 
     private:
+        enum Fade
+        {
+            NO_FADE,
+            FADE_IN,
+            FADE_OUT,
+            FADE_TRIGGER,
+        };
+
         int32_t CalculateDistance(int32_t a, int32_t b, float aSpeed, float bSpeed);
         void CalculateCrossPoint();
 
@@ -115,6 +123,7 @@ namespace wreath
         bool readingActive_{true};
         float freeze_{};
         int32_t sampleRateSpeed_{};
+        bool looping_{};
         bool loopSync_{};
         bool isRestarting_{};
         bool isFading_{};
@@ -128,6 +137,10 @@ namespace wreath
 
         float fadePos_{};
         bool mustPaste_{};
+
+        Fade mustFade_{};
+        float fadeIndex_{};
+        bool zeroFade_{};
 
         float fadeBuffer[static_cast<int32_t>(kSamplesToFade)]{};
 

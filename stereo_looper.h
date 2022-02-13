@@ -2,6 +2,7 @@
 
 #include "head.h"
 #include "looper.h"
+#include "envelope_follower.h"
 #include "Utility/dsp.h"
 #include "Filters/svf.h"
 #include "Dynamics/crossfade.h"
@@ -84,6 +85,7 @@ namespace wreath
         float outputGain{1.f};
         float dryWetMix{0.5f};
         float feedback{0.f};
+        float feedbackLevel{1.f};
         float rateSlew{0.f};
 
         bool noteModeLeft{};
@@ -118,7 +120,6 @@ namespace wreath
         bool mustRestart{};
         float stereoWidth{1.f};
         float dryLevel{1.f};
-        float filterResonance{0.45f};
         FilterType filterType{FilterType::BP};
 
         inline int32_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
@@ -158,7 +159,6 @@ namespace wreath
             state_ = State::STARTUP;
             cf_.Init(CROSSFADE_CPOW);
             feedbackFilter_.Init(sampleRate_);
-            outputFilter_.Init(sampleRate_);
 
             // Process configuration and reset the looper.
             conf_ = conf;
@@ -174,7 +174,7 @@ namespace wreath
             loopers_[RIGHT].SetLoopSync(loopSync);
         }
 
-        bool GetloopSync()
+        bool HasLoopSync()
         {
             return loopSync_;
         }
@@ -200,11 +200,8 @@ namespace wreath
         {
             filterValue_ = value;
             feedbackFilter_.SetFreq(filterValue_);
-            feedbackFilter_.SetDrive(filterValue_ * 0.0001f);
-            feedbackFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
-            outputFilter_.SetFreq(filterValue_);
-            outputFilter_.SetDrive(filterValue_ * 0.0001f);
-            outputFilter_.SetRes(filterResonance + filterValue_ * 0.0005f);
+            feedbackFilter_.SetDrive(filterValue_ * 0.0005f);
+            feedbackFilter_.SetRes(filterValue_ * 0.0004f);
         }
 
         void OffsetLoopers(float value)
@@ -462,16 +459,16 @@ namespace wreath
                 leftWet = loopers_[LEFT].Read(leftDry);
                 rightWet = loopers_[RIGHT].Read(rightDry);
 
+                // Feedback path.
                 float leftFeedback = (leftWet * feedback);
                 float rightFeedback = (rightWet * feedback);
+                leftFeedback = Mix(leftFeedback, Filter(leftFeedback));
+                rightFeedback = Mix(rightFeedback, Filter(rightFeedback));
+                leftFeedback *= (feedbackLevel - filterEnvelope_.GetEnv(leftFeedback));
+                rightFeedback *= (feedbackLevel - filterEnvelope_.GetEnv(rightFeedback));
 
-                // Mix the filtered dry signal with the feedback signal.
-                leftFeedback = Mix(leftFeedback, Filter(&feedbackFilter_, leftDry));
-                rightFeedback = Mix(rightFeedback, Filter(&feedbackFilter_, rightDry));
-
-                // Mix the wet signal with the filterd version.
-                leftWet = Mix(leftWet, Filter(&outputFilter_, leftWet));
-                rightWet = Mix(rightWet, Filter(&outputFilter_, rightWet));
+                leftWet = Mix(leftWet, Filter(leftFeedback) * freeze_ * 0.5f);
+                rightWet = Mix(rightWet, Filter(rightFeedback) * freeze_ * 0.5f);
 
                 loopers_[LEFT].Write(Mix(leftDry, leftFeedback));
                 loopers_[RIGHT].Write(Mix(rightDry, rightFeedback));
@@ -495,7 +492,6 @@ namespace wreath
                         if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
                         {
                             loopers_[LEFT].ToggleDirection();
-                            hasChangedLeft_ = true;
                         }
                     }
                     if (loopers_[RIGHT].IsDrunkMovement())
@@ -503,7 +499,6 @@ namespace wreath
                         if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
                         {
                             loopers_[RIGHT].ToggleDirection();
-                            hasChangedRight_ = true;
                         }
                     }
                 }
@@ -529,14 +524,12 @@ namespace wreath
         Looper loopers_[2];
         State state_{}; // The current state of the looper
         CrossFade cf_;
+        EnvFollow filterEnvelope_{};
         Svf feedbackFilter_;
-        Svf outputFilter_;
         int32_t sampleRate_{};
-        bool hasChangedLeft_{};
-        bool hasChangedRight_{};
-        Conf conf_{};
         float freeze_{};
         float filterValue_{};
+        Conf conf_{};
 
         void Reset()
         {
@@ -558,19 +551,19 @@ namespace wreath
             // return (1 / std::sqrt(2)) * (a + b);
         }
 
-        float Filter(Svf *filter, float value)
+        float Filter(float value)
         {
-            filter->Process(value);
+            feedbackFilter_.Process(value);
             switch (filterType)
             {
             case FilterType::BP:
-                return filter->Band();
+                return feedbackFilter_.Band();
             case FilterType::HP:
-                return filter->High();
+                return feedbackFilter_.High();
             case FilterType::LP:
-                return filter->Low();
+                return feedbackFilter_.Low();
             default:
-                return filter->Band();
+                return feedbackFilter_.Band();
             }
         }
 

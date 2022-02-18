@@ -92,7 +92,7 @@ namespace wreath
             NO_FADE,
             FADE_IN,
             FADE_OUT,
-            FADE_TRIGGER,
+            FADE_OUT_IN,
         };
 
         int32_t CalculateDistance(int32_t a, int32_t b, float aSpeed, float bSpeed);
@@ -138,8 +138,10 @@ namespace wreath
         float fadePos_{};
         bool mustPaste_{};
 
-        Fade mustFade_{};
-        float fadeIndex_{};
+        Fade mustFadeRead_{};
+        Fade mustFadeWrite_{};
+        float readFadeIndex_{};
+        float writeFadeIndex_{};
         bool zeroFade_{};
 
         float fadeBuffer[static_cast<int32_t>(kSamplesToFade)]{};

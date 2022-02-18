@@ -13,12 +13,13 @@
 namespace wreath
 {
     constexpr float kMinLoopLengthSamples{46.f};  // ~ C6 @ 48KHz
-    constexpr float kSamplesToFade{1200.f}; // 25ms @ 48KHz
+    constexpr float kSamplesToFade{48.f * 100}; // 20ms @ 48KHz
     constexpr float kMaxSamplesToFade{4800.f}; // 100ms @ 48KHz
     constexpr float kMinSamplesForTone{2400}; // 50ms @ 48KHz
     constexpr float kMinSamplesForFlanger{4800}; // 100ms @ 48KHz
     constexpr float kSwitchAndRampThresh{0.2f};
     constexpr float kFreezeResolution{0.0001f};
+    constexpr float kEqualCrossFadeP{1.25f};
 
     enum Type
     {
@@ -113,7 +114,7 @@ namespace wreath
                     {
                         SetIndex(loopStart_);
 
-                        return Action::LOOP;
+                        return Action::NO_ACTION;
                     }
                     if (looping_ && intIndex_ > intLoopEnd_)
                     {
@@ -145,7 +146,7 @@ namespace wreath
                     {
                         SetIndex(loopEnd_);
 
-                        return Action::LOOP;
+                        return Action::NO_ACTION;
                     }
                     if (looping_ && intIndex_ < intLoopStart_)
                     {
@@ -183,6 +184,14 @@ namespace wreath
                 float frame = bufferSamples_ - 1;
                 if (Direction::FORWARD == direction_)
                 {
+                    // This prevents "dragging" the index while changing the
+                    // loop's start point.
+                    if (intIndex_ < intLoopStart_)
+                    {
+                        SetIndex(loopStart_);
+
+                        return Action::NO_ACTION;
+                    }
                     if (intIndex_ > frame)
                     {
                         // Wrap-around.
@@ -210,6 +219,14 @@ namespace wreath
                 }
                 else
                 {
+                    // This prevents "dragging" the index while changing the
+                    // loop's start point.
+                    if (intIndex_ > intLoopEnd_)
+                    {
+                        SetIndex(loopEnd_);
+
+                        return Action::NO_ACTION;
+                    }
                     if (intIndex_ < 0)
                     {
                         // Wrap-around.
@@ -303,6 +320,7 @@ namespace wreath
 
         void CalculateLoopEnd()
         {
+            //SetSwitchAndRamp(loopEnd_);
             if (intLoopStart_ + intLoopLength_ > bufferSamples_)
             {
                 loopEnd_ = (loopStart_ + loopLength_) - bufferSamples_ - 1;
@@ -328,10 +346,36 @@ namespace wreath
 
         static float CrossFade(float from, float to, float pos)
         {
-            float in = std::sin(1.570796326794897 * pos);
-            float out = std::cos(1.570796326794897 * pos);
+            float in = std::sin(pos * 1.570796326794897);
+            float out = std::sin((1.f - pos) * 1.570796326794897);
 
             return from * out + to * in;
+        }
+
+        static float LinearCrossFade(float from, float to, float pos)
+        {
+            return from * (1.f - pos) + to;
+        }
+
+        /**
+         * @brief Energy preserving crossfade
+         * @see https://signalsmith-audio.co.uk/writing/2021/cheap-energy-crossfade/
+         *
+         * @param from
+         * @param to
+         * @param pos
+         * @return float
+         */
+        static float EqualCrossFade(float from, float to, float pos)
+        {
+            float invPos = 1.f - pos;
+            float k = -6.0026608f + kEqualCrossFadeP * (6.8773512f - 1.5838104f * kEqualCrossFadeP);
+            float a = pos * invPos;
+            float b = a * (1.f + k * a);
+            float c = (b + pos);
+            float d = (b + invPos);
+
+            return from * d * d + to * c * c;
         }
 
         void Init(float *buffer, float *buffer2, int32_t maxBufferSamples)
@@ -372,6 +416,7 @@ namespace wreath
 
         bool mustFreeze_{};
         bool mustUnfreeze_{};
+        float freezeFadeIndex_{};
         inline void SetFreeze(float amount)
         {
             freezeAmount_ = amount;
@@ -386,13 +431,13 @@ namespace wreath
                 {
                     // Fade in recording in the freeze buffer.
                     mustUnfreeze_ = true;
-                    fadeIndex_ = 0;
+                    freezeFadeIndex_ = 0;
                 }
                 else if (!frozen_ && frozen && !mustFreeze_)
                 {
                     // Fade out recording in the freeze buffer.
                     mustFreeze_ = true;
-                    fadeIndex_ = 0;
+                    freezeFadeIndex_ = 0;
                 }
             }
         }
@@ -538,6 +583,8 @@ namespace wreath
         }
         */
 
+        bool mustFadeInFrozen{};
+        float freezeLoopFadeIndex_{};
         float Read(float valueToFade)
         {
             if (RunStatus::STOPPED == runStatus_)
@@ -546,15 +593,38 @@ namespace wreath
             }
 
             previousValue_ = currentValue_;
-            float value = ReadAt(index_);
+            float value = ReadAt(buffer_, index_);
             currentValue_ = value;
+
+            float frozenValue{};
+            // When frozen, fade the start of the loop with the end.
+            if (frozen_)
+            {
+                frozenValue = ReadAt(buffer2_, index_);
+                if (intIndex_ == intLoopStart_ && intLoopLength_ < bufferSamples_ && intLoopLength_ >= samplesToFade_)
+                {
+                    mustFadeInFrozen = true;
+                    freezeLoopFadeIndex_ = 0;
+                }
+                if (mustFadeInFrozen)
+                {
+                    // Read samples from past the loop end.
+                    float fadeValue = ReadAt(buffer2_, WrapIndex(loopEnd_ + rate_ + freezeLoopFadeIndex_));
+                    frozenValue = EqualCrossFade(fadeValue, frozenValue, freezeLoopFadeIndex_ * (1.f / samplesToFade_));
+                    if (freezeLoopFadeIndex_ >= samplesToFade_)
+                    {
+                        mustFadeInFrozen = false;
+                    }
+                    freezeLoopFadeIndex_ += rate_;
+                }
+            }
 
             //valueToFade = switchAndRamp_ ? valueToFade : 0;
 
             // Copy some samples in the buffer used for fading.
             if (copyFadeBuffer_)
             {
-                fadeBuffer_[fadeBufferIndex_] = ReadAt(fadePos_ + fadeBufferIndex_);
+                fadeBuffer_[fadeBufferIndex_] = ReadAt(buffer_, fadePos_ + fadeBufferIndex_);
                 if (fadeBufferIndex_ == samplesToFade_ - 1)
                 {
                     copyFadeBuffer_ = false;
@@ -578,89 +648,84 @@ namespace wreath
             else if (RunStatus::STOPPING == runStatus_)
             {
                 value = CrossFade(value, valueToFade, fadeIndex_ * (1.f / samplesToFade_));
-
                 if (fadeIndex_ >= samplesToFade_)
                 {
                     runStatus_ = RunStatus::STOPPED;
                 }
                 fadeIndex_ += rate_;
             }
-            else
+
+            if (frozen_)
             {
-                // Apply switch-and-ramp technique to smooth the read value if
-                // the difference from the previous value is more than the
-                // defined threshold.
-                // http://msp.ucsd.edu/techniques/v0.11/book-html/node63.html
+                value = EqualCrossFade(value, frozenValue, freezeAmount_);
+            }
 
-                // FIX: this generates artefacts with high frequency signals
-                /*
-                if (!switchAndRamp_ && std::abs(previousValue_ - value) > kSwitchAndRampThresh && loopLength_ > SamplesToFade())
+            // Crossfade the samples of the fade buffer.
+            if (pasteFadeBuffer_)
+            {
+                value = CrossFade(fadeBuffer_[fadeBufferIndex_], value, fadeBufferIndex_ * (1.f / samplesToFade_));
+                if (fadeBufferIndex_ == samplesToFade_ - 1)
                 {
-                    //SwitchAndRamp();
+                    pasteFadeBuffer_ = false;
                 }
+                fadeBufferIndex_++;
+            }
 
-                if (switchAndRamp_)
+            if (switchAndRamp_)
+            {
+                float v = ReadAt(buffer_, fadePos_ + fadeBufferIndex_);
+                value = CrossFade(fadeBuffer_[fadeBufferIndex_], value, fadeBufferIndex_ * (1.f / samplesToFade_));
+                if (fadeBufferIndex_ == samplesToFade_ - 1)
                 {
-                    float delta = snapshotValue_ - value;
-                    float win = std::sin(1.570796326794897 * fadeIndex_ * (1.f / samplesToFade_));
-                    //win = fadeIndex_ * (1.f / samplesToFade_);
-                    value += delta * (1.0f - win);
-                    if (fadeIndex_ >= samplesToFade_)
-                    {
-                        switchAndRamp_ = false;
-                    }
-                    fadeIndex_ += rate_;
+                    pasteFadeBuffer_ = false;
                 }
-                */
+                fadeBufferIndex_++;
             }
 
             return value;
         }
 
-        float ReadAt(float index)
+        float ReadAt(float *buffer, float index)
         {
             int32_t intPos = index;
-            float valueA = buffer_[intPos];
-            float valueB = buffer2_[intPos];
+            float value = buffer[intPos];
             float frac = index - intPos;
 
             // Interpolate value only it the index has a fractional part.
             if (frac > std::numeric_limits<float>::epsilon())
             {
-                valueA = valueA + (buffer_[WrapIndex(intPos + direction_)] - valueA) * frac;
-                valueB = valueB + (buffer2_[WrapIndex(intPos + direction_)] - valueB) * frac;
+                value = value + (buffer[WrapIndex(intPos + direction_)] - value) * frac;
             }
 
-            return CrossFade(valueA, valueB, freezeAmount_);
+            return value;
         }
 
         void HandleFreeze(float input)
         {
-            float value = input;
-            float current = buffer2_[intIndex_];
+            float frozenValue = buffer2_[intIndex_];
             if (mustFreeze_)
             {
-                value = CrossFade(input, current, fadeIndex_ * (1.f / samplesToFade_));
-                if (fadeIndex_ >= samplesToFade_)
+                input = EqualCrossFade(input, frozenValue, freezeFadeIndex_ * (1.f / samplesToFade_));
+                if (freezeFadeIndex_ >= samplesToFade_)
                 {
                     mustFreeze_ = false;
                     frozen_ = true;
                 }
-                fadeIndex_ += rate_;
+                freezeFadeIndex_ += rate_;
             }
             else if (mustUnfreeze_)
             {
-                value = CrossFade(current, input, fadeIndex_ * (1.f / samplesToFade_));
-                if (fadeIndex_ >= samplesToFade_)
+                input = EqualCrossFade(frozenValue, input, freezeFadeIndex_ * (1.f / samplesToFade_));
+                if (freezeFadeIndex_ >= samplesToFade_)
                 {
                     mustUnfreeze_ = false;
                     frozen_ = false;
                 }
-                fadeIndex_ += rate_;
+                freezeFadeIndex_ += rate_;
             }
             if (!frozen_ || mustUnfreeze_)
             {
-                buffer2_[intIndex_] = value;
+                buffer2_[intIndex_] = input;
             }
         }
 
@@ -669,19 +734,6 @@ namespace wreath
             HandleFreeze(input);
 
             currentValue_ = buffer_[intIndex_];
-
-            // Crossfade the samples of the fade buffer.
-            if (pasteFadeBuffer_)
-            {
-                float value = ReadAt(fadePos_ + fadeBufferIndex_);
-                int32_t pos = fadePos_ + fadeBufferIndex_;
-                buffer_[pos] = CrossFade(value, fadeBuffer_[fadeBufferIndex_], fadeBufferIndex_ * (1.f / samplesToFade_));
-                if (fadeBufferIndex_ == samplesToFade_ - 1)
-                {
-                    pasteFadeBuffer_ = false;
-                }
-                fadeBufferIndex_++;
-            }
 
             // Gradually start writing, fading from the buffered value to the input
             // signal.
@@ -801,5 +853,6 @@ namespace wreath
         bool IsGoingForward() { return Direction::FORWARD == direction_; }
         bool IsRunning() { return RunStatus::RUNNING == runStatus_; }
         RunStatus GetRunStatus() { return runStatus_; }
+        float GetCurrentValue() { return currentValue_; }
     };
 }

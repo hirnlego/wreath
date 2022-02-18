@@ -114,9 +114,14 @@ bool Looper::Stop(bool now)
 void Looper::Trigger()
 {
     // Fade reading.
+    heads_[READ].ResetPosition();
+    if (loopSync_)
+    {
+        heads_[WRITE].ResetPosition();
+    }
     heads_[READ].SetRunStatus(RunStatus::RUNNING);
-    mustFade_ = Fade::FADE_TRIGGER;
-    fadeIndex_ = 0;
+    mustFadeRead_ = Fade::FADE_OUT_IN;
+    readFadeIndex_ = 0;
 }
 
 bool Looper::Restart(bool resetPosition)
@@ -162,7 +167,7 @@ void Looper::SetLoopStart(float start)
 {
     loopStart_ = heads_[READ].SetLoopStart(start);
     intLoopStart_ = loopStart_;
-    heads_[WRITE].SetLoopStart(loopStart_);
+    heads_[WRITE].SetLoopStart(loopSync_ ? loopStart_ : 0);
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
     loopEnd_ = heads_[READ].GetLoopEnd();
     crossPointFound_ = false;
@@ -181,15 +186,15 @@ void Looper::SetLoopLength(float length)
     loopLengthSeconds_ = loopLength_ / sampleRate_;
     loopEnd_ = heads_[READ].GetLoopEnd();
 /*
-    if (loopLength_ > kMaxSamplesToFade)
+    if (loopLength_ > heads_[READ].GetSamplesToFade())
     {
         if (mustPaste_)
         {
-            heads_[WRITE].PasteFadeBuffer(fadePos_);
+            heads_[READ].PasteFadeBuffer(fadePos_);
             mustPaste_ = false;
         }
 
-        fadePos_ = loopEnd_ - kMaxSamplesToFade + 1;
+        fadePos_ = loopEnd_ - heads_[READ].GetSamplesToFade() + 1;
         heads_[READ].CopyFadeBuffer(fadePos_);
         mustPaste_ = true;
     }
@@ -265,23 +270,24 @@ void Looper::SetLoopSync(bool loopSync)
 float Looper::Read(float input)
 {
     float value = heads_[READ].Read(input);
-    float valueToFade = zeroFade_ ? 0 : input;
+    float valueToFade = freeze_ == 1.f ? 0 : input;
+    float samples = heads_[READ].GetSamplesToFade();
 
-    if (Fade::FADE_IN == mustFade_)
+    if (Fade::FADE_IN == mustFadeRead_)
     {
-        value = Head::CrossFade(valueToFade, value, fadeIndex_ * (1.f / 1200));
-        if (fadeIndex_ >= 1200)
+        value = Head::CrossFade(valueToFade, value, readFadeIndex_ * (1.f / samples));
+        if (readFadeIndex_ >= samples)
         {
-            mustFade_ = Fade::NO_FADE;
+            mustFadeRead_ = Fade::NO_FADE;
         }
-        fadeIndex_++;
+        readFadeIndex_++;
     }
-    else if (Fade::FADE_OUT == mustFade_ || Fade::FADE_TRIGGER == mustFade_)
+    else if (Fade::FADE_OUT == mustFadeRead_ || Fade::FADE_OUT_IN == mustFadeRead_)
     {
-        value = Head::CrossFade(value, valueToFade, fadeIndex_ * (1.f / 1200));
-        if (fadeIndex_ >= 1200)
+        value = Head::CrossFade(value, valueToFade, readFadeIndex_ * (1.f / samples));
+        if (readFadeIndex_ >= samples)
         {
-            if (Fade::FADE_TRIGGER == mustFade_)
+            if (Fade::FADE_OUT_IN == mustFadeRead_)
             {
                 // Invert direction when in pendulum or drunk mode.
                 if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
@@ -293,23 +299,55 @@ float Looper::Read(float input)
                 {
                     heads_[WRITE].ResetPosition();
                 }
-                mustFade_ = Fade::FADE_IN;
-                fadeIndex_ = 0;
+                mustFadeRead_ = Fade::FADE_IN;
+                readFadeIndex_ = 0;
             }
             else
             {
-                mustFade_ = Fade::NO_FADE;
+                mustFadeRead_ = Fade::NO_FADE;
             }
         }
-        fadeIndex_++;
+        readFadeIndex_++;
     }
 
     return value;
 }
 
-void Looper::Write(float value)
+void Looper::Write(float input)
 {
-    heads_[WRITE].Write(value);
+    if (!freeze_)
+    {
+        float currentValue = heads_[READ].GetCurrentValue();
+        float samples = heads_[WRITE].GetSamplesToFade();
+        if (Fade::FADE_IN == mustFadeWrite_)
+        {
+            input = Head::CrossFade(currentValue, input, writeFadeIndex_ * (1.f / samples));
+            if (writeFadeIndex_ >= samples)
+            {
+                mustFadeWrite_ = Fade::NO_FADE;
+            }
+            writeFadeIndex_++;
+        }
+        else if (Fade::FADE_OUT == mustFadeWrite_ || Fade::FADE_OUT_IN == mustFadeWrite_)
+        {
+            input = Head::CrossFade(input, currentValue, writeFadeIndex_ * (1.f / samples));
+            if (writeFadeIndex_ >= samples)
+            {
+                if (Fade::FADE_OUT_IN == mustFadeWrite_)
+                {
+                    mustFadeWrite_ = Fade::FADE_IN;
+                    writeFadeIndex_ = 0;
+                }
+                else
+                {
+                    mustFadeWrite_ = Fade::NO_FADE;
+                }
+            }
+            writeFadeIndex_++;
+        }
+    }
+
+    heads_[WRITE].Write(input);
 }
 
 void Looper::UpdateReadPos()
@@ -450,7 +488,7 @@ void Looper::CalculateCrossPoint()
 void Looper::HandleFade()
 {
     int32_t intReadPos = heads_[READ].GetIntPosition();
-
+/*
     if (isFading_)
     {
         // When the write head stopped we may restart it.
@@ -465,7 +503,7 @@ void Looper::HandleFade()
             isFading_ = false;
         }
     }
-
+*/
     // Fading is not needed when frozen.
     if (freeze_ == 1)
     {
@@ -495,9 +533,11 @@ void Looper::HandleFade()
             // If the condition are met, start the fade out of the write head.
             if (samples > 0 && samples <= heads_[READ].GetSamplesToFade())
             {
-                heads_[WRITE].SetWriteFade(samples, std::max(1.f, readRate_));
-                heads_[WRITE].Stop();
-                isFading_ = true;
+                //heads_[WRITE].SetWriteFade(samples, std::max(1.f, readRate_));
+                //heads_[WRITE].Stop();
+                //isFading_ = true;
+                mustFadeWrite_ = Fade::FADE_OUT_IN;
+                writeFadeIndex_ = 0;
             }
         }
     }

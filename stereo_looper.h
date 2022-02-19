@@ -201,7 +201,7 @@ namespace wreath
             filterValue_ = value;
             feedbackFilter_.SetFreq(filterValue_);
             feedbackFilter_.SetDrive(0.75f);
-            feedbackFilter_.SetRes(0.1f);
+            feedbackFilter_.SetRes(fmap(1.f - feedback, 0.05f, 0.2f + (freeze_ * 0.2f)));
         }
 
         void OffsetLoopers(float value)

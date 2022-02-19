@@ -647,7 +647,7 @@ namespace wreath
                 value = EqualCrossFade(value, frozenValue, freezeAmount_);
             }
 
-
+/*
             // Crossfade the samples of the fade buffer.
             if (pasteFadeBuffer_)
             {
@@ -686,7 +686,7 @@ namespace wreath
             {
                 //CopyFadeBuffer(23123);
             }
-
+*/
             return value;
         }
 

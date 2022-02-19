@@ -327,7 +327,10 @@ namespace wreath
 
         void Start()
         {
-            state_ = State::RECORDING;
+            if (State::READY == state_)
+            {
+                state_ = State::RECORDING;
+            }
         }
 
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)

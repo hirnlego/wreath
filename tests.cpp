@@ -180,18 +180,85 @@ void TestRead()
     std::cout << "Value at " << index << ": " << value << "\n";
 }
 
-void TestFade()
+void TestLeds()
 {
-    Buffer(false);
+    struct Scenario
+    {
+        std::string desc{};
+        float loopLength{};
+        float loopStart{};
+        float index{};
+        short idx{};
+        float leds[4]{};
+    };
+
+    static Scenario scenarios[] =
+    {
+        { "1", 48000, 0, 0, 0, {0, 0, 0, 0} },
+        { "2", 48000, 0, 48000/4, 1, {1, 0, 0, 0} },
+        { "3", 48000, 0, 3 * 48000/4, 3, {1, 1, 1, 0} },
+        { "4", 48000, 48000/4, 3 * 48000/4, 3, {0, 1, 1, 0} },
+        { "5", 48000, 48000/4, 48000/4, 1, {0, 1, 0, 0} },
+    };
+
+    std::cout << "\n";
+
+    for (Scenario scenario : scenarios)
+    {
+        float leds[4]{};
+        std::cout << "Scenario " << scenario.desc << "\n";
+        std::cout << "Loop length: " << scenario.loopLength << "\n";
+        std::cout << "Loop start: " << scenario.loopStart << "\n";
+        std::cout << "Current index: " << scenario.index << "\n";
+
+        float value = (scenario.index) / scenario.loopLength;
+        float offset = scenario.loopStart / scenario.loopLength;
+        std::cout << "Current value: " << value << "\n";
+
+        short idx = static_cast<short>(std::floor(value * 4));
+        std::cout << "Index led: " << idx << " (expected: " << scenario.idx << ")\n";
+
+        std::cout << "Expected leds: ";
+        for (short i = 0; i < 4; i++)
+        {
+            std::cout << scenario.leds[i] << " ";
+        }
+        std::cout << "\nActual leds: ";
+        //idx %= length;
+        short odx = static_cast<short>(std::floor(offset * 4));
+        for (short i = 0; i < 4; i++)
+        {
+            float led = 0;
+            if (i >= odx && i <= idx)
+            {
+                float factor = ((i == idx) ? (value * 4 - idx) : 1.f);
+                if (factor < 0.0003f)
+                {
+                    factor = 0.f;
+                }
+                led = factor;
+            }
+            leds[i] = led;
+
+            std::cout << led << " ";
+        }
+
+        std::cout << "\n\n";
+
+        for (short i = 0; i < 4; i++)
+        {
+            assert(scenario.leds[i] == leds[i]);
+        }
+    }
 }
 
 int main()
 {
     looper.Init(48000, buffer, buffer2, 48000);
 
-    TestBoundaries();
+    //TestBoundaries();
     //TestRead();
-    //TestFade();
+    TestLeds();
 
     return 0;
 }

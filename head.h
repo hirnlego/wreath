@@ -112,7 +112,7 @@ namespace wreath
                     // loop's start point.
                     if (intIndex_ < intLoopStart_)
                     {
-                        SetIndex(loopStart_);
+                        //SetIndex(loopStart_);
 
                         return Action::NO_ACTION;
                     }
@@ -184,14 +184,6 @@ namespace wreath
                 float frame = bufferSamples_ - 1;
                 if (Direction::FORWARD == direction_)
                 {
-                    // This prevents "dragging" the index while changing the
-                    // loop's start point.
-                    if (intIndex_ < intLoopStart_)
-                    {
-                        SetIndex(loopStart_);
-
-                        return Action::NO_ACTION;
-                    }
                     if (intIndex_ > frame)
                     {
                         // Wrap-around.
@@ -219,14 +211,6 @@ namespace wreath
                 }
                 else
                 {
-                    // This prevents "dragging" the index while changing the
-                    // loop's start point.
-                    if (intIndex_ > intLoopEnd_)
-                    {
-                        SetIndex(loopEnd_);
-
-                        return Action::NO_ACTION;
-                    }
                     if (intIndex_ < 0)
                     {
                         // Wrap-around.
@@ -409,6 +393,7 @@ namespace wreath
             loopLength_ = length;
             intLoopLength_ = loopLength_;
             CalculateLoopEnd();
+            samplesToFade_ = std::min(samplesToFade_, loopLength_);
             switchAndRamp_ = false;
 
             return loopLength_;
@@ -624,12 +609,14 @@ namespace wreath
             // Copy some samples in the buffer used for fading.
             if (copyFadeBuffer_)
             {
+                /*
                 fadeBuffer_[fadeBufferIndex_] = ReadAt(buffer_, fadePos_ + fadeBufferIndex_);
                 if (fadeBufferIndex_ == samplesToFade_ - 1)
                 {
                     copyFadeBuffer_ = false;
                 }
                 fadeBufferIndex_++;
+                */
             }
 
             // Gradually start reading, fading from the input signal to the
@@ -660,6 +647,7 @@ namespace wreath
                 value = EqualCrossFade(value, frozenValue, freezeAmount_);
             }
 
+
             // Crossfade the samples of the fade buffer.
             if (pasteFadeBuffer_)
             {
@@ -680,6 +668,23 @@ namespace wreath
                     pasteFadeBuffer_ = false;
                 }
                 fadeBufferIndex_++;
+            }
+
+            if (copyFadeBuffer_)
+            {
+                // Read samples from past the loop end.
+                //valueToFade = ReadAt(buffer_, WrapIndex(loopEnd_ + rate_ + fadeBufferIndex_));
+                value = EqualCrossFade(0, value, fadeBufferIndex_ * (1.f / samplesToFade_));
+                if (fadeBufferIndex_ >= samplesToFade_)
+                {
+                    copyFadeBuffer_ = false;
+                }
+                fadeBufferIndex_ += rate_;
+            }
+
+            if (intIndex_ == intLoopStart_ && intLoopLength_ < bufferSamples_ && intLoopLength_ >= samplesToFade_)
+            {
+                //CopyFadeBuffer(23123);
             }
 
             return value;
@@ -791,6 +796,7 @@ namespace wreath
             intLoopLength_ = loopLength_;
             loopEnd_ = loopLength_ - 1.f;
             intLoopEnd_ = loopEnd_;
+            samplesToFade_ = std::min(samplesToFade_, loopLength_);
         }
 
         int32_t StopBuffering()
@@ -802,6 +808,7 @@ namespace wreath
             loopEnd_ = loopLength_ - 1.f;
             intLoopEnd_ = loopEnd_;
             ResetPosition();
+            samplesToFade_ = std::min(samplesToFade_, loopLength_);
 
             return bufferSamples_;
         }

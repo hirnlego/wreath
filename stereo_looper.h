@@ -65,6 +65,13 @@ namespace wreath
             HP,
         };
 
+        enum NoteMode
+        {
+            NO_MODE,
+            NOTE,
+            FLANGER,
+        };
+
         struct Conf
         {
             Mode mode;
@@ -88,8 +95,8 @@ namespace wreath
         float feedbackLevel{1.f};
         float rateSlew{0.f};
 
-        bool noteModeLeft{};
-        bool noteModeRight{};
+        NoteMode noteModeLeft{};
+        NoteMode noteModeRight{};
 
         int32_t nextLeftLoopStart{};
         int32_t nextRightLoopStart{};
@@ -167,6 +174,10 @@ namespace wreath
         }
 
         bool loopSync_{};
+        bool GetLoopSync()
+        {
+            return loopSync_;
+        }
         void SetLoopSync(bool loopSync)
         {
             loopSync_ = loopSync;
@@ -279,7 +290,10 @@ namespace wreath
 
         void SetFreeze(int channel, float amount)
         {
-            state_ = amount == 1.f ? State::FROZEN : State::RECORDING;
+            if (State::READY != state_)
+            {
+                state_ = amount == 1.f ? State::FROZEN : State::RECORDING;
+            }
             freeze_ = amount;
 
             if (LEFT == channel || BOTH == channel)
@@ -316,12 +330,28 @@ namespace wreath
             if (LEFT == channel || BOTH == channel)
             {
                 nextLeftLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[LEFT].GetBufferSamples()));
-                noteModeLeft = length <= kMinLoopLengthSamples;
+                noteModeLeft = NoteMode::NO_MODE;
+                if (length <= kMinLoopLengthSamples)
+                {
+                    noteModeLeft = NoteMode::NOTE;
+                }
+                else if (length >= kMinSamplesForTone && length <= kMinSamplesForFlanger)
+                {
+                    noteModeLeft = NoteMode::FLANGER;
+                }
             }
             if (RIGHT == channel || BOTH == channel)
             {
                 nextRightLoopLength = std::min(std::max(length, kMinLoopLengthSamples), static_cast<float>(loopers_[RIGHT].GetBufferSamples()));
-                noteModeRight = length <= kMinLoopLengthSamples;
+                noteModeRight = NoteMode::NO_MODE;
+                if (length <= kMinLoopLengthSamples)
+                {
+                    noteModeRight = NoteMode::NOTE;
+                }
+                else if (length >= kMinSamplesForTone && length <= kMinSamplesForFlanger)
+                {
+                    noteModeRight = NoteMode::FLANGER;
+                }
             }
         }
 
@@ -329,7 +359,9 @@ namespace wreath
         {
             if (State::READY == state_)
             {
-                state_ = State::RECORDING;
+                loopers_[LEFT].Start(true);
+                loopers_[RIGHT].Start(true);
+                state_ = freeze_ == 1.f ? State::FROZEN : State::RECORDING;
             }
         }
 

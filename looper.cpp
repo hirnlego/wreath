@@ -381,6 +381,13 @@ void Looper::UpdateWritePos()
 {
     heads_[WRITE].UpdatePosition();
     writePos_ = heads_[WRITE].GetIntPosition();
+    if (loopSync_ && intLoopLength_ <= kMinSamplesForFlanger && freeze_ == 0)
+    {
+        if ((Direction::FORWARD == direction_ && writePos_ == intLoopStart_) || (Direction::BACKWARDS == direction_ && writePos_ == intLoopEnd_))
+        {
+            heads_[READ].SetIndex(writePos_);
+        }
+    }
 }
 
 void Looper::ToggleDirection()

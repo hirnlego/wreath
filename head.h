@@ -12,11 +12,11 @@
 
 namespace wreath
 {
-    constexpr float kMinLoopLengthSamples{46.f};  // ~ C6 @ 48KHz
+    constexpr float kMinLoopLengthSamples{46.f};  // ~C1 @ 48KHz
     constexpr float kSamplesToFade{48.f * 100}; // 20ms @ 48KHz
     constexpr float kMaxSamplesToFade{4800.f}; // 100ms @ 48KHz
-    constexpr float kMinSamplesForTone{2400}; // 50ms @ 48KHz
-    constexpr float kMinSamplesForFlanger{4800}; // 100ms @ 48KHz
+    constexpr float kMinSamplesForTone{91.f}; // ~C2 @ 48KHz
+    constexpr float kMinSamplesForFlanger{1722.f}; // 34ms @ 48KHz
     constexpr float kSwitchAndRampThresh{0.2f};
     constexpr float kFreezeResolution{0.0001f};
     constexpr float kEqualCrossFadeP{1.25f};

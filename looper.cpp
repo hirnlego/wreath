@@ -275,7 +275,7 @@ void Looper::SetLoopSync(bool loopSync)
 float Looper::Read(float input)
 {
     float value = heads_[READ].Read(input);
-    float valueToFade = 0;//freeze_ == 1.f ? 0 : input;
+    float valueToFade = freeze_ == 1.f ? 0 : input;
     float samples = heads_[READ].GetSamplesToFade();
 
     // Set a full fade (out + in) when the read head get near the loop end or

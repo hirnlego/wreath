@@ -449,23 +449,6 @@ namespace wreath
 
                 if (mustRestart)
                 {
-                    /*
-                    static bool dl{};
-                    static bool dr{};
-                    if (!dl)
-                    {
-                        dl = loopers_[LEFT].Restart(resetPosition);
-                    }
-                    if (!dr)
-                    {
-                        dr = loopers_[RIGHT].Restart(resetPosition);
-                    }
-                    if (dl && dr)
-                    {
-                        dl = dr = false;
-                        mustRestart = false;
-                    }
-                    */
                     loopers_[LEFT].Trigger();
                     loopers_[RIGHT].Trigger();
                     mustRestart = false;
@@ -582,8 +565,6 @@ namespace wreath
         float Mix(float a, float b)
         {
             return SoftClip(a + b);
-            // return a + b - ((a * b) / 2.f);
-            // return (1 / std::sqrt(2)) * (a + b);
         }
 
         float Filter(float value)

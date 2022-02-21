@@ -16,7 +16,7 @@ namespace wreath
     constexpr float kSamplesToFade{48.f * 100}; // 20ms @ 48KHz
     constexpr float kMaxSamplesToFade{4800.f}; // 100ms @ 48KHz
     constexpr float kMinSamplesForTone{91.f}; // ~C2 @ 48KHz
-    constexpr float kMinSamplesForFlanger{1722.f}; // 34ms @ 48KHz
+    constexpr float kMinSamplesForFlanger{1722.f};
     constexpr float kSwitchAndRampThresh{0.2f};
     constexpr float kFreezeResolution{0.0001f};
     constexpr float kEqualCrossFadeP{1.25f};
@@ -699,7 +699,7 @@ namespace wreath
             // Interpolate value only it the index has a fractional part.
             if (frac > std::numeric_limits<float>::epsilon())
             {
-                value = value + (buffer[WrapIndex(intPos + direction_)] - value) * frac;
+                value = value + (buffer[WrapIndex(intPos + std::max(1.f, rate_ * direction_))] - value) * frac;
             }
 
             return value;

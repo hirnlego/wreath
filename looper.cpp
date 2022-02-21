@@ -275,14 +275,21 @@ void Looper::SetLoopSync(bool loopSync)
 float Looper::Read(float input)
 {
     float value = heads_[READ].Read(input);
-    float valueToFade = freeze_ == 1.f ? 0 : input;
+    float valueToFade = input;
+    if (readRate_ != writeRate_ || freeze_ > 0)
+    {
+        valueToFade = 0;
+    }
     float samples = heads_[READ].GetSamplesToFade();
+    float fadeRate = freeze_ == 1.f ? 1.f : readRate_;
+    samples = samples * fadeRate;
 
     // Set a full fade (out + in) when the read head get near the loop end or
     // loop start, depending on the direction.
     // Note: this is needed in both looper and delay mode!
-    int32_t pos = Direction::FORWARD == direction_ ? intLoopEnd_ - (samples * readRate_) : intLoopStart_ + (samples * readRate_);
-    if ((intLoopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_) && intLoopLength_ >= samples && heads_[READ].GetIntPosition() == pos && Fade::NO_FADE == mustFadeRead_)
+    float pos = Direction::FORWARD == direction_ ? intLoopEnd_ - samples : intLoopStart_ + samples;
+    bool posCond = Direction::FORWARD == direction_ ? readPos_ >= pos : readPos_ <= pos;
+    if ((intLoopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_) && intLoopLength_ >= samples && posCond && Fade::NO_FADE == mustFadeRead_)
     {
         mustFadeRead_ = Fade::FADE_OUT_IN;
         readFadeIndex_ = 0;
@@ -295,7 +302,7 @@ float Looper::Read(float input)
         {
             mustFadeRead_ = Fade::NO_FADE;
         }
-        readFadeIndex_ += readRate_;
+        readFadeIndex_ += fadeRate;
     }
     else if (Fade::FADE_OUT == mustFadeRead_ || Fade::FADE_OUT_IN == mustFadeRead_ || Fade::FADE_TRIGGER == mustFadeRead_)
     {
@@ -325,7 +332,7 @@ float Looper::Read(float input)
                 mustFadeRead_ = Fade::NO_FADE;
             }
         }
-        readFadeIndex_ += readRate_;
+        readFadeIndex_ += fadeRate;
     }
 
     return value;

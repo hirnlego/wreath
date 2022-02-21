@@ -335,8 +335,7 @@ void Looper::Write(float input)
 {
     if (!freeze_)
     {
-        float currentValue = heads_[READ].GetCurrentValue();
-        currentValue = 0;
+        float currentValue = heads_[WRITE].GetCurrentValue();
         float samples = isFading_ ? mustFadeWriteSamples_ : heads_[WRITE].GetSamplesToFade();
         if (Fade::FADE_IN == mustFadeWrite_)
         {
@@ -344,7 +343,6 @@ void Looper::Write(float input)
             if (writeFadeIndex_ >= samples)
             {
                 isFading_ = false;
-                crossPointFound_ = false;
                 mustFadeWrite_ = Fade::NO_FADE;
             }
             writeFadeIndex_ += std::max(1.f, readRate_);
@@ -555,14 +553,13 @@ void Looper::HandleFade()
             // Calculate the correct point to start the write head's fade,
             // that is the minimum distance from the cross point of the read
             // and write heads.
-            // The fade samples and rate are calculated taking into account
-            // the heads' speeds and the direction.
             int32_t samples = (writeSpeed_ < readSpeed_) ? CalculateDistance(intReadPos, crossPoint_, readSpeed_, 0) : CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0);
             // If the condition are met, start the fade out of the write head.
             if (samples > 0 && samples <= heads_[READ].GetSamplesToFade())
             {
                 //heads_[WRITE].SetWriteFade(samples, std::max(1.f, readRate_));
                 //heads_[WRITE].Stop();
+                crossPointFound_ = false;
                 isFading_ = true;
                 mustFadeWrite_ = Fade::FADE_OUT_IN;
                 mustFadeWriteSamples_ = samples;

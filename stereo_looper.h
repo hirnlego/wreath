@@ -17,6 +17,7 @@ namespace wreath
     constexpr int32_t kSampleRate{48000};
     // constexpr int kBufferSeconds{150}; // 2:30 minutes max, with 2 buffers
     constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
+    //constexpr int kBufferSeconds{1};
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
     // constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
     constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K

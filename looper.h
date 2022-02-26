@@ -33,8 +33,8 @@ namespace wreath
         void SetWritePos(float position);
         float Read(float input);
         void Write(float value);
-        void UpdateReadPos();
-        void UpdateWritePos();
+        bool UpdateReadPos();
+        bool UpdateWritePos();
         void HandleFade();
         bool Start(bool now);
         bool Stop(bool now);
@@ -68,7 +68,7 @@ namespace wreath
 
         inline float GetFreeze() { return freeze_; }
 
-        inline int32_t GetWritePos() { return writePos_; }
+        inline float GetWritePos() { return writePos_; }
 
         inline float GetReadRate() { return readRate_; }
         inline float GetWriteRate() { return writeRate_; }
@@ -82,9 +82,10 @@ namespace wreath
 
         inline void SetReading(bool active) { readingActive_ = active; }
 
-        inline int32_t GetHeadsDistance() { return headsDistance_; }
-        inline int32_t GetCrossPoint() { return crossPoint_; }
+        inline float GetHeadsDistance() { return headsDistance_; }
+        inline float GetCrossPoint() { return crossPoint_; }
         inline bool CrossPointFound() { return crossPointFound_; }
+        float CalculateDistance(float a, float b, float aSpeed, float bSpeed, Direction direction);
 
     private:
         enum Fade
@@ -96,7 +97,6 @@ namespace wreath
             FADE_TRIGGER,
         };
 
-        int32_t CalculateDistance(int32_t a, int32_t b, float aSpeed, float bSpeed);
         void CalculateCrossPoint();
 
         float *buffer_{};           // The buffer
@@ -111,14 +111,14 @@ namespace wreath
         float readSpeed_{};         // Actual read speed
         float writeSpeed_{};        // Actual write speed
         int32_t bufferSamples_{};    // The written buffer length in samples
-        int32_t writePos_{};         // The write position
+        float writePos_{};         // The write position
         float loopStart_{};        // Loop start position
         float loopEnd_{};          // Loop end position
         float loopLength_{};       // Length of the loop in samples
         int32_t intLoopLength_{};
         int32_t intLoopStart_{};        // Loop start position
         int32_t intLoopEnd_{};          // Loop end position
-        int32_t headsDistance_{};
+        float headsDistance_{};
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};
         bool readingActive_{true};
@@ -128,7 +128,7 @@ namespace wreath
         bool loopSync_{};
         bool isRestarting_{};
         bool isFading_{};
-        int32_t crossPoint_{};
+        float crossPoint_{};
         bool crossPointFound_{};
         float fadeBufferPos_{};
         bool mustPasteFadeBuffer_{};
@@ -141,7 +141,7 @@ namespace wreath
 
         Fade mustFadeRead_{};
         Fade mustFadeWrite_{};
-        int32_t mustFadeWriteSamples_{};
+        float mustFadeWriteSamples_{};
         float readFadeIndex_{};
         float writeFadeIndex_{};
         bool zeroFade_{};

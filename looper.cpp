@@ -40,7 +40,7 @@ void Looper::Reset()
     loopLengthSeconds_ = 0.f;
     readPos_ = 0.f;
     readPosSeconds_ = 0.f;
-    writePos_ = 0;
+    writePos_ = 0.f;
 }
 
 void Looper::ClearBuffer()
@@ -352,7 +352,7 @@ void Looper::Write(float input)
                 isFading_ = false;
                 mustFadeWrite_ = Fade::NO_FADE;
             }
-            writeFadeIndex_ += std::max(1.f, readRate_);
+            writeFadeIndex_ += writeRate_;
         }
         else if (Fade::FADE_OUT == mustFadeWrite_ || Fade::FADE_OUT_IN == mustFadeWrite_)
         {
@@ -369,30 +369,41 @@ void Looper::Write(float input)
                     mustFadeWrite_ = Fade::NO_FADE;
                 }
             }
-            writeFadeIndex_ += std::max(1.f, readRate_);
+            writeFadeIndex_ += writeRate_;
         }
     }
 
     heads_[WRITE].Write(input);
 }
 
-void Looper::UpdateReadPos()
+bool Looper::UpdateReadPos()
 {
-    readPos_ = heads_[READ].UpdatePosition();
+    bool toggle = heads_[READ].UpdatePosition();
+    readPos_ = heads_[READ].GetPosition();
     readPosSeconds_ = readPos_ / sampleRate_;
+
+    return toggle;
 }
 
-void Looper::UpdateWritePos()
+bool Looper::UpdateWritePos()
 {
-    heads_[WRITE].UpdatePosition();
+    bool toggle = heads_[WRITE].UpdatePosition();
     writePos_ = heads_[WRITE].GetIntPosition();
+    int32_t intWritePos = writePos_;
+
+    // To avoid a constant change of phase when changing the rate in delay mode
+    // when in the "flanger" zone, keep in sync the read and the write head's
+    // positions each time the latter reaches either the start or the end of the
+    // loop, depending on the reading direction.
     if (loopSync_ && intLoopLength_ <= kMinSamplesForFlanger && freeze_ == 0)
     {
-        if ((Direction::FORWARD == direction_ && writePos_ == intLoopStart_) || (Direction::BACKWARDS == direction_ && writePos_ == intLoopEnd_))
+        if ((Direction::FORWARD == direction_ && intWritePos == intLoopStart_) || (Direction::BACKWARDS == direction_ && intWritePos == intLoopEnd_))
         {
             heads_[READ].SetIndex(writePos_);
         }
     }
+
+    return toggle;
 }
 
 void Looper::ToggleDirection()
@@ -426,7 +437,7 @@ void Looper::SetTriggerMode(TriggerMode mode)
     triggerMode_ = mode;
 }
 
-int32_t Looper::CalculateDistance(int32_t a, int32_t b, float aSpeed, float bSpeed)
+float Looper::CalculateDistance(float a, float b, float aSpeed, float bSpeed, Direction direction)
 {
     if (a == b)
     {
@@ -438,34 +449,42 @@ int32_t Looper::CalculateDistance(int32_t a, int32_t b, float aSpeed, float bSpe
     {
         if (a > b)
         {
-            return (aSpeed > bSpeed) ? loopEnd_ - a + b : a - b;
+            return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopEnd_ - a + b : a - b;
         }
 
-        return (bSpeed > aSpeed) ? loopEnd_ - b + a : b - a;
+        return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopEnd_ - b + a : b - a;
     }
 
     // Broken loop, case where a is in the second segment and b in the first.
-    if (a > loopStart_ && b < loopEnd_)
+    if (a >= loopStart_ && b <= loopEnd_)
     {
-        return (aSpeed > bSpeed) ? (bufferSamples_ - 1) - a + b : (loopEnd_ - b) + (a - loopStart_);
+        return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopLength_ - ((loopEnd_ - b) + (a - loopStart_)) : (loopEnd_ - b) + (a - loopStart_);
     }
 
     // Broken loop, case where b is in the second segment and a in the first.
-    if (b > loopStart_ && a < loopEnd_)
+    if (b >= loopStart_ && a <= loopEnd_)
     {
-        return (bSpeed > aSpeed) ? (bufferSamples_ - 1) - b + a : (loopEnd_ - a) + (b - loopStart_);
+        return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopLength_ - ((loopEnd_ - a) + (b - loopStart_)) : (loopEnd_ - a) + (b - loopStart_);
     }
 
     if (a > b)
     {
-        return (aSpeed > bSpeed) ? loopLength_ - (a - b) : a - b;
+        return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopLength_ - (a - b) : a - b;
     }
 
-    return (bSpeed > aSpeed) ? loopLength_ - (b - a) : b - a;
+    return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopLength_ - (b - a) : b - a;
 }
 
 void Looper::CalculateCrossPoint()
 {
+    // Do not calculate the cross point if the write head is outside of
+    // the loop (this is expecially true in looper mode, when it roams
+    // along all the buffer).
+    if ((loopEnd_ > loopStart_ && (writePos_ < loopStart_ || writePos_ > loopEnd_)) || (loopStart_ > loopEnd_ && writePos_ < loopStart_ && writePos_ > loopEnd_))
+    {
+        return;
+    }
+
     float relSpeed{writeSpeed_ > readSpeed_ ? writeSpeed_ - readSpeed_ : readSpeed_ - writeSpeed_};
     if (!IsGoingForward())
     {
@@ -481,7 +500,7 @@ void Looper::CalculateCrossPoint()
         // Wrap the crossing point if it's outside of the loop (or the buffer).
         if (crossPoint_ > loopEnd_ || crossPoint_ >= bufferSamples_)
         {
-            int32_t r = crossPoint_ % intLoopLength_;
+            float r = std::fmod(crossPoint_, loopLength_);
             if (loopStart_ + r > bufferSamples_)
             {
                 crossPoint_ = r - (bufferSamples_ - loopStart_);
@@ -497,7 +516,7 @@ void Looper::CalculateCrossPoint()
         // Wrap the crossing point if it's outside of the buffer.
         if (crossPoint_ >= bufferSamples_)
         {
-            int32_t r = crossPoint_ % intLoopLength_;
+            float r = std::fmod(crossPoint_, loopLength_);
             if (loopStart_ + r > bufferSamples_)
             {
                 crossPoint_ = r - (bufferSamples_ - loopStart_);
@@ -515,28 +534,13 @@ void Looper::CalculateCrossPoint()
         }
     }
 
+    crossPoint_ = std::floor(crossPoint_);
+
     crossPointFound_ = true;
 }
 
 void Looper::HandleFade()
 {
-    int32_t intReadPos = heads_[READ].GetIntPosition();
-/*
-    if (isFading_)
-    {
-        // When the write head stopped we may restart it.
-        if (RunStatus::STOPPED == heads_[WRITE].GetRunStatus())
-        {
-            heads_[WRITE].Start();
-        }
-        // Finally, remove any trace of the fade operation.
-        if (RunStatus::RUNNING == heads_[WRITE].GetRunStatus())
-        {
-            crossPointFound_ = false;
-            isFading_ = false;
-        }
-    }
-*/
     // Fading is not needed when frozen.
     if (freeze_ == 1 || isFading_)
     {
@@ -547,9 +551,10 @@ void Looper::HandleFade()
     // backwards.
     if (readSpeed_ != writeSpeed_ || !IsGoingForward())
     {
-        headsDistance_ = CalculateDistance(intReadPos, writePos_, readSpeed_, writeSpeed_);
+        headsDistance_ = CalculateDistance(readPos_, writePos_, readSpeed_, writeSpeed_, direction_);
 
         // Calculate the cross point.
+        // FIXME: This doesn't work with loopSync_ = false!
         if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].GetSamplesToFade() * 2)
         {
             CalculateCrossPoint();
@@ -558,14 +563,17 @@ void Looper::HandleFade()
         if (crossPointFound_ && !isFading_)
         {
             // Calculate the correct point to start the write head's fade,
-            // that is the minimum distance from the cross point of the read
-            // and write heads.
-            int32_t samples = (writeSpeed_ < readSpeed_) ? CalculateDistance(intReadPos, crossPoint_, readSpeed_, 0) : CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0);
+            // that is the minimum distance from the cross point of either the
+            // read or the write heads.
+            /*
+            float readDist = CalculateDistance(readPos_, crossPoint_, readSpeed_, 0, direction_);
+            float writeDist = CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0, Direction::FORWARD);
+            float samples = (readSpeed_ > writeSpeed_) ? readDist : writeDist;
+            */
+            float samples = CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0, Direction::FORWARD);
             // If the condition are met, start the fade out of the write head.
             if (samples > 0 && samples <= heads_[READ].GetSamplesToFade())
             {
-                //heads_[WRITE].SetWriteFade(samples, std::max(1.f, readRate_));
-                //heads_[WRITE].Stop();
                 crossPointFound_ = false;
                 isFading_ = true;
                 mustFadeWrite_ = Fade::FADE_OUT_IN;

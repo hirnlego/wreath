@@ -1,5 +1,6 @@
 #include "head.h"
 #include "looper.h"
+#include <ctime>
 #include <cstdlib>
 #include <iostream>
 #include <cassert>
@@ -252,13 +253,125 @@ void TestLeds()
     }
 }
 
+void TestCrossPoint()
+{
+    std::srand(static_cast<unsigned>(time(0)));
+
+    Buffer(false);
+
+    looper.SetTriggerMode(Looper::TriggerMode::LOOP);
+    looper.SetMovement(Movement::NORMAL);
+    looper.SetLoopSync(true);
+
+    float loopStart = std::rand() / (RAND_MAX / static_cast<float>(bufferSamples - 1));
+    loopStart = 18374.f;
+    float loopLength = kMinLoopLengthSamples + std::rand() / (RAND_MAX / ((bufferSamples - 1) - kMinLoopLengthSamples));
+    loopLength = 33929.6f;
+
+    looper.SetLoopLength(loopLength);
+    looper.SetLoopStart(loopStart);
+    bool inverted = looper.GetLoopStart() > looper.GetLoopEnd();
+    looper.SetReadRate(1.574f);
+    //looper.SetReadRate(0.34f);
+    looper.SetWriteRate(1.f);
+    looper.SetDirection(Direction::FORWARD);
+    //looper.SetReadPos(inverted ? looper.GetLoopEnd() : looper.GetLoopStart());
+    //looper.SetWritePos(std::floor(inverted ? looper.GetLoopStart() : looper.GetLoopEnd()));
+    looper.SetReadPos(40000);
+    looper.SetWritePos(30000);
+    looper.Start(true);
+
+    std::cout << "Read rate: " << looper.GetReadRate() << "\n";
+    std::cout << "Write rate: " << looper.GetWriteRate() << "\n";
+    std::cout << "Loop start: " << looper.GetLoopStart() << "\n";
+    std::cout << "Loop end: " << looper.GetLoopEnd() << "\n";
+    std::cout << "Loop length: " << looper.GetLoopLength() << "\n";
+    std::cout << "Inverted loop: " << (inverted ? "YES" : "NO") << "\n";
+    std::cout << "Read pos: " << looper.GetReadPos() << "\n";
+    std::cout << "Write pos: " << looper.GetWritePos() << "\n";
+    float min{48000};
+    looper.HandleFade();
+    std::cout << "Heads distance: " << looper.GetHeadsDistance() << "\n\n";
+    while (!looper.CrossPointFound())
+    {
+        looper.HandleFade();
+        looper.UpdateWritePos();
+        looper.UpdateReadPos();
+        /*
+        std::cout << "Heads distance: " << looper.GetHeadsDistance() << "\n";
+        //std::cout << "Read pos: " << looper.GetReadPos() << "\n";
+        //std::cout << "Write pos: " << looper.GetWritePos() << "\n\n";
+        if ( looper.GetHeadsDistance() > 0 && looper.GetHeadsDistance() < min)
+        {
+            std::cout << "Min distance: " <<  looper.GetHeadsDistance() << "\n";
+            std::cout << "Read pos: " << looper.GetReadPos() << "\n";
+            std::cout << "Write pos: " << looper.GetWritePos() << "\n";
+            min =  looper.GetHeadsDistance();
+        }
+        */
+    }
+
+    std::cout << "----> Cross point: " << looper.GetCrossPoint() << "\n";
+    std::cout << "Read pos: " << looper.GetReadPos() << "\n";
+    std::cout << "Write pos: " << looper.GetWritePos() << "\n";
+    std::cout << "Heads distance: " << looper.GetHeadsDistance() << "\n";
+
+    float wd = looper.CalculateDistance(looper.GetWritePos(), looper.GetCrossPoint(), looper.GetWriteRate() * bufferSamples, 0, Direction::FORWARD);
+    float rd = looper.CalculateDistance(looper.GetReadPos(), looper.GetCrossPoint(), looper.GetReadRate() * bufferSamples, 0, looper.GetDirection());
+    std::cout << "Write distance: " << wd << "\n";
+    std::cout << "Read distance: " << rd << "\n\n";
+
+    int32_t fadeIndex{};
+    float samples{4800};
+    bool fade{};
+    int32_t iterations{};
+    while (fadeIndex < samples)
+    {
+        if (fade)
+        {
+            if (fadeIndex >= samples)
+            {
+                break;
+            }
+            fadeIndex += 1;
+        }
+        else
+        {
+            wd = looper.CalculateDistance(looper.GetWritePos(), looper.GetCrossPoint(), looper.GetWriteRate() * bufferSamples, 0, Direction::FORWARD);
+            rd = looper.CalculateDistance(looper.GetReadPos(), looper.GetCrossPoint(), looper.GetReadRate() * bufferSamples, 0, looper.GetDirection());
+            float wds = std::min(wd, rd);
+
+            wds = wd;
+
+            //float fr = (wd > rd) ? looper.GetReadRate() : looper.GetWriteRate();
+            //fr = looper.GetReadRate();
+            if (wds <= 4800)
+            {
+                samples = wds;
+                fade = true;
+            }
+        }
+        looper.UpdateWritePos();
+        looper.UpdateReadPos();
+        iterations++;
+    }
+    std::cout << "Iterations: " << iterations << "\n";
+    std::cout << "Samples to fade: " << samples << "\n";
+    std::cout << "Final fade index: " << fadeIndex << "\n";
+    std::cout << "Final write distance: " << wd << "\n";
+    std::cout << "Final read distance: " << rd << "\n";
+    std::cout << "----> Final read pos: " << looper.GetReadPos() << "\n";
+    std::cout << "----> Final write pos: " << looper.GetWritePos() << "\n";
+}
+
 int main()
 {
     looper.Init(48000, buffer, buffer2, 48000);
 
     //TestBoundaries();
     //TestRead();
-    TestLeds();
+    //TestLeds();
+    TestCrossPoint();
 
     return 0;
 }

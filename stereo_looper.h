@@ -16,8 +16,8 @@ namespace wreath
 
     constexpr int32_t kSampleRate{48000};
     // constexpr int kBufferSeconds{150}; // 2:30 minutes max, with 2 buffers
-    constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
-    //constexpr int kBufferSeconds{1};
+    //constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
+    constexpr int kBufferSeconds{1};
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
     // constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
     constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
@@ -110,6 +110,9 @@ namespace wreath
 
         float nextLeftReadRate{};
         float nextRightReadRate{};
+
+        float nextLeftWriteRate{};
+        float nextRightWriteRate{};
 
         float nextLeftFreeze{};
         float nextRightFreeze{};
@@ -275,6 +278,13 @@ namespace wreath
             {
                 conf_.direction = direction;
             }
+            // Before the looper starts, if the direction is backwards set the
+            // read head at the end of the loop.
+            if (State::READY == state_ && Direction::BACKWARDS == direction)
+            {
+                loopers_[LEFT].SetReadPos(loopers_[LEFT].GetLoopEnd());
+                loopers_[RIGHT].SetReadPos(loopers_[RIGHT].GetLoopEnd());
+            }
         }
 
         void SetLoopStart(int channel, float value)
@@ -291,12 +301,6 @@ namespace wreath
 
         void SetFreeze(int channel, float amount)
         {
-            if (State::READY != state_)
-            {
-                state_ = amount == 1.f ? State::FROZEN : State::RECORDING;
-            }
-            freeze_ = amount;
-
             if (LEFT == channel || BOTH == channel)
             {
                 nextLeftFreeze = amount;
@@ -304,6 +308,11 @@ namespace wreath
             if (RIGHT == channel || BOTH == channel)
             {
                 nextRightFreeze = amount;
+            }
+            freeze_ = amount;
+            if (State::READY != state_)
+            {
+                state_ = amount == 1.f ? State::FROZEN : State::RECORDING;
             }
         }
 
@@ -322,8 +331,14 @@ namespace wreath
 
         void SetWriteRate(int channel, float rate)
         {
-            mustSetChannelWriteRate = channel;
-            nextWriteRate = rate;
+            if (LEFT == channel || BOTH == channel)
+            {
+                nextLeftWriteRate = rate;
+            }
+            if (RIGHT == channel || BOTH == channel)
+            {
+                nextRightWriteRate = rate;
+            }
         }
 
         void SetLoopLength(int channel, float length)
@@ -417,6 +432,8 @@ namespace wreath
                 nextRightLoopStart = loopers_[RIGHT].GetLoopStart();
                 nextLeftReadRate = 1.f;
                 nextRightReadRate = 1.f;
+                nextLeftWriteRate = 1.f;
+                nextRightWriteRate = 1.f;
                 nextLeftFreeze = 0.f;
                 nextRightFreeze = 0.f;
 
@@ -475,12 +492,18 @@ namespace wreath
                     }
                 }
 
+                loopers_[LEFT].HandleFade();
+                loopers_[RIGHT].HandleFade();
+
                 leftWet = loopers_[LEFT].Read(leftDry);
                 rightWet = loopers_[RIGHT].Read(rightDry);
 
+                static bool toggleLeft{};
+                static bool toggleRight{};
+
                 // Feedback path.
-                float leftFeedback = (leftWet * feedback);
-                float rightFeedback = (rightWet * feedback);
+                float leftFeedback = ((toggleLeft ? rightWet : leftWet) * feedback);
+                float rightFeedback = ((toggleRight ? leftWet : rightWet) * feedback);
                 leftFeedback = Mix(leftFeedback, Filter(leftFeedback));
                 rightFeedback = Mix(rightFeedback, Filter(rightFeedback));
                 leftFeedback *= (feedbackLevel - filterEnvelope_.GetEnv(leftFeedback));
@@ -492,14 +515,19 @@ namespace wreath
                 loopers_[LEFT].Write(Mix(leftDry, leftFeedback));
                 loopers_[RIGHT].Write(Mix(rightDry, rightFeedback));
 
-                loopers_[LEFT].UpdateReadPos();
-                loopers_[RIGHT].UpdateReadPos();
-
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
 
-                loopers_[LEFT].HandleFade();
-                loopers_[RIGHT].HandleFade();
+                bool tl = loopers_[LEFT].UpdateReadPos();
+                if (toggleLeft != tl)
+                {
+                    toggleLeft = tl;
+                }
+                bool tr = loopers_[RIGHT].UpdateReadPos();
+                if (toggleRight != tr)
+                {
+                    toggleRight = tr;
+                }
 
                 /*
                 if (!hasCvRestart)
@@ -643,6 +671,21 @@ namespace wreath
                 float coeff = rateSlew > 0 ? 1.f / (rateSlew * sampleRate_) : 1.f;
                 fonepole(rightReadRate, nextRightReadRate, coeff);
                 loopers_[RIGHT].SetReadRate(rightReadRate);
+            }
+
+            float leftWriteRate = loopers_[LEFT].GetWriteRate();
+            if (leftWriteRate != nextLeftWriteRate)
+            {
+                float coeff = rateSlew > 0 ? 1.f / (rateSlew * sampleRate_) : 1.f;
+                fonepole(leftWriteRate, nextLeftWriteRate, coeff);
+                loopers_[LEFT].SetWriteRate(leftWriteRate);
+            }
+            float rightWriteRate = loopers_[RIGHT].GetWriteRate();
+            if (rightWriteRate != nextRightWriteRate)
+            {
+                float coeff = rateSlew > 0 ? 1.f / (rateSlew * sampleRate_) : 1.f;
+                fonepole(rightWriteRate, nextRightWriteRate, coeff);
+                loopers_[RIGHT].SetWriteRate(rightWriteRate);
             }
 
             float leftFreeze = loopers_[LEFT].GetFreeze();

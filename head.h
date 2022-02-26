@@ -450,38 +450,41 @@ namespace wreath
         {
             SetIndex(FORWARD == direction_ ? loopStart_ : loopEnd_);
         }
-        float UpdatePosition()
+        bool UpdatePosition()
         {
             if (RunStatus::STOPPED == runStatus_)
             {
-                return index_;
+                return false;
             }
 
             float index = index_ + (rate_ * direction_);
             SetIndex(index);
             Action action = HandleLoopAction();
 
-            if (READ == type_)
+            switch (action)
             {
-                switch (action)
+            case STOP:
+                if (READ == type_)
                 {
-                case STOP:
                     Stop();
-                    break;
-
-                case INVERT:
-                    ToggleDirection();
-                    break;
-
-                case LOOP:
-                    break;
-
-                default:
-                    break;
                 }
+                return true;
+
+            case INVERT:
+                if (READ == type_)
+                {
+                    ToggleDirection();
+                }
+                return true;
+
+            case LOOP:
+                return true;
+
+            default:
+                break;
             }
 
-            return index_;
+            return false;
         }
 
         bool IsFading()

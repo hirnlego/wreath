@@ -49,13 +49,10 @@ std::string MapMovement(Movement movement)
     {
     case Movement::NORMAL:
         return "Normal";
-        break;
     case Movement::DRUNK:
         return "Drunk";
-        break;
     case Movement::PENDULUM:
         return "Pendulum";
-        break;
     default:
         break;
     }
@@ -67,10 +64,8 @@ std::string MapDirection(Direction direction)
     {
     case Direction::FORWARD:
         return "Forward";
-        break;
     case Direction::BACKWARDS:
         return "Backwards";
-        break;
     default:
         break;
     }
@@ -364,6 +359,70 @@ void TestCrossPoint()
     std::cout << "----> Final write pos: " << looper.GetWritePos() << "\n";
 }
 
+void TestHeadsDistance()
+{
+    Buffer(false);
+
+    looper.SetTriggerMode(Looper::TriggerMode::LOOP);
+    looper.SetMovement(Movement::NORMAL);
+    looper.SetLoopSync(true);
+    looper.Start(true);
+
+    struct Scenario
+    {
+        std::string desc{};
+        float loopLength{};
+        float loopStart{};
+        Direction direction{};
+        float readRate{};
+        float readPos{};
+        float writePos{};
+        float distance{};
+    };
+
+    static Scenario scenarios[] =
+    {
+        { "1", 48000, 0, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
+        { "2", 40000, 30000, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
+        { "3", 48000, 0, Direction::BACKWARDS, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
+        { "4", 40000, 30000, Direction::BACKWARDS, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
+        //{ "5", 48000, 0, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
+        //{ "6", 48000, 0, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
+        //{ "7", 48000, 0, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
+    };
+
+    std::cout << "\n";
+
+    for (Scenario scenario : scenarios)
+    {
+        std::cout << "Scenario " << scenario.desc << "\n";
+        std::cout << "Loop length: " << scenario.loopLength << "\n";
+        std::cout << "Loop start: " << scenario.loopStart << "\n";
+        std::cout << "Direction: " << MapDirection(scenario.direction) << "\n";
+        std::cout << "Read rate: " << scenario.readRate << "\n";
+        std::cout << "Read pos: " << scenario.readPos << "\n";
+        std::cout << "Write pos: " << scenario.writePos << "\n";
+
+        looper.SetLoopLength(scenario.loopLength);
+        looper.SetLoopStart(scenario.loopStart);
+        bool inverted = looper.GetLoopStart() > looper.GetLoopEnd();
+        looper.SetReadRate(scenario.readRate);
+        //looper.SetReadRate(0.34f);
+        looper.SetWriteRate(1.f);
+        looper.SetDirection(scenario.direction);
+        //looper.SetReadPos(inverted ? looper.GetLoopEnd() : looper.GetLoopStart());
+        //looper.SetWritePos(std::floor(inverted ? looper.GetLoopStart() : looper.GetLoopEnd()));
+        looper.SetReadPos(scenario.readPos);
+        looper.SetWritePos(scenario.writePos);
+
+        float distance = looper.CalculateDistance(scenario.readPos, scenario.writePos, scenario.readRate * bufferSamples, bufferSamples, scenario.direction);
+        std::cout << "Distance: " << distance << " (expected: " << scenario.distance << ")\n";
+        //assert(distance == scenario.distance);
+
+        std::cout << "\n";
+    }
+}
+
 int main()
 {
     looper.Init(48000, buffer, buffer2, 48000);
@@ -371,7 +430,8 @@ int main()
     //TestBoundaries();
     //TestRead();
     //TestLeds();
-    TestCrossPoint();
+    //TestCrossPoint();
+    TestHeadsDistance();
 
     return 0;
 }

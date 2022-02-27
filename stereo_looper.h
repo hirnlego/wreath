@@ -16,8 +16,8 @@ namespace wreath
 
     constexpr int32_t kSampleRate{48000};
     // constexpr int kBufferSeconds{150}; // 2:30 minutes max, with 2 buffers
-    //constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
-    constexpr int kBufferSeconds{1};
+    constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
+    //constexpr int kBufferSeconds{1};
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
     // constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
     constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
@@ -498,12 +498,9 @@ namespace wreath
                 leftWet = loopers_[LEFT].Read(leftDry);
                 rightWet = loopers_[RIGHT].Read(rightDry);
 
-                static bool toggleLeft{};
-                static bool toggleRight{};
-
                 // Feedback path.
-                float leftFeedback = ((toggleLeft ? rightWet : leftWet) * feedback);
-                float rightFeedback = ((toggleRight ? leftWet : rightWet) * feedback);
+                float leftFeedback = leftWet * feedback;
+                float rightFeedback = rightWet * feedback;
                 leftFeedback = Mix(leftFeedback, Filter(leftFeedback));
                 rightFeedback = Mix(rightFeedback, Filter(rightFeedback));
                 leftFeedback *= (feedbackLevel - filterEnvelope_.GetEnv(leftFeedback));
@@ -518,16 +515,8 @@ namespace wreath
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
 
-                bool tl = loopers_[LEFT].UpdateReadPos();
-                if (toggleLeft != tl)
-                {
-                    toggleLeft = tl;
-                }
-                bool tr = loopers_[RIGHT].UpdateReadPos();
-                if (toggleRight != tr)
-                {
-                    toggleRight = tr;
-                }
+                loopers_[LEFT].UpdateReadPos();
+                loopers_[RIGHT].UpdateReadPos();
 
                 /*
                 if (!hasCvRestart)

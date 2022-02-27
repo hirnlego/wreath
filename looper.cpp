@@ -122,7 +122,7 @@ void Looper::Trigger()
         heads_[WRITE].ResetPosition();
     }
     heads_[READ].SetRunStatus(RunStatus::RUNNING);
-    mustFadeRead_ = Fade::FADE_OUT_IN;
+    mustFadeRead_ = Fade::FADE_TRIGGER;
     readFadeIndex_ = 0;
 }
 
@@ -204,6 +204,11 @@ void Looper::SetLoopLength(float length)
         mustPaste_ = true;
     }
 
+    if (loopLength_ > kMinSamplesForFlanger)
+    {
+        // Keep heads in sync when resizin the loop.
+        heads_[WRITE].SetIndex(readPos_);
+    }
     crossPointFound_ = false;
 }
 
@@ -284,15 +289,17 @@ float Looper::Read(float input)
     float fadeRate = freeze_ == 1.f ? 1.f : readRate_;
     samples = samples * fadeRate;
 
-    // Set a full fade (out + in) when the read head get near the loop end or
-    // loop start, depending on the direction.
-    // Note: this is needed in both looper and delay mode!
-    float pos = Direction::FORWARD == direction_ ? intLoopEnd_ - samples : intLoopStart_ + samples;
-    bool posCond = Direction::FORWARD == direction_ ? readPos_ >= pos : readPos_ <= pos;
-    if ((intLoopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_) && intLoopLength_ >= samples && posCond && Fade::NO_FADE == mustFadeRead_)
+    // In delay mode, set a full fade (out + in) when the read head get near the
+    // loop end or loop start, depending on the direction.
+    if (!loopSync_)
     {
-        mustFadeRead_ = Fade::FADE_OUT_IN;
-        readFadeIndex_ = 0;
+        float pos = Direction::FORWARD == direction_ ? intLoopEnd_ - samples : intLoopStart_ + samples;
+        bool posCond = Direction::FORWARD == direction_ ? readPos_ >= pos : readPos_ <= pos;
+        if ((intLoopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_) && intLoopLength_ >= samples && posCond && Fade::NO_FADE == mustFadeRead_)
+        {
+            mustFadeRead_ = Fade::FADE_OUT_IN;
+            readFadeIndex_ = 0;
+        }
     }
 
     if (Fade::FADE_IN == mustFadeRead_)
@@ -553,14 +560,6 @@ void Looper::HandleFade()
 
         if (crossPointFound_ && !isFading_)
         {
-            // Calculate the correct point to start the write head's fade,
-            // that is the minimum distance from the cross point of either the
-            // read or the write heads.
-            /*
-            float readDist = CalculateDistance(readPos_, crossPoint_, readSpeed_, 0, direction_);
-            float writeDist = CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0, Direction::FORWARD);
-            float samples = (readSpeed_ > writeSpeed_) ? readDist : writeDist;
-            */
             float samples = CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0, Direction::FORWARD);
             // If the condition are met, start the fade out of the write head.
             if (samples > 0 && samples <= heads_[READ].GetSamplesToFade())

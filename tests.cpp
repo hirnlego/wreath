@@ -259,9 +259,9 @@ void TestCrossPoint()
     looper.SetLoopSync(true);
 
     float loopStart = std::rand() / (RAND_MAX / static_cast<float>(bufferSamples - 1));
-    loopStart = 18374.f;
+    //loopStart = 18374.f;
     float loopLength = kMinLoopLengthSamples + std::rand() / (RAND_MAX / ((bufferSamples - 1) - kMinLoopLengthSamples));
-    loopLength = 33929.6f;
+    //loopLength = 33929.6f;
 
     looper.SetLoopLength(loopLength);
     looper.SetLoopStart(loopStart);
@@ -382,29 +382,43 @@ void TestHeadsDistance()
 
     static Scenario scenarios[] =
     {
-        { "1", 48000, 0, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
-        { "2", 40000, 30000, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
-        { "3", 48000, 0, Direction::BACKWARDS, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
-        { "4", 40000, 30000, Direction::BACKWARDS, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
-        //{ "5", 48000, 0, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
-        //{ "6", 48000, 0, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
-        //{ "7", 48000, 0, Direction::FORWARD, 1.574f, 20000, 10000, 48000 - 20000 + 10000 },
+        //{ "1 - regular, forward, rs > ws, wp > rp", 20000, 10000, Direction::FORWARD, 1.574f, 11000, 15000, 15000 - 11000 },
+        //{ "2 - regular, forward, rs > ws, rp > wp", 20000, 10000, Direction::FORWARD, 1.574f, 15000, 11000, 20000 - (15000 - 11000) },
+        //{ "3 - regular, forward, ws > rs, wp > rp", 20000, 10000, Direction::FORWARD, 0.574f, 11000, 15000, 20000 - (15000 - 11000) },
+        //{ "4 - regular, forward, ws > rs, rp > wp", 20000, 10000, Direction::FORWARD, 0.574f, 15000, 11000, 15000 - 11000 },
+
+        //{ "5 - regular, backwards, rs > ws, wp > rp", 20000, 10000, Direction::BACKWARDS, 1.574f, 11000, 15000, 20000 - (15000 - 11000) },
+        //{ "6 - regular, backwards, rs > ws, rp > wp", 20000, 10000, Direction::BACKWARDS, 1.574f, 15000, 11000, 15000 - 11000 },
+        //{ "7 - regular, backwards, ws > rs, wp > rp", 20000, 10000, Direction::BACKWARDS, 0.574f, 11000, 15000, 20000 - (15000 - 11000) },
+        //{ "8 - regular, backwards, ws > rs, rp > wp", 20000, 10000, Direction::BACKWARDS, 0.574f, 15000, 11000, 15000 - 11000 },
+
+        //{ "9 - inverted, forward, rs > ws, wp > rp (same sector)", 20000, 30000, Direction::FORWARD, 1.574f, 35000, 40000, 40000 - 35000 },
+        //{ "10 - inverted, forward, rs > ws, rp > wp (same sector)", 20000, 30000, Direction::FORWARD, 1.574f, 40000, 35000, 20000 - (40000 - 35000) },
+        //{ "11 - inverted, forward, rs > ws, wp > rp (different sectors)", 20000, 30000, Direction::FORWARD, 1.574f, 1000, 35000, (1999 - 1000) + (35000 - 30000) },
+        //{ "12 - inverted, forward, rs > ws, rp > wp (different sectors)", 20000, 30000, Direction::FORWARD, 1.574f, 35000, 1000, 20000 - ((1999 - 1000) + (35000 - 30000)) },
+
+        //{ "13 - inverted, forward, ws > rs, wp > rp (same sector)", 20000, 30000, Direction::FORWARD, 0.574f, 35000, 40000, 20000 - (40000 - 35000) },
+        //{ "14 - inverted, forward, ws > rs, rp > wp (same sector)", 20000, 30000, Direction::FORWARD, 0.574f, 40000, 35000, 40000 - 35000 },
+        //{ "15 - inverted, forward, ws > rs, wp > rp (different sectors)", 20000, 30000, Direction::FORWARD, 0.574f, 1000, 35000, 20000 - ((1999 - 1000) + (35000 - 30000)) },
+        //{ "16 - inverted, forward, ws > rs, rp > wp (different sectors)", 20000, 30000, Direction::FORWARD, 0.574f, 35000, 1000, (1999 - 1000) + (35000 - 30000) },
+
+        //{ "17 - inverted, backwards, rs > ws, wp > rp (same sector)", 20000, 30000, Direction::BACKWARDS, 1.574f, 35000, 40000, 20000 - (40000 - 35000) },
+        //{ "18 - inverted, backwards, rs > ws, rp > wp (same sector)", 20000, 30000, Direction::BACKWARDS, 1.574f, 40000, 35000, 40000 - 35000 },
+        //{ "19 - inverted, backwards, rs > ws, wp > rp (different sectors)", 20000, 30000, Direction::BACKWARDS, 1.574f, 1000, 35000, 20000 - ((1999 - 1000) + (35000 - 30000)) },
+        //{ "20 - inverted, backwards, rs > ws, rp > wp (different sectors)", 20000, 30000, Direction::BACKWARDS, 1.574f, 35000, 1000, (1999 - 1000) + (35000 - 30000) },
+
+        //{ "21 - inverted, backwards, ws > rs, wp > rp (same sector)", 20000, 30000, Direction::BACKWARDS, 0.574f, 35000, 40000, 20000 - (40000 - 35000) },
+        //{ "22 - inverted, backwards, ws > rs, rp > wp (same sector)", 20000, 30000, Direction::BACKWARDS, 0.574f, 40000, 35000, 40000 - 35000 },
+        //{ "23 - inverted, backwards, ws > rs, wp > rp (different sectors)", 20000, 30000, Direction::BACKWARDS, 0.574f, 1000, 35000, 20000 - ((1999 - 1000) + (35000 - 30000)) },
+        { "24 - inverted, backwards, ws > rs, rp > wp (different sectors)", 20000, 30000, Direction::BACKWARDS, 0.574f, 35000, 1000, (1999 - 1000) + (35000 - 30000) },
     };
 
     std::cout << "\n";
 
     for (Scenario scenario : scenarios)
     {
-        std::cout << "Scenario " << scenario.desc << "\n";
-        std::cout << "Loop length: " << scenario.loopLength << "\n";
-        std::cout << "Loop start: " << scenario.loopStart << "\n";
-        std::cout << "Direction: " << MapDirection(scenario.direction) << "\n";
-        std::cout << "Read rate: " << scenario.readRate << "\n";
-        std::cout << "Read pos: " << scenario.readPos << "\n";
-        std::cout << "Write pos: " << scenario.writePos << "\n";
-
-        looper.SetLoopLength(scenario.loopLength);
         looper.SetLoopStart(scenario.loopStart);
+        looper.SetLoopLength(scenario.loopLength);
         bool inverted = looper.GetLoopStart() > looper.GetLoopEnd();
         looper.SetReadRate(scenario.readRate);
         //looper.SetReadRate(0.34f);
@@ -414,6 +428,17 @@ void TestHeadsDistance()
         //looper.SetWritePos(std::floor(inverted ? looper.GetLoopStart() : looper.GetLoopEnd()));
         looper.SetReadPos(scenario.readPos);
         looper.SetWritePos(scenario.writePos);
+
+        std::cout << "Scenario " << scenario.desc << "\n";
+        std::cout << "Loop length: " << looper.GetLoopLength() << "\n";
+        std::cout << "Loop start: " << looper.GetLoopStart() << "\n";
+        std::cout << "Loop end: " << looper.GetLoopEnd() << "\n";
+        std::cout << "Inverted loop: " << (inverted ? "YES" : "NO") << "\n";
+        std::cout << "Direction: " << MapDirection(looper.GetDirection()) << "\n";
+        std::cout << "Read rate: " << looper.GetReadRate() << "\n";
+        std::cout << "Read pos: " << looper.GetReadPos() << "\n";
+        std::cout << "Write pos: " << looper.GetWritePos() << "\n";
+
 
         float distance = looper.CalculateDistance(scenario.readPos, scenario.writePos, scenario.readRate * bufferSamples, bufferSamples, scenario.direction);
         std::cout << "Distance: " << distance << " (expected: " << scenario.distance << ")\n";

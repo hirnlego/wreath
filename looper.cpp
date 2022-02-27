@@ -443,28 +443,31 @@ float Looper::CalculateDistance(float a, float b, float aSpeed, float bSpeed, Di
     {
         return 0;
     }
-
+/*
     // Normal loop
     if (loopEnd_ > loopStart_)
     {
         if (a > b)
         {
-            return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopEnd_ - a + b : a - b;
+            return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopLength_ - (a - b) : a - b;
         }
 
-        return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopEnd_ - b + a : b - a;
+        return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopLength_ - (b - a) : b - a;
     }
-
-    // Broken loop, case where a is in the second segment and b in the first.
-    if (a >= loopStart_ && b <= loopEnd_)
+*/
+    if (loopStart_ > loopEnd_)
     {
-        return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopLength_ - ((loopEnd_ - b) + (a - loopStart_)) : (loopEnd_ - b) + (a - loopStart_);
-    }
+        // Broken loop, case where a is in the second segment and b in the first.
+        if (a >= loopStart_ && b <= loopEnd_)
+        {
+            return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopLength_ - ((loopEnd_ - b) + (a - loopStart_)) : (loopEnd_ - b) + (a - loopStart_);
+        }
 
-    // Broken loop, case where b is in the second segment and a in the first.
-    if (b >= loopStart_ && a <= loopEnd_)
-    {
-        return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopLength_ - ((loopEnd_ - a) + (b - loopStart_)) : (loopEnd_ - a) + (b - loopStart_);
+        // Broken loop, case where b is in the second segment and a in the first.
+        if (b >= loopStart_ && a <= loopEnd_)
+        {
+            return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopLength_ - ((loopEnd_ - a) + (b - loopStart_)) : (loopEnd_ - a) + (b - loopStart_);
+        }
     }
 
     if (a > b)
@@ -497,34 +500,23 @@ void Looper::CalculateCrossPoint()
     // Normal loop
     if (loopEnd_ > loopStart_)
     {
-        // Wrap the crossing point if it's outside of the loop (or the buffer).
-        if (crossPoint_ > loopEnd_ || crossPoint_ >= bufferSamples_)
+        // Wrap the crossing point if it's outside of the loop.
+        if (crossPoint_ > loopEnd_)
         {
-            float r = std::fmod(crossPoint_, loopLength_);
-            if (loopStart_ + r > bufferSamples_)
-            {
-                crossPoint_ = r - (bufferSamples_ - loopStart_);
-            }
-            else
-            {
-                crossPoint_ = loopStart_ + r;
-            }
+            crossPoint_ = loopStart_ + std::fmod(crossPoint_, loopLength_);
+        }
+        else if (crossPoint_ < loopStart_)
+        {
+            crossPoint_ = loopStart_ + std::fmod(crossPoint_ + loopStart_, loopLength_);
         }
     }
+    // Inverted loop
     else
     {
         // Wrap the crossing point if it's outside of the buffer.
         if (crossPoint_ >= bufferSamples_)
         {
-            float r = std::fmod(crossPoint_, loopLength_);
-            if (loopStart_ + r > bufferSamples_)
-            {
-                crossPoint_ = r - (bufferSamples_ - loopStart_);
-            }
-            else
-            {
-                crossPoint_ = loopStart_ + r;
-            }
+            crossPoint_ = std::fmod(crossPoint_, loopLength_);
         }
         // If the cross point falls just between the loop's start and end point,
         // nudge it forward.
@@ -553,8 +545,7 @@ void Looper::HandleFade()
     {
         headsDistance_ = CalculateDistance(readPos_, writePos_, readSpeed_, writeSpeed_, direction_);
 
-        // Calculate the cross point.
-        // FIXME: This doesn't work with loopSync_ = false!
+        // Calculate the cross point when the two heads are close enough.
         if (!crossPointFound_ && headsDistance_ > 0 && headsDistance_ <= heads_[READ].GetSamplesToFade() * 2)
         {
             CalculateCrossPoint();

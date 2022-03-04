@@ -38,7 +38,6 @@ namespace wreath
         void HandleFade();
         bool Start(bool now);
         bool Stop(bool now);
-        bool Restart(bool resetPosition);
         void Trigger();
         void SetLoopStart(float start);
         int32_t GetRandomPosition();
@@ -80,8 +79,6 @@ namespace wreath
         inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
         inline TriggerMode GetTriggerMode() { return triggerMode_; }
 
-        inline void SetReading(bool active) { readingActive_ = active; }
-
         inline float GetHeadsDistance() { return headsDistance_; }
         inline float GetCrossPoint() { return crossPoint_; }
         inline bool CrossPointFound() { return crossPointFound_; }
@@ -100,7 +97,7 @@ namespace wreath
         void CalculateCrossPoint();
 
         float *buffer_{};           // The buffer
-        float *buffer2_{};           // The buffer
+        float *freezeBuffer_{};           // The buffer
         float bufferSeconds_{};     // Written buffer length in seconds
         float readPos_{};           // The read position
         float readPosSeconds_{};    // Read position in seconds
@@ -121,34 +118,28 @@ namespace wreath
         float headsDistance_{};
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};
-        bool readingActive_{true};
         float freeze_{};
         int32_t sampleRateSpeed_{};
         bool looping_{};
         bool loopSync_{};
-        bool isRestarting_{};
         bool isFading_{};
         float crossPoint_{};
         bool crossPointFound_{};
-        float fadeBufferPos_{};
-        bool mustPasteFadeBuffer_{};
-        bool mustCopyFadeBuffer_{};
 
         TriggerMode triggerMode_{};
 
-        float fadePos_{};
-        bool mustPaste_{};
+        bool loopLengthFade_{};
+        float lengthFadePos_{};
+        float lengthFadeSamples_{};
+        float lengthFadeIndex_{};
 
-        Fade mustFadeRead_{};
-        Fade mustFadeWrite_{};
-        float mustFadeWriteSamples_{};
-        float readFadeIndex_{};
-        float writeFadeIndex_{};
-        bool zeroFade_{};
-
-        float fadeBuffer[static_cast<int32_t>(kSamplesToFade)]{};
+        bool mustSetLoopStart_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
+
+        Fader loopFade;
+        Fader triggerFade;
+        Fader headsCrossFade;
 
         Movement movement_{}; // The current movement type of the looper
     };

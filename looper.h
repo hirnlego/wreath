@@ -128,10 +128,11 @@ namespace wreath
 
         TriggerMode triggerMode_{};
 
+        bool loopLengthChanged_{};
         bool loopLengthFade_{};
-        float lengthFadePos_{};
         float lengthFadeSamples_{};
         float lengthFadeIndex_{};
+        bool loopLengthGrown_{};
 
         bool mustSetLoopStart_{};
 
@@ -140,6 +141,7 @@ namespace wreath
         Fader loopFade;
         Fader triggerFade;
         Fader headsCrossFade;
+        Fader loopLengthFade;
 
         Movement movement_{}; // The current movement type of the looper
     };

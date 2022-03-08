@@ -27,17 +27,22 @@ namespace wreath
             ENDED,
         };
 
+        void Reset()
+        {
+            status_ = FadeStatus::PENDING;
+            index_ = 0;
+            toggle_ = false;
+        }
+
         void Init(FadeType type = FadeType::FADE_SINGLE, float samples = kSamplesToFade, float rate = 1.f)
         {
             if (FadeStatus::CREATED == status_ || FadeStatus::ENDED == status_)
             {
-                status_ = FadeStatus::PENDING;
+                Reset();
                 type_ = type;
                 samples_ = FadeType::FADE_OUT_IN == type_ ? samples / 2 : samples;
                 freq_ = 1.f / samples_;
                 rate_ = rate;
-                index_ = 0;
-                toggle_ = false;
             }
         }
         static float CrossFade(float from, float to, float pos)
@@ -74,8 +79,10 @@ namespace wreath
             return from * d * d + to * c * c;
         }
 
-        FadeStatus Process(float fromInput, float toInput, float &output)
+        FadeStatus Process(float fromInput, float toInput)
         {
+            input_ = fromInput;
+
             if (FadeStatus::CREATED == status_)
             {
                 return status_;
@@ -94,7 +101,7 @@ namespace wreath
                 from = toInput;
                 to = fromInput;
             }
-            output = EqualCrossFade(from, to, index_ * freq_);
+            output_ = EqualCrossFade(from, to, index_ * freq_);
 
             if (index_ >= samples_)
             {
@@ -122,6 +129,11 @@ namespace wreath
             return index_;
         }
 
+        float GetOutput()
+        {
+            return FadeStatus::FADING == status_ ? output_ : input_;
+        }
+
     private:
         FadeType type_{FadeType::FADE_SINGLE};
         FadeStatus status_{FadeStatus::CREATED};
@@ -129,6 +141,8 @@ namespace wreath
         float samples_{};
         float freq_{};
         float rate_{};
+        float input_{};
+        float output_{};
         bool toggle_{};
     };
 }

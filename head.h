@@ -360,6 +360,10 @@ namespace wreath
         void WriteAt(int32_t index, float value)
         {
             buffer_[index] = value;
+            if (!frozen_ || mustUnfreeze_)
+            {
+                freezeBuffer_[index] = value;
+            }
         }
 
         void ClearBuffer()

@@ -161,25 +161,26 @@ void Looper::SetLoopEnd(float end)
 
 void Looper::SetLoopLength(float length)
 {
-    // Throttle the change.
-    if (!loopLengthFade_)
-    {
-        bool grow = length > heads_[READ].GetLoopLength();
-        loopLength_ = heads_[READ].SetLoopLength(length);
-        intLoopLength_ = loopLength_;
-        heads_[WRITE].SetLoopLength(loopSync_ ? loopLength_ : bufferSamples_);
-        loopLengthSeconds_ = loopLength_ / sampleRate_;
-        loopEnd_ = heads_[READ].GetLoopEnd();
-        intLoopEnd_ = loopEnd_;
-        crossPointFound_ = false;
+    loopLengthGrown_ = length > heads_[READ].GetLoopLength();
+    loopLength_ = heads_[READ].SetLoopLength(length);
+    intLoopLength_ = loopLength_;
+    heads_[WRITE].SetLoopLength(loopSync_ ? loopLength_ : bufferSamples_);
+    loopLengthSeconds_ = loopLength_ / sampleRate_;
+    loopEnd_ = heads_[READ].GetLoopEnd();
+    intLoopEnd_ = loopEnd_;
+    crossPointFound_ = false;
 
-        // When the length changes, copy right away the part after the loop end instead of reading it when looping
-        if (length > kMinSamplesForFlanger && length < bufferSamples_ && freeze_ < 1.f)
+    if (loopLength_ < bufferSamples_ && freeze_ < 1.f)
+    {
+        loopLengthChanged_ = true;
+        if (loopLengthFade_)
         {
-            loopLengthFade_ = true;
-            lengthFadeIndex_ = 0;
-            lengthFadePos_ = loopEnd_;
-            lengthFadeSamples_ = std::min(kSamplesToFade, bufferSamples_ - readPos_);
+            loopLengthFade_ = false;
+            loopLengthFade.Reset();
+        }
+        else
+        {
+            loopLengthFade.Init(Fader::FadeType::FADE_SINGLE, std::min(kSamplesToFade, bufferSamples_ - loopLength_));
         }
     }
 }
@@ -261,6 +262,19 @@ float Looper::Read(float input)
     float fadeRate = freeze_ == 1.f ? 1.f : readRate_;
     samples = samples * fadeRate;
 
+    if (loopLengthFade_)
+    {
+        // If the loop length grew, blend a few samples from the start with
+        // those at the old loop end, otherwise, blend the cropped part at
+        // the end with the samples at the start.
+        float v1 = heads_[READ].ReadAt((loopLengthGrown_ ? loopStart_ : loopEnd_ + 1) + loopLengthFade.GetIndex());
+        if (Fader::FadeStatus::ENDED == loopLengthFade.Process(v1, value))
+        {
+            loopLengthFade_ = false;
+        }
+        value = loopLengthFade.GetOutput();
+    }
+
     // In looper mode, set a full fade (out + in) when the read head get near the
     // loop end or loop start, depending on the direction.
     if (!loopSync_)
@@ -273,8 +287,9 @@ float Looper::Read(float input)
         }
     }
 
-    loopFade.Process(value, valueToFade, value);
-    if (Fader::FadeStatus::ENDED == triggerFade.Process(value, valueToFade, value))
+    loopFade.Process(value, valueToFade);
+    value = loopFade.GetOutput();
+    if (Fader::FadeStatus::ENDED == triggerFade.Process(value, valueToFade))
     {
         // Invert direction when in pendulum or drunk mode.
         if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
@@ -288,6 +303,7 @@ float Looper::Read(float input)
         }
         heads_[READ].SetRunStatus(RunStatus::RUNNING);
     }
+    value = triggerFade.GetOutput();
 
     return value;
 }
@@ -296,25 +312,12 @@ void Looper::Write(float input)
 {
     if (freeze_ < 1.f)
     {
-        // If the loop length changed, blend the cropped part at the end of the
-        // loop with the start of the loop to avoid clicking.
-        if (loopLengthFade_)
-        {
-            heads_[WRITE].WriteAt(loopStart_ + lengthFadeIndex_, heads_[READ].ReadAt(lengthFadePos_ + lengthFadeIndex_));
-            if (lengthFadeIndex_ >= lengthFadeSamples_)
-            {
-                loopLengthFade_ = false;
-            }
-            lengthFadeIndex_ += 1;
-        }
-
         float currentValue = heads_[WRITE].GetCurrentValue();
-        headsCrossFade.Process(input, currentValue, input);
-    }
-    // Abort the operation when frozen.
-    else if (loopLengthFade_)
-    {
-        loopLengthFade_ = false;
+        if (Fader::FadeStatus::ENDED == headsCrossFade.Process(input, currentValue))
+        {
+            isFading_ = false;
+        }
+        input = headsCrossFade.GetOutput();
     }
 
     heads_[WRITE].Write(input);
@@ -326,6 +329,19 @@ bool Looper::UpdateReadPos()
     readPos_ = heads_[READ].GetPosition();
     readPosSeconds_ = readPos_ / sampleRate_;
 
+    if (toggle && loopLengthChanged_)
+    {
+        // Keep in sync the read and the write head's positions each time the
+        // latter reaches either the start or the end of the loop, depending on
+        // the reading direction.
+        if (loopSync_)
+        {
+            heads_[READ].SetIndex(writePos_);
+        }
+        loopLengthChanged_ = false;
+        loopLengthFade_ = true;
+    }
+
     return toggle;
 }
 
@@ -333,14 +349,6 @@ bool Looper::UpdateWritePos()
 {
     bool toggle = heads_[WRITE].UpdatePosition();
     writePos_ = heads_[WRITE].GetIntPosition();
-
-    // Keep in sync the read and the write head's positions each time the latter
-    // reaches either the start or the end of the loop, depending on the reading
-    // direction.
-    if (toggle && loopSync_ && loopLengthFade_)
-    {
-        heads_[READ].SetIndex(writePos_);
-    }
 
     return toggle;
 }
@@ -498,7 +506,7 @@ void Looper::HandleFade()
             {
                 crossPointFound_ = false;
                 isFading_ = true;
-                headsCrossFade.Init(Fader::FadeType::FADE_OUT_IN, samples, writeRate_);
+                headsCrossFade.Init(Fader::FadeType::FADE_OUT_IN, samples * 2, writeRate_);
             }
         }
     }

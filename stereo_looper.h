@@ -611,7 +611,7 @@ namespace wreath
             float rightLoopLength = loopers_[RIGHT].GetLoopLength();
             if (rightLoopLength != nextRightLoopLength)
             {
-                loopers_[RIGHT].SetLoopLength(nextLeftLoopLength);
+                loopers_[RIGHT].SetLoopLength(nextRightLoopLength);
             }
 
             float leftLoopStart = loopers_[LEFT].GetLoopStart();

@@ -488,13 +488,12 @@ namespace wreath
                 // Feedback path.
                 float leftFeedback = leftWet * feedback;
                 float rightFeedback = rightWet * feedback;
-                leftFeedback = Mix(leftFeedback, filterLevel * Filter(leftFeedback));
-                rightFeedback = Mix(rightFeedback, filterLevel * Filter(rightFeedback));
-                leftFeedback *= (feedbackLevel - filterEnvelope_.GetEnv(leftFeedback));
-                rightFeedback *= (feedbackLevel - filterEnvelope_.GetEnv(rightFeedback));
-
-                leftWet = Mix(leftWet, Filter(leftFeedback) * freeze_ * 0.5f);
-                rightWet = Mix(rightWet, Filter(rightFeedback) * freeze_ * 0.5f);
+                float leftFiltered = filterLevel * Filter(leftFeedback) * feedback;
+                float rightFiltered = filterLevel * Filter(rightFeedback) * feedback;
+                leftFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(leftFiltered));
+                rightFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(rightFiltered));
+                leftFeedback = Mix(leftFeedback, leftFiltered);
+                rightFeedback = Mix(rightFeedback, rightFiltered);
 
                 loopers_[LEFT].Write(Mix(leftDry, leftFeedback));
                 loopers_[RIGHT].Write(Mix(rightDry, rightFeedback));
@@ -505,24 +504,9 @@ namespace wreath
                 loopers_[LEFT].UpdateReadPos();
                 loopers_[RIGHT].UpdateReadPos();
 
-                /*
-                // When drunk there's a small probability of changing direction.
-                bool toggleDir{rand() % loopers_[LEFT].GetSampleRateSpeed() == 1};
-                if (loopers_[LEFT].IsDrunkMovement())
-                {
-                    if ((IsDualMode() && (rand() % loopers_[LEFT].GetSampleRateSpeed()) == 1) || toggleDir)
-                    {
-                        loopers_[LEFT].ToggleDirection();
-                    }
-                }
-                if (loopers_[RIGHT].IsDrunkMovement())
-                {
-                    if ((IsDualMode() && (rand() % loopers_[RIGHT].GetSampleRateSpeed()) == 1) || toggleDir)
-                    {
-                        loopers_[RIGHT].ToggleDirection();
-                    }
-                }
-                */
+                // Mix some of the filtered fed back signal with the wet when frozen.
+                leftWet = Mix(leftWet, filterLevel * Filter(leftFeedback) * freeze_);
+                rightWet = Mix(rightWet, filterLevel * Filter(rightFeedback) * freeze_);
             }
             default:
                 break;

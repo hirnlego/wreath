@@ -18,7 +18,7 @@ namespace wreath
     constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
     // constexpr int kBufferSeconds{1};
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
-    // constexpr float kParamSlewCoeff{0.0002f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
+    // constexpr float kParamSlewCoeff{0.00005f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
     constexpr float kParamSlewCoeff{1.f}; // 1.0 / (time_sec * sample_rate) > 100ms @ 48K
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
@@ -479,8 +479,8 @@ namespace wreath
                     }
                 }
 
-                loopers_[LEFT].HandleFade();
-                loopers_[RIGHT].HandleFade();
+                loopers_[LEFT].HandleCrossPointFade();
+                loopers_[RIGHT].HandleCrossPointFade();
 
                 leftWet = loopers_[LEFT].Read(leftDry);
                 rightWet = loopers_[RIGHT].Read(rightDry);
@@ -587,28 +587,6 @@ namespace wreath
                 loopers_[RIGHT].SetDirection(rightDirection);
             }
 
-            float leftLoopLength = loopers_[LEFT].GetLoopLength();
-            if (leftLoopLength != nextLeftLoopLength)
-            {
-                loopers_[LEFT].SetLoopLength(nextLeftLoopLength);
-            }
-            float rightLoopLength = loopers_[RIGHT].GetLoopLength();
-            if (rightLoopLength != nextRightLoopLength)
-            {
-                loopers_[RIGHT].SetLoopLength(nextRightLoopLength);
-            }
-
-            float leftLoopStart = loopers_[LEFT].GetLoopStart();
-            if (leftLoopStart != nextLeftLoopStart)
-            {
-                loopers_[LEFT].SetLoopStart(nextLeftLoopStart);
-            }
-            float rightLoopStart = loopers_[RIGHT].GetLoopStart();
-            if (rightLoopStart != nextRightLoopStart)
-            {
-                loopers_[RIGHT].SetLoopStart(nextRightLoopStart);
-            }
-
             float leftReadRate = loopers_[LEFT].GetReadRate();
             if (leftReadRate != nextLeftReadRate)
             {
@@ -637,6 +615,28 @@ namespace wreath
                 float coeff = rateSlew > 0 ? 1.f / (rateSlew * sampleRate_) : 1.f;
                 fonepole(rightWriteRate, nextRightWriteRate, coeff);
                 loopers_[RIGHT].SetWriteRate(rightWriteRate);
+            }
+
+            float leftLoopLength = loopers_[LEFT].GetLoopLength();
+            if (leftLoopLength != nextLeftLoopLength)
+            {
+                loopers_[LEFT].SetLoopLength(nextLeftLoopLength);
+            }
+            float rightLoopLength = loopers_[RIGHT].GetLoopLength();
+            if (rightLoopLength != nextRightLoopLength)
+            {
+                loopers_[RIGHT].SetLoopLength(nextRightLoopLength);
+            }
+
+            float leftLoopStart = loopers_[LEFT].GetLoopStart();
+            if (leftLoopStart != nextLeftLoopStart)
+            {
+                loopers_[LEFT].SetLoopStart(nextLeftLoopStart);
+            }
+            float rightLoopStart = loopers_[RIGHT].GetLoopStart();
+            if (rightLoopStart != nextRightLoopStart)
+            {
+                loopers_[RIGHT].SetLoopStart(nextRightLoopStart);
             }
 
             float leftFreeze = loopers_[LEFT].GetFreeze();

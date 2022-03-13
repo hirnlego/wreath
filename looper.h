@@ -35,7 +35,7 @@ namespace wreath
         void Write(float value);
         bool UpdateReadPos();
         bool UpdateWritePos();
-        void HandleFade();
+        void HandleCrossPointFade();
         bool Start(bool now);
         bool Stop(bool now);
         void Trigger();
@@ -122,7 +122,7 @@ namespace wreath
         int32_t sampleRateSpeed_{};
         bool looping_{};
         bool loopSync_{};
-        bool isFading_{};
+        bool crossPointFade_{};
         float crossPoint_{};
         bool crossPointFound_{};
 
@@ -134,14 +134,13 @@ namespace wreath
         float lengthFadeIndex_{};
         bool loopLengthGrown_{};
 
-        bool mustSetLoopStart_{};
-
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 
         Fader loopFade;
         Fader triggerFade;
         Fader headsCrossFade;
         Fader loopLengthFade;
+        Fader frozenFade;
 
         Movement movement_{}; // The current movement type of the looper
     };

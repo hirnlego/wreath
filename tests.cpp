@@ -285,11 +285,11 @@ void TestCrossPoint()
     std::cout << "Read pos: " << looper.GetReadPos() << "\n";
     std::cout << "Write pos: " << looper.GetWritePos() << "\n";
     float min{48000};
-    looper.HandleFade();
+    looper.HandleCrossPointFade();
     std::cout << "Heads distance: " << looper.GetHeadsDistance() << "\n\n";
     while (!looper.CrossPointFound())
     {
-        looper.HandleFade();
+        looper.HandleCrossPointFade();
         looper.UpdateWritePos();
         looper.UpdateReadPos();
         /*

@@ -14,10 +14,9 @@
 namespace wreath
 {
     constexpr float kMinLoopLengthSamples{46.f}; // ~C1 @ 48KHz
-    constexpr float kMaxSamplesToFade{4800.f};   // 100ms @ 48KHz
+    constexpr float kMaxSamplesToFade{9600.f};   // 200ms @ 48KHz
     constexpr float kMinSamplesForTone{91.f};    // ~C2 @ 48KHz
     constexpr float kMinSamplesForFlanger{1722.f};
-    constexpr float kFreezeResolution{0.0001f};
 
     enum Type
     {
@@ -99,7 +98,7 @@ namespace wreath
             loopLength_ = length;
             intLoopLength_ = loopLength_;
             CalculateLoopEnd();
-            samplesToFade_ = std::min(samplesToFade_, loopLength_);
+            samplesToFade_ = std::min(kSamplesToFade, loopLength_ / 2.f);
 
             return loopLength_;
         }
@@ -197,11 +196,38 @@ namespace wreath
 
         void SetSamplesToFade(float samples)
         {
-            samplesToFade_ = loopLength_ ? std::min(samples, loopLength_) : samples;
+            samplesToFade_ = loopLength_ ? std::min(samples, loopLength_ / 2.f) : samples;
         }
 
-        bool mustFadeInFrozen{};
-        float freezeLoopFadeIndex_{};
+        float ReadFrozen()
+        {
+            return frozen_ ? ReadAt(freezeBuffer_, index_) : 0;
+
+
+            float frozenValue{};
+            // When frozen, fade the start of the loop with the end.
+            if (frozen_)
+            {
+                frozenValue = ReadAt(freezeBuffer_, index_);
+                if (intIndex_ == intLoopStart_ && intLoopLength_ < bufferSamples_ && intLoopLength_ >= samplesToFade_)
+                {
+                    mustFadeInFrozen_ = true;
+                    freezeLoopFadeIndex_ = 0;
+                }
+                if (mustFadeInFrozen_)
+                {
+                    // Read samples from past the loop end.
+                    float fadeValue = ReadAt(freezeBuffer_, WrapIndex(loopEnd_ + rate_ + freezeLoopFadeIndex_));
+                    frozenValue = Fader::EqualCrossFade(fadeValue, frozenValue, freezeLoopFadeIndex_ * (1.f / samplesToFade_));
+                    if (freezeLoopFadeIndex_ >= samplesToFade_)
+                    {
+                        mustFadeInFrozen_ = false;
+                    }
+                    freezeLoopFadeIndex_ += rate_;
+                }
+            }
+        }
+
         float Read(float valueToFade)
         {
             if (RunStatus::STOPPED == runStatus_)
@@ -211,29 +237,6 @@ namespace wreath
 
             float value = ReadAt(buffer_, index_);
             currentValue_ = value;
-
-            float frozenValue{};
-            // When frozen, fade the start of the loop with the end.
-            if (frozen_)
-            {
-                frozenValue = ReadAt(freezeBuffer_, index_);
-                if (intIndex_ == intLoopStart_ && intLoopLength_ < bufferSamples_ && intLoopLength_ >= samplesToFade_)
-                {
-                    mustFadeInFrozen = true;
-                    freezeLoopFadeIndex_ = 0;
-                }
-                if (mustFadeInFrozen)
-                {
-                    // Read samples from past the loop end.
-                    float fadeValue = ReadAt(freezeBuffer_, WrapIndex(loopEnd_ + rate_ + freezeLoopFadeIndex_));
-                    frozenValue = Fader::EqualCrossFade(fadeValue, frozenValue, freezeLoopFadeIndex_ * (1.f / samplesToFade_));
-                    if (freezeLoopFadeIndex_ >= samplesToFade_)
-                    {
-                        mustFadeInFrozen = false;
-                    }
-                    freezeLoopFadeIndex_ += rate_;
-                }
-            }
 
             // Gradually start reading, fading from the input signal to the
             // buffered value.
@@ -258,17 +261,12 @@ namespace wreath
                 fadeIndex_ += rate_;
             }
 
-            if (frozen_)
-            {
-                value = Fader::EqualCrossFade(value, frozenValue, freezeAmount_);
-            }
-
             return value;
         }
 
-        float ReadAt(float index)
+        float ReadAt(float index, bool wrap = false)
         {
-            int32_t intPos = index;
+            int32_t intPos = wrap ? WrapIndex(index) : index;
             float value = buffer_[intPos];
             float frac = index - intPos;
 
@@ -281,19 +279,14 @@ namespace wreath
             return value;
         }
 
-        float ReadAt(float *buffer, float index)
+        float ReadBufferAt(float index, bool wrap = false)
         {
-            int32_t intPos = index;
-            float value = buffer[intPos];
-            float frac = index - intPos;
+            return ReadAt(buffer_, index, wrap);
+        }
 
-            // Interpolate value only it the index has a fractional part.
-            if (frac > std::numeric_limits<float>::epsilon())
-            {
-                value = value + (buffer[WrapIndex(intPos + std::max(1.f, rate_ * direction_))] - value) * frac;
-            }
-
-            return value;
+        float ReadFrozenAt(float index, bool wrap = false)
+        {
+            return ReadAt(freezeBuffer_, index, wrap);
         }
 
         void HandleFreeze(float input)
@@ -396,7 +389,7 @@ namespace wreath
             intLoopLength_ = loopLength_;
             loopEnd_ = loopLength_ - 1.f;
             intLoopEnd_ = loopEnd_;
-            samplesToFade_ = std::min(samplesToFade_, loopLength_);
+            samplesToFade_ = std::min(kSamplesToFade, loopLength_ / 2.f);
         }
 
         int32_t StopBuffering()
@@ -408,7 +401,7 @@ namespace wreath
             loopEnd_ = loopLength_ - 1.f;
             intLoopEnd_ = loopEnd_;
             ResetPosition();
-            samplesToFade_ = std::min(samplesToFade_, loopLength_);
+            samplesToFade_ = std::min(kSamplesToFade, loopLength_ / 2.f);
 
             return bufferSamples_;
         }
@@ -495,8 +488,17 @@ namespace wreath
         bool mustFreeze_{};
         bool mustUnfreeze_{};
         float freezeFadeIndex_{};
+        bool mustFadeInFrozen_{};
+        float freezeLoopFadeIndex_{};
 
         float samplesToFade_{kSamplesToFade};
+
+        float tBuffer_[static_cast<int32_t>(kSamplesToFade)]{};
+        float tBufferIndex_{};
+
+        /*
+        1)
+        */
 
         Action HandleLoopAction()
         {
@@ -712,6 +714,21 @@ namespace wreath
                 loopEnd_ = loopStart_ + loopLength_ - 1;
             }
             intLoopEnd_ = loopEnd_;
+        }
+
+        float ReadAt(float *buffer, float index, bool wrap = false)
+        {
+            int32_t intPos = wrap ? WrapIndex(index) : index;
+            float value = buffer[intPos];
+            float frac = index - intPos;
+
+            // Interpolate value only it the index has a fractional part.
+            if (frac > std::numeric_limits<float>::epsilon())
+            {
+                value = value + (buffer[WrapIndex(intPos + direction_)] - value) * frac;
+            }
+
+            return value;
         }
     };
 }

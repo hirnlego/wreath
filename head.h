@@ -78,6 +78,7 @@ namespace wreath
             runStatus_ = RunStatus::STOPPED;
             movement_ = Movement::NORMAL;
             direction_ = Direction::FORWARD;
+            samplesToFade_ = std::min(kSamplesToFade, loopLength_ / 2.f);
             Reset();
         }
 

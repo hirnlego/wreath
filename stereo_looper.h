@@ -358,6 +358,16 @@ namespace wreath
             }
         }
 
+        void Gate(bool on)
+        {
+            dryLevel = on ? 1.f : 0.f;
+            if (on)
+            {
+                loopers_[LEFT].SetWritePos(loopers_[LEFT].GetReadPos());
+                loopers_[RIGHT].SetWritePos(loopers_[RIGHT].GetReadPos());
+            }
+        }
+
         void Start()
         {
             if (State::READY == state_)
@@ -431,9 +441,6 @@ namespace wreath
             {
                 UpdateParameters();
 
-                leftDry *= dryLevel;
-                rightDry *= dryLevel;
-
                 if (mustClearBuffer)
                 {
                     mustClearBuffer = false;
@@ -479,9 +486,6 @@ namespace wreath
                     }
                 }
 
-                loopers_[LEFT].HandleCrossPointFade();
-                loopers_[RIGHT].HandleCrossPointFade();
-
                 leftWet = loopers_[LEFT].Read(leftDry);
                 rightWet = loopers_[RIGHT].Read(rightDry);
 
@@ -495,8 +499,8 @@ namespace wreath
                 leftFeedback = Mix(leftFeedback, leftFiltered);
                 rightFeedback = Mix(rightFeedback, rightFiltered);
 
-                loopers_[LEFT].Write(Mix(leftDry, leftFeedback));
-                loopers_[RIGHT].Write(Mix(rightDry, rightFeedback));
+                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
+                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();

@@ -33,7 +33,8 @@ namespace wreath
         void SetReadPos(float position);
         void SetWritePos(float position);
         float Read(float input);
-        void Write(float dry, float wet);
+        void Write(float input);
+        float Degrade(float input);
         bool UpdateReadPos();
         bool UpdateWritePos();
         void HandleCrossPointFade();

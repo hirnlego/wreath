@@ -13,7 +13,6 @@ using namespace daisysp;
  */
 void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t maxBufferSamples)
 {
-    std::srand(static_cast<unsigned>(time(0)));
     sampleRate_ = sampleRate;
     heads_[READ].Init(buffer, buffer2, maxBufferSamples);
     heads_[WRITE].Init(buffer, buffer2, maxBufferSamples);
@@ -28,6 +27,7 @@ void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t max
 
 void Looper::Reset()
 {
+    std::srand(static_cast<unsigned>(time(0)));
     heads_[READ].Reset();
     heads_[WRITE].Reset();
     bufferSamples_ = 0;
@@ -343,16 +343,8 @@ float Looper::Read(float input)
     return value;
 }
 
-void Looper::Write(float dry, float wet)
+void Looper::Write(float input)
 {
-    if (degradation_ > 0.f)
-    {
-        float d = 1.f - ((std::rand() / (float)RAND_MAX) * degradation_);
-        wet = heads_[WRITE].BresenhamEuclidean(eRand_ * 64, degradation_) ? wet : wet * d;
-    }
-
-    float input = SoftClip(dry + wet);
-
     if (freeze_ < 1.f && crossPointFade_)
     {
         float currentValue = heads_[WRITE].GetCurrentValue();
@@ -364,6 +356,18 @@ void Looper::Write(float dry, float wet)
     }
 
     heads_[WRITE].Write(input);
+}
+
+float Looper::Degrade(float input)
+{
+    if (degradation_ > 0.f)
+    {
+        float d = 1.f - ((std::rand() / (float)RAND_MAX) * degradation_);
+
+        return heads_[WRITE].BresenhamEuclidean(eRand_ * 64, degradation_) ? input : input * d;
+    }
+
+    return input;
 }
 
 bool Looper::UpdateReadPos()

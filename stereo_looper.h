@@ -497,8 +497,8 @@ namespace wreath
                 rightWet = loopers_[RIGHT].Read(rightDry);
 
                 // Feedback path.
-                float leftFeedback = leftWet * feedback;
-                float rightFeedback = rightWet * feedback;
+                float leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
+                float rightFeedback = loopers_[RIGHT].Degrade(rightWet * feedback);
                 float leftFiltered = filterLevel * Filter(leftFeedback) * feedback;
                 float rightFiltered = filterLevel * Filter(rightFeedback) * feedback;
                 leftFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(leftFiltered));
@@ -506,8 +506,8 @@ namespace wreath
                 leftFeedback = Mix(leftFeedback, leftFiltered);
                 rightFeedback = Mix(rightFeedback, rightFiltered);
 
-                loopers_[LEFT].Write(leftDry * dryLevel, leftFeedback);
-                loopers_[RIGHT].Write(rightDry * dryLevel, rightFeedback);
+                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
+                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();

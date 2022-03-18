@@ -206,30 +206,6 @@ namespace wreath
         float ReadFrozen()
         {
             return frozen_ ? ReadAt(freezeBuffer_, index_) : 0;
-
-
-            float frozenValue{};
-            // When frozen, fade the start of the loop with the end.
-            if (frozen_)
-            {
-                frozenValue = ReadAt(freezeBuffer_, index_);
-                if (intIndex_ == intLoopStart_ && intLoopLength_ < bufferSamples_ && intLoopLength_ >= samplesToFade_)
-                {
-                    mustFadeInFrozen_ = true;
-                    freezeLoopFadeIndex_ = 0;
-                }
-                if (mustFadeInFrozen_)
-                {
-                    // Read samples from past the loop end.
-                    float fadeValue = ReadAt(freezeBuffer_, WrapIndex(loopEnd_ + rate_ + freezeLoopFadeIndex_));
-                    frozenValue = Fader::EqualCrossFade(fadeValue, frozenValue, freezeLoopFadeIndex_ * (1.f / samplesToFade_));
-                    if (freezeLoopFadeIndex_ >= samplesToFade_)
-                    {
-                        mustFadeInFrozen_ = false;
-                    }
-                    freezeLoopFadeIndex_ += rate_;
-                }
-            }
         }
 
         float Read(float valueToFade)
@@ -347,12 +323,6 @@ namespace wreath
             {
                 freezeBuffer_[intIndex_] = input;
             }
-            /*
-            else if (frozen_ && degradationAmount_ == 1.f)
-            {
-                freezeBuffer_[intIndex_] = BresenhamEuclidean(freezeAmount_) ? freezeBuffer_[intIndex_] : (input * (1.f - freezeAmount_)) + (freezeBuffer_[intIndex_] * freezeAmount_);
-            }
-            */
         }
 
         void Write(float input)

@@ -128,6 +128,9 @@ namespace wreath
                 }
             }
         }
+
+        inline void SetDegradation(float amount) { degradationAmount_ = amount; }
+
         inline void SetRate(float rate)
         {
             rate_ = std::abs(rate);
@@ -290,6 +293,33 @@ namespace wreath
             return ReadAt(freezeBuffer_, index, wrap);
         }
 
+        bool toggleOnset{true};
+        int32_t previousE_{};
+        bool BresenhamEuclidean(float pulses, float onsetAmount)
+        {
+            float ratio = bufferSamples_ / pulses;
+            float onsets = onsetAmount * pulses;
+            if (onsets == pulses)
+            {
+                toggleOnset = false;
+            }
+            else if (onsets == 0)
+            {
+                toggleOnset = true;
+            }
+            else
+            {
+                float slope = onsets / pulses;
+                int32_t current = (index_ / ratio) * slope;
+                if (current != previousE_)
+                {
+                    toggleOnset = !toggleOnset;
+                }
+                previousE_ = current;
+            }
+            return toggleOnset;
+        }
+
         void HandleFreeze(float input)
         {
             float frozenValue = freezeBuffer_[intIndex_];
@@ -317,6 +347,12 @@ namespace wreath
             {
                 freezeBuffer_[intIndex_] = input;
             }
+            /*
+            else if (frozen_ && degradationAmount_ == 1.f)
+            {
+                freezeBuffer_[intIndex_] = BresenhamEuclidean(freezeAmount_) ? freezeBuffer_[intIndex_] : (input * (1.f - freezeAmount_)) + (freezeBuffer_[intIndex_] * freezeAmount_);
+            }
+            */
         }
 
         void Write(float input)
@@ -349,15 +385,6 @@ namespace wreath
             }
 
             buffer_[intIndex_] = input;
-        }
-
-        void WriteAt(int32_t index, float value)
-        {
-            buffer_[index] = value;
-            if (!frozen_ || mustUnfreeze_)
-            {
-                freezeBuffer_[index] = value;
-            }
         }
 
         void ClearBuffer()
@@ -484,6 +511,7 @@ namespace wreath
 
         float currentValue_{};
         float freezeAmount_{};
+        float degradationAmount_{};
         bool frozen_{};
 
         bool mustFreeze_{};

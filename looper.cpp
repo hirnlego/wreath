@@ -13,6 +13,7 @@ using namespace daisysp;
  */
 void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t maxBufferSamples)
 {
+    std::srand(static_cast<unsigned>(time(0)));
     sampleRate_ = sampleRate;
     heads_[READ].Init(buffer, buffer2, maxBufferSamples);
     heads_[WRITE].Init(buffer, buffer2, maxBufferSamples);
@@ -285,6 +286,16 @@ float Looper::Read(float input)
     float value = heads_[READ].Read(input);
     if (freeze_ > 0)
     {
+        /*
+        if (degradation_ == 1.f)
+        {
+            value = heads_[READ].ReadFrozen();
+        }
+        else
+        {
+            value = Fader::EqualCrossFade(value, heads_[READ].ReadFrozen(), freeze_);
+        }
+        */
         value = Fader::EqualCrossFade(value, heads_[READ].ReadFrozen(), freeze_);
     }
 
@@ -332,8 +343,16 @@ float Looper::Read(float input)
     return value;
 }
 
-void Looper::Write(float input)
+void Looper::Write(float dry, float wet)
 {
+    if (degradation_ > 0.f)
+    {
+        float d = 1.f - ((std::rand() / (float)RAND_MAX) * degradation_);
+        wet = heads_[WRITE].BresenhamEuclidean(eRand_ * 64, degradation_) ? wet : wet * d;
+    }
+
+    float input = SoftClip(dry + wet);
+
     if (freeze_ < 1.f && crossPointFade_)
     {
         float currentValue = heads_[WRITE].GetCurrentValue();
@@ -384,7 +403,7 @@ bool Looper::UpdateWritePos()
     // In delay mode, keep in sync the reading and the writing heads' position
     // each time the latter reaches either the start or the end of the loop
     // (depending on the reading direction).
-    if (toggle && loopSync_)
+    if (toggle && loopSync_ && loopLength_ > kMinSamplesForFlanger)
     {
         heads_[READ].SetIndex(writePos_);
     }
@@ -446,6 +465,13 @@ void Looper::SetTriggerMode(TriggerMode mode)
     }
 
     triggerMode_ = mode;
+}
+
+void Looper::SetDegradation(float amount)
+{
+    degradation_ = amount;
+    heads_[READ].SetDegradation(amount);
+    heads_[WRITE].SetDegradation(amount);
 }
 
 float Looper::CalculateDistance(float a, float b, float aSpeed, float bSpeed, Direction direction)

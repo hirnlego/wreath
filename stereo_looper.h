@@ -209,6 +209,13 @@ namespace wreath
             feedbackFilter_.SetRes(fmap(1.f - feedback, 0.05f, 0.2f + (freeze_ * 0.2f)));
         }
 
+        void SetDegradation(float value)
+        {
+            degradation_ = value;
+            loopers_[LEFT].SetDegradation(value);
+            loopers_[RIGHT].SetDegradation(value);
+        }
+
         void OffsetLoopers(float value)
         {
             float pos = fclamp(loopers_[LEFT].GetReadPos() + value, 0, loopers_[RIGHT].GetLoopEnd());
@@ -499,8 +506,8 @@ namespace wreath
                 leftFeedback = Mix(leftFeedback, leftFiltered);
                 rightFeedback = Mix(rightFeedback, rightFiltered);
 
-                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
-                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
+                loopers_[LEFT].Write(leftDry * dryLevel, leftFeedback);
+                loopers_[RIGHT].Write(rightDry * dryLevel, rightFeedback);
 
                 loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
@@ -534,6 +541,7 @@ namespace wreath
         Svf feedbackFilter_;
         int32_t sampleRate_{};
         float freeze_{};
+        float degradation_{};
         float filterValue_{};
         Conf conf_{};
 

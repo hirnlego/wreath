@@ -1,6 +1,7 @@
 #pragma once
 
 #include "head.h"
+#include <ctime>
 #include <cstdint>
 
 namespace wreath
@@ -32,7 +33,7 @@ namespace wreath
         void SetReadPos(float position);
         void SetWritePos(float position);
         float Read(float input);
-        void Write(float value);
+        void Write(float dry, float wet);
         bool UpdateReadPos();
         bool UpdateWritePos();
         void HandleCrossPointFade();
@@ -46,6 +47,7 @@ namespace wreath
         void ToggleDirection();
         void SetFreeze(float amount);
         void SetTriggerMode(TriggerMode mode);
+        void SetDegradation(float amount);
 
         void SetSamplesToFade(float samples);
 
@@ -119,6 +121,7 @@ namespace wreath
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};
         float freeze_{};
+        float degradation_{};
         int32_t sampleRateSpeed_{};
         bool looping_{};
         bool loopSync_{};
@@ -133,6 +136,8 @@ namespace wreath
         float lengthFadeSamples_{};
         float lengthFadeIndex_{};
         bool loopLengthGrown_{};
+
+        float eRand_{std::rand() / (float)RAND_MAX};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

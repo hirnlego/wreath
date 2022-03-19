@@ -43,7 +43,6 @@ namespace wreath
         void Trigger();
         void SetLoopStart(float start);
         int32_t GetRandomPosition();
-        void SetLoopEnd(float end);
         void SetDirection(Direction direction);
         void ToggleDirection();
         void SetFreeze(float amount);
@@ -132,10 +131,9 @@ namespace wreath
 
         TriggerMode triggerMode_{};
 
+        float lengthFadePos_{};
         bool loopLengthChanged_{};
         bool loopLengthFade_{};
-        float lengthFadeSamples_{};
-        float lengthFadeIndex_{};
         bool loopLengthGrown_{};
 
         float eRand_{std::rand() / (float)RAND_MAX};

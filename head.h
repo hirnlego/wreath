@@ -492,13 +492,6 @@ namespace wreath
 
         float samplesToFade_{kSamplesToFade};
 
-        float tBuffer_[static_cast<int32_t>(kSamplesToFade)]{};
-        float tBufferIndex_{};
-
-        /*
-        1)
-        */
-
         Action HandleLoopAction()
         {
             // Handle normal loop boundaries.
@@ -507,14 +500,6 @@ namespace wreath
                 // Forward direction.
                 if (Direction::FORWARD == direction_)
                 {
-                    // This prevents "dragging" the index while changing the
-                    // loop's start point.
-                    if (intIndex_ < intLoopStart_)
-                    {
-                        // SetIndex(loopStart_);
-
-                        return Action::NO_ACTION;
-                    }
                     if (looping_ && intIndex_ > intLoopEnd_)
                     {
                         if (Movement::PENDULUM == movement_ && looping_)
@@ -540,14 +525,6 @@ namespace wreath
                 // Backwards direction.
                 else
                 {
-                    // This prevents "dragging" the index while changing the
-                    // loop's start point.
-                    if (intIndex_ > intLoopEnd_)
-                    {
-                        SetIndex(loopEnd_);
-
-                        return Action::NO_ACTION;
-                    }
                     if (looping_ && intIndex_ < intLoopStart_)
                     {
                         if (Movement::PENDULUM == movement_ && looping_)

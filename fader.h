@@ -29,7 +29,7 @@ namespace wreath
 
         void Reset(float samples, float rate)
         {
-            samples_ = FadeType::FADE_OUT_IN == type_ ? samples / 2 : samples;
+            samples_ = FadeType::FADE_OUT_IN == type_ ? samples / 2.f : samples;
             freq_ = 1.f / samples_;
             rate_ = rate;
             status_ = FadeStatus::PENDING;

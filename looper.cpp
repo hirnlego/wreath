@@ -131,9 +131,10 @@ void Looper::SetLoopStart(float start)
 
     // Set up a fade when the start point changed, except if we're in delay mode
     // or totally frozen.
-    if (loopLength_ < bufferSamples_ && loopLength_ > kMinSamplesForFlanger && !loopSync_ && freeze_ < 1.f)
+    if (loopLength_ < bufferSamples_ && loopLength_ > kMinSamplesForFlanger && freeze_ < 1.f)
     {
         loopLengthChanged_ = true;
+        lengthFadePos_ = loopEnd_;
         float samples = std::min(heads_[READ].GetSamplesToFade() * readRate_, (loopLength_ / 2.f) * readRate_);
         // If there's already a fade in progress, reset it.
         if (loopLengthFade_)
@@ -157,7 +158,7 @@ void Looper::SetLoopStart(float start)
     crossPointFound_ = false;
 
     // If the reading head goes outside of the loop, reset its position.
-    if ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_))
+    if (loopLength_ < kMinSamplesForFlanger && ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_)))
     {
         heads_[READ].ResetPosition();
         if (loopSync_)
@@ -167,21 +168,16 @@ void Looper::SetLoopStart(float start)
     }
 }
 
-void Looper::SetLoopEnd(float end)
-{
-    loopEnd_ = end;
-    intLoopEnd_ = loopEnd_;
-}
-
 void Looper::SetLoopLength(float length)
 {
     loopLengthGrown_ = length > loopLength_;
 
     // Set up a fade when the length changed, except if we're in delay mode or
     // totally frozen.
-    if (length < bufferSamples_ && length > kMinSamplesForFlanger && !loopSync_ && freeze_ < 1.f)
+    if (length < bufferSamples_ && length > kMinSamplesForFlanger && freeze_ < 1.f)
     {
         loopLengthChanged_ = true;
+        lengthFadePos_ = loopEnd_;
         float samples = std::min(heads_[READ].GetSamplesToFade(), (length / 2.f) * readRate_);
         // If there's already a fade in progress, reset it.
         if (loopLengthFade_)
@@ -206,7 +202,7 @@ void Looper::SetLoopLength(float length)
     crossPointFound_ = false;
 
     // If the reading head goes outside of the loop, reset its position.
-    if ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_))
+    if (loopLength_ < kMinSamplesForFlanger && ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_)))
     {
         heads_[READ].ResetPosition();
         if (loopSync_)
@@ -286,16 +282,6 @@ float Looper::Read(float input)
     float value = heads_[READ].Read(input);
     if (freeze_ > 0)
     {
-        /*
-        if (degradation_ == 1.f)
-        {
-            value = heads_[READ].ReadFrozen();
-        }
-        else
-        {
-            value = Fader::EqualCrossFade(value, heads_[READ].ReadFrozen(), freeze_);
-        }
-        */
         value = Fader::EqualCrossFade(value, heads_[READ].ReadFrozen(), freeze_);
     }
 
@@ -376,12 +362,25 @@ bool Looper::UpdateReadPos()
     readPos_ = heads_[READ].GetPosition();
     readPosSeconds_ = readPos_ / sampleRate_;
 
-    // If the loop length changed, initiate the fade when the reading head
-    // actually loops.
-    if (toggle && loopLengthChanged_)
+    if (loopLengthChanged_)
     {
-        loopLengthChanged_ = false;
-        loopLengthFade_ = true;
+        // If the loop length has grown, wait until we reach the position from
+        // which we must fade.
+        if (loopLengthGrown_)
+        {
+            float dist = CalculateDistance(readPos_, lengthFadePos_, readRate_, 0, direction_);
+            if (dist <= std::numeric_limits<float>::epsilon())
+            {
+                loopLengthChanged_ = false;
+                loopLengthFade_ = true;
+            }
+        }
+        // Otherwise, initiate the fade when the reading head actually loops.
+        else if (toggle)
+        {
+            loopLengthChanged_ = false;
+            loopLengthFade_ = true;
+        }
     }
 
     // In looper mode, set a full fade (out + in) when the reading head get near

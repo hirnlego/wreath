@@ -136,7 +136,7 @@ namespace wreath
         bool loopLengthFade_{};
         bool loopLengthGrown_{};
 
-        float eRand_{std::rand() / (float)RAND_MAX};
+        float eRand_{};
 
         Head heads_[2]{{Type::READ}, {Type::WRITE}};
 

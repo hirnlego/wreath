@@ -28,6 +28,7 @@ void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t max
 void Looper::Reset()
 {
     std::srand(static_cast<unsigned>(time(0)));
+    eRand_ = std::rand() / (float)RAND_MAX;
     heads_[READ].Reset();
     heads_[WRITE].Reset();
     bufferSamples_ = 0;

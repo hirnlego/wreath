@@ -211,15 +211,6 @@ void Looper::SetLoopLength(float length)
             heads_[WRITE].ResetPosition();
         }
     }
-
-
-    // In delay mode, keep in sync the reading and the writing heads' position
-    // each time the latter reaches either the start or the end of the loop
-    // (depending on the reading direction).
-    if (loopSync_ && loopLength_ > kMinSamplesForFlanger)
-    {
-        heads_[READ].SetIndex(writePos_);
-    }
 }
 
 void Looper::SetReadRate(float rate)
@@ -303,6 +294,13 @@ float Looper::Read(float input)
         float valueToBlend = heads_[READ].ReadBufferAt((loopLengthGrown_ ? loopStart_ : loopEnd_ + 1) + loopLengthFade.GetIndex());
         if (Fader::FadeStatus::ENDED == loopLengthFade.Process(valueToBlend, value))
         {
+            // In delay mode, keep in sync the reading and the writing heads' position
+            // each time the latter reaches either the start or the end of the loop
+            // (depending on the reading direction).
+            if (loopSync_ && loopLength_ > kMinSamplesForFlanger)
+            {
+                heads_[READ].SetIndex(writePos_);
+            }
             loopLengthFade_ = false;
         }
         value = loopLengthFade.GetOutput();

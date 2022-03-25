@@ -157,6 +157,7 @@ void Looper::SetLoopStart(float start)
     loopEnd_ = heads_[READ].GetLoopEnd();
     intLoopEnd_ = loopEnd_;
     crossPointFound_ = false;
+    mustSync_ = true;
 
     // If the reading head goes outside of the loop, reset its position.
     if (loopLength_ < kMinSamplesForFlanger && ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_)))
@@ -201,6 +202,7 @@ void Looper::SetLoopLength(float length)
     loopEnd_ = heads_[READ].GetLoopEnd();
     intLoopEnd_ = loopEnd_;
     crossPointFound_ = false;
+    mustSync_ = true;
 
     // If the reading head goes outside of the loop, reset its position.
     if (loopLength_ < kMinSamplesForFlanger && ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_)))
@@ -220,6 +222,7 @@ void Looper::SetReadRate(float rate)
     readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
     crossPointFound_ = false;
+    mustSync_ = true;
 }
 
 void Looper::SetWriteRate(float rate)
@@ -241,6 +244,7 @@ void Looper::SetDirection(Direction direction)
     heads_[READ].SetDirection(direction);
     direction_ = direction;
     crossPointFound_ = false;
+    mustSync_ = true;
 }
 
 void Looper::SetReadPos(float position)
@@ -294,13 +298,6 @@ float Looper::Read(float input)
         float valueToBlend = heads_[READ].ReadBufferAt((loopLengthGrown_ ? loopStart_ : loopEnd_ + 1) + loopLengthFade.GetIndex());
         if (Fader::FadeStatus::ENDED == loopLengthFade.Process(valueToBlend, value))
         {
-            // In delay mode, keep in sync the reading and the writing heads' position
-            // each time the latter reaches either the start or the end of the loop
-            // (depending on the reading direction).
-            if (loopSync_ && loopLength_ > kMinSamplesForFlanger)
-            {
-                heads_[READ].SetIndex(writePos_);
-            }
             loopLengthFade_ = false;
         }
         value = loopLengthFade.GetOutput();
@@ -410,6 +407,15 @@ bool Looper::UpdateWritePos()
 {
     bool toggle = heads_[WRITE].UpdatePosition();
     writePos_ = heads_[WRITE].GetIntPosition();
+
+    // In delay mode, keep in sync the reading and the writing heads' position
+    // each time the latter reaches either the start or the end of the loop
+    // (depending on the reading direction).
+    if (toggle && loopSync_ && mustSync_)
+    {
+        heads_[READ].SetIndex(writePos_);
+        mustSync_ = false;
+    }
 
     // Handle when reading and writing speeds differ or we're going
     // backwards.

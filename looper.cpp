@@ -414,7 +414,7 @@ bool Looper::UpdateWritePos()
 
     // Handle when reading and writing speeds differ or we're going
     // backwards.
-    if ((freeze_ < 1.f || !crossPointFade_) && (readSpeed_ != writeSpeed_ || !IsGoingForward()))
+    if (freeze_ < 1.f && !crossPointFade_ && (readSpeed_ != writeSpeed_ || !IsGoingForward()))
     {
         headsDistance_ = CalculateDistance(readPos_, writePos_, readSpeed_, writeSpeed_, direction_);
 
@@ -424,7 +424,7 @@ bool Looper::UpdateWritePos()
             CalculateCrossPoint();
         }
 
-        if (crossPointFound_ && !crossPointFade_)
+        if (crossPointFound_)
         {
             float samples = CalculateDistance(writePos_, crossPoint_, writeSpeed_, 0, Direction::FORWARD);
             // If the condition are met, set up the cross point fade.
@@ -511,7 +511,7 @@ float Looper::CalculateDistance(float a, float b, float aSpeed, float bSpeed, Di
 void Looper::CalculateCrossPoint()
 {
     // Do not calculate the cross point if the write head is outside of
-    // the loop (this is expecially true in looper mode, when it roams
+    // the loop (this is especially true in looper mode, when it roams
     // along all the buffer).
     if ((loopEnd_ > loopStart_ && (writePos_ < loopStart_ || writePos_ > loopEnd_)) || (loopStart_ > loopEnd_ && writePos_ < loopStart_ && writePos_ > loopEnd_))
     {

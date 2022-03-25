@@ -211,6 +211,15 @@ void Looper::SetLoopLength(float length)
             heads_[WRITE].ResetPosition();
         }
     }
+
+
+    // In delay mode, keep in sync the reading and the writing heads' position
+    // each time the latter reaches either the start or the end of the loop
+    // (depending on the reading direction).
+    if (loopSync_ && loopLength_ > kMinSamplesForFlanger)
+    {
+        heads_[READ].SetIndex(writePos_);
+    }
 }
 
 void Looper::SetReadRate(float rate)
@@ -403,14 +412,6 @@ bool Looper::UpdateWritePos()
 {
     bool toggle = heads_[WRITE].UpdatePosition();
     writePos_ = heads_[WRITE].GetIntPosition();
-
-    // In delay mode, keep in sync the reading and the writing heads' position
-    // each time the latter reaches either the start or the end of the loop
-    // (depending on the reading direction).
-    if (toggle && loopSync_ && loopLength_ > kMinSamplesForFlanger)
-    {
-        heads_[READ].SetIndex(writePos_);
-    }
 
     // Handle when reading and writing speeds differ or we're going
     // backwards.

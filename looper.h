@@ -125,7 +125,7 @@ namespace wreath
         int32_t sampleRateSpeed_{};
         bool looping_{};
         bool loopSync_{};
-        bool mustSync_{};
+        bool mustSyncHeads_{};
         bool crossPointFade_{};
         float crossPoint_{};
         bool crossPointFound_{};

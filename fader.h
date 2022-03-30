@@ -4,7 +4,7 @@
 
 namespace wreath
 {
-    constexpr float kSamplesToFade{48.f * 100}; // 20ms @ 48KHz
+    constexpr float kSamplesToFade{48.f * 50}; // 10ms @ 48KHz
     constexpr float kEqualCrossFadeP{1.25f};
 
     class Fader

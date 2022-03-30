@@ -14,7 +14,6 @@
 namespace wreath
 {
     constexpr float kMinLoopLengthSamples{46.f}; // ~C1 @ 48KHz
-    constexpr float kMaxSamplesToFade{9600.f};   // 200ms @ 48KHz
     constexpr float kMinSamplesForTone{91.f};    // ~C2 @ 48KHz
     constexpr float kMinSamplesForFlanger{1722.f};
 

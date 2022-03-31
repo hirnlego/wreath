@@ -132,7 +132,7 @@ void Looper::SetLoopStart(float start)
 
     // Set up a fade when the start point changed, except if we're in delay mode
     // or totally frozen.
-    if (loopLength_ < bufferSamples_ && loopLength_ > heads_[READ].GetSamplesToFade() && freeze_ < 1.f)
+    if (loopLength_ < bufferSamples_ && loopLength_ > kMinSamplesForFlanger && freeze_ < 1.f)
     {
         loopLengthChanged_ = true;
         lengthFadePos_ = loopEnd_;
@@ -176,7 +176,7 @@ void Looper::SetLoopLength(float length)
 
     // Set up a fade when the length changed, except if we're in delay mode or
     // totally frozen.
-    if (length < bufferSamples_ && length > heads_[READ].GetSamplesToFade() && freeze_ < 1.f)
+    if (length < bufferSamples_ && length > kMinSamplesForFlanger && freeze_ < 1.f)
     {
         loopLengthChanged_ = true;
         lengthFadePos_ = loopEnd_;
@@ -205,7 +205,7 @@ void Looper::SetLoopLength(float length)
     mustSyncHeads_ = true;
 
     // If the reading head goes outside of the loop, reset its position.
-    if (loopLength_ <= heads_[READ].GetSamplesToFade() && ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_)))
+    if (loopLength_ <= kMinSamplesForFlanger && ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_)))
     {
         heads_[READ].ResetPosition();
         if (loopSync_)
@@ -292,6 +292,24 @@ float Looper::Read(float input)
         frozenValue = heads_[READ].ReadFrozen();
     }
 
+    // Handle fade when looping.
+    if (loopFade.IsActive())
+    {
+        float valueToBlend = (loopLength_ <= kMinSamplesForFlanger) ? 0 : heads_[READ].ReadBufferAt((Direction::FORWARD == direction_ ? loopStart_ : loopEnd_ + 1) + loopFade.GetIndex());
+        loopFade.Process(value, valueToBlend);
+        value = loopFade.GetOutput();
+    }
+
+    if (freeze_ > 0)
+    {
+        if (frozenFade.IsActive())
+        {
+            //frozenFade.Process(frozenValue, heads_[READ].ReadFrozenAt((Direction::FORWARD == direction_ ? loopStart_ : loopEnd_ + 1) + frozenFade.GetIndex()));
+            //frozenValue = frozenFade.GetOutput();
+        }
+        value = Fader::EqualCrossFade(value, frozenValue, freeze_);
+    }
+
     // If the loop length grew, blend a few samples from the start with those at
     // the old loop end, otherwise, blend the cropped part at the end with the
     // samples at the start.
@@ -303,24 +321,6 @@ float Looper::Read(float input)
             loopLengthFade_ = false;
         }
         value = loopLengthFade.GetOutput();
-    }
-
-    // Handle fade when looping.
-    if (loopFade.IsActive())
-    {
-        float valueToBlend = (loopLength_ <= heads_[READ].GetSamplesToFade()) ? 0 : heads_[READ].ReadBufferAt((Direction::FORWARD == direction_ ? loopStart_ : loopEnd_ + 1) + loopFade.GetIndex());
-        loopFade.Process(value, valueToBlend);
-        value = loopFade.GetOutput();
-    }
-
-    if (freeze_ > 0)
-    {
-        if (frozenFade.IsActive())
-        {
-            frozenFade.Process(frozenValue, heads_[READ].ReadFrozenAt((Direction::FORWARD == direction_ ? loopStart_ : loopEnd_ + 1) + loopFade.GetIndex()));
-            frozenValue = frozenFade.GetOutput();
-        }
-        value = Fader::EqualCrossFade(value, frozenValue, freeze_);
     }
 
     // Handle fade on re-triggering.

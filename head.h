@@ -159,7 +159,7 @@ namespace wreath
         {
             if (RunStatus::STOPPED == runStatus_)
             {
-                return false;
+                //return false;
             }
 
             float index = index_ + (rate_ * direction_);
@@ -217,6 +217,8 @@ namespace wreath
             float value = ReadAt(buffer_, index_);
             currentValue_ = value;
 
+            valueToFade = 0.f;
+
             // Gradually start reading, fading from the input signal to the
             // buffered value.
             if (RunStatus::STARTING == runStatus_)
@@ -238,21 +240,6 @@ namespace wreath
                     runStatus_ = RunStatus::STOPPED;
                 }
                 fadeIndex_ += rate_;
-            }
-
-            return value;
-        }
-
-        float ReadAt(float index, bool wrap = false)
-        {
-            int32_t intPos = wrap ? WrapIndex(index) : index;
-            float value = buffer_[intPos];
-            float frac = index - intPos;
-
-            // Interpolate value only it the index has a fractional part.
-            if (frac > std::numeric_limits<float>::epsilon())
-            {
-                value = value + (buffer_[WrapIndex(intPos + std::max(1.f, rate_ * direction_))] - value) * frac;
             }
 
             return value;
@@ -436,6 +423,24 @@ namespace wreath
             return status;
         }
 
+        void Activate()
+        {
+            active_ = true;
+            ResetPosition();
+            Start();
+        }
+
+        void Deactivate()
+        {
+            active_ = false;
+            Stop();
+        }
+
+        void SetActive(bool active)
+        {
+            active_ = active;
+        }
+
         inline void SetLooping(bool looping)
         {
             looping_ = looping;
@@ -473,6 +478,7 @@ namespace wreath
         int32_t intLoopLength_{};
 
         bool looping_{};
+        bool active_{};
         RunStatus runStatus_{};
 
         Movement movement_{};
@@ -493,6 +499,24 @@ namespace wreath
 
         Action HandleLoopAction()
         {
+            if (!active_)
+            {
+                if (intIndex_ >= bufferSamples_)
+                {
+                    SetIndex(index_ - bufferSamples_);
+
+                    return Action::LOOP;
+                }
+                else if (intIndex_ < 0)
+                {
+                    SetIndex(bufferSamples_ + index_);
+
+                    return Action::LOOP;
+                }
+
+                return Action::NO_ACTION;
+            }
+
             // Handle normal loop boundaries.
             if (intLoopEnd_ > intLoopStart_)
             {
@@ -509,7 +533,13 @@ namespace wreath
                         }
                         else
                         {
-                            SetIndex((loopStart_ + (index_ - loopEnd_)) - 1);
+                            if (intIndex_ >= bufferSamples_)
+                            {
+                                SetIndex(index_ - bufferSamples_);
+
+                            }
+
+                            //SetIndex((loopStart_ + (index_ - loopEnd_)) - 1);
 
                             return Action::LOOP;
                         }
@@ -534,7 +564,12 @@ namespace wreath
                         }
                         else
                         {
-                            SetIndex((loopEnd_ - std::abs(loopStart_ - index_)) + 1);
+                            if (intIndex_ < 0)
+                            {
+                                SetIndex(bufferSamples_ + index_);
+
+                            }
+                            //SetIndex((loopEnd_ - std::abs(loopStart_ - index_)) + 1);
 
                             return Action::LOOP;
                         }

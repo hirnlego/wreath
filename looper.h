@@ -37,6 +37,7 @@ namespace wreath
         float Degrade(float input);
         bool UpdateReadPos();
         bool UpdateWritePos();
+        void SwitchReadingHeads();
         void HandleCrossPointFade();
         bool Start(bool now);
         bool Stop(bool now);
@@ -51,7 +52,7 @@ namespace wreath
 
         void SetSamplesToFade(float samples);
 
-        inline float GetSamplesToFade() { return heads_[READ].GetSamplesToFade(); }
+        inline float GetSamplesToFade() { return readHeads_[activeReadHead_].GetSamplesToFade(); }
 
         inline int32_t GetBufferSamples() { return bufferSamples_; }
         inline float GetBufferSeconds() { return bufferSeconds_; }
@@ -139,7 +140,10 @@ namespace wreath
 
         float eRand_{};
 
-        Head heads_[2]{{Type::READ}, {Type::WRITE}};
+        Head writeHead_{Type::WRITE};
+        Head readHeads_[2]{{Type::READ}, {Type::READ}};
+
+        short activeReadHead_{};
 
         Fader loopFade;
         Fader triggerFade;

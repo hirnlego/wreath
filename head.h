@@ -507,23 +507,43 @@ namespace wreath
         {
             if (!loopSync_)
             {
-                if (intIndex_ > intLoopEnd_)
+                // Handle normal loop boundaries.
+                if (intLoopEnd_ > intLoopStart_)
                 {
-                    if (intIndex_ >= bufferSamples_)
+                    if (intIndex_ > intLoopEnd_)
+                    {
+                        if (intIndex_ >= bufferSamples_)
+                        {
+                            SetIndex(index_ - bufferSamples_);
+                        }
+
+                        return looping_ ? Action::LOOP : Action::STOP;
+                    }
+                    else if (intIndex_ < intLoopStart_)
+                    {
+                        if (intIndex_ < 0)
+                        {
+                            SetIndex(bufferSamples_ + index_);
+                        }
+
+                        return looping_ ? Action::LOOP : Action::STOP;
+                    }
+                }
+                // Handle inverted loop boundaries (end point comes before start point).
+                else
+                {
+                    if (intIndex_ > intLoopEnd_ && intIndex_ < intLoopStart_)
+                    {
+                        return looping_ ? Action::LOOP : Action::STOP;
+                    }
+                    else if (intIndex_ >= bufferSamples_)
                     {
                         SetIndex(index_ - bufferSamples_);
                     }
-
-                    return looping_ ? Action::LOOP : Action::STOP;
-                }
-                else if (intIndex_ < intLoopStart_)
-                {
-                    if (intIndex_ < 0)
+                    else if (intIndex_ < 0)
                     {
                         SetIndex(bufferSamples_ + index_);
                     }
-
-                    return looping_ ? Action::LOOP : Action::STOP;
                 }
 
                 return Action::NO_ACTION;

@@ -136,26 +136,6 @@ void Looper::SetSamplesToFade(float samples)
 void Looper::SetLoopStart(float start)
 {
     loopLengthGrown_ = start > loopStart_;
-
-    // Set up a fade when the start point changed, except if we're in delay mode
-    // or totally frozen.
-    if (loopLength_ < bufferSamples_ && loopLength_ > kMinSamplesForFlanger && freeze_ < 1.f)
-    {
-        lengthFadePos_ = loopEnd_;
-        float samples = std::min(readHeads_[activeReadHead_].GetSamplesToFade() * readRate_, (loopLength_ / 2.f) * readRate_);
-        // If there's already a fade in progress, reset it.
-        if (loopLengthFade_)
-        {
-            loopLengthFade_ = false;
-            loopLengthFade.Reset(samples, readRate_);
-        }
-        // Otherwise, init a new fade.
-        else
-        {
-            loopLengthFade.Init(Fader::FadeType::FADE_SINGLE, samples, readRate_);
-        }
-    }
-
     loopStart_ = readHeads_[0].SetLoopStart(start);
     readHeads_[1].SetLoopStart(loopStart_);
     intLoopStart_ = loopStart_;
@@ -165,17 +145,6 @@ void Looper::SetLoopStart(float start)
     intLoopEnd_ = loopEnd_;
     crossPointFound_ = false;
     mustSyncHeads_ = true;
-
-    // If the reading head goes outside of the loop, reset its position.
-    if (loopLength_ < kMinSamplesForFlanger && ((loopEnd_ > loopStart_ && (readPos_ > loopEnd_ || readPos_ < loopStart_)) || (loopStart_ > loopEnd_ && readPos_ > loopEnd_ && readPos_ < loopStart_)))
-    {
-        readHeads_[0].ResetPosition();
-        readHeads_[1].ResetPosition();
-        if (loopSync_)
-        {
-            writeHead_.ResetPosition();
-        }
-    }
 }
 
 void Looper::SetLoopLength(float length)

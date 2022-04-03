@@ -441,9 +441,14 @@ namespace wreath
             active_ = active;
         }
 
-        inline void SetLooping(bool looping)
+        void SetLooping(bool looping)
         {
             looping_ = looping;
+        }
+
+        void SetLoopSync(bool active)
+        {
+            loopSync_ = active;
         }
 
         inline int32_t GetBufferSamples() { return bufferSamples_; }
@@ -469,6 +474,7 @@ namespace wreath
         float index_{};
         float rate_{};
         float fadeIndex_{};
+        bool loopSync_{};
 
         float loopStart_{};
         int32_t intLoopStart_{};
@@ -499,19 +505,25 @@ namespace wreath
 
         Action HandleLoopAction()
         {
-            if (!active_)
+            if (!loopSync_)
             {
-                if (intIndex_ >= bufferSamples_)
+                if (intIndex_ > intLoopEnd_)
                 {
-                    SetIndex(index_ - bufferSamples_);
+                    if (intIndex_ >= bufferSamples_)
+                    {
+                        SetIndex(index_ - bufferSamples_);
+                    }
 
-                    return Action::LOOP;
+                    return looping_ ? Action::LOOP : Action::STOP;
                 }
-                else if (intIndex_ < 0)
+                else if (intIndex_ < intLoopStart_)
                 {
-                    SetIndex(bufferSamples_ + index_);
+                    if (intIndex_ < 0)
+                    {
+                        SetIndex(bufferSamples_ + index_);
+                    }
 
-                    return Action::LOOP;
+                    return looping_ ? Action::LOOP : Action::STOP;
                 }
 
                 return Action::NO_ACTION;
@@ -533,13 +545,7 @@ namespace wreath
                         }
                         else
                         {
-                            if (intIndex_ >= bufferSamples_)
-                            {
-                                SetIndex(index_ - bufferSamples_);
-
-                            }
-
-                            //SetIndex((loopStart_ + (index_ - loopEnd_)) - 1);
+                            SetIndex((loopStart_ + (index_ - loopEnd_)) - 1);
 
                             return Action::LOOP;
                         }
@@ -564,12 +570,7 @@ namespace wreath
                         }
                         else
                         {
-                            if (intIndex_ < 0)
-                            {
-                                SetIndex(bufferSamples_ + index_);
-
-                            }
-                            //SetIndex((loopEnd_ - std::abs(loopStart_ - index_)) + 1);
+                            SetIndex((loopEnd_ - std::abs(loopStart_ - index_)) + 1);
 
                             return Action::LOOP;
                         }

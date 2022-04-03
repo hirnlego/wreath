@@ -134,7 +134,7 @@ namespace wreath
         TriggerMode triggerMode_{};
 
         float lengthFadePos_{};
-        bool loopLengthChanged_{};
+        bool loopLengthReset_{};
         bool loopLengthFade_{};
         bool loopLengthGrown_{};
 

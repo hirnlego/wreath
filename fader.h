@@ -101,7 +101,7 @@ namespace wreath
                 from = toInput;
                 to = fromInput;
             }
-            output_ = EqualCrossFade(0, 0, index_ * freq_);
+            output_ = EqualCrossFade(from, to, index_ * freq_);
             index_ += rate_;
             if (index_ >= samples_)
             {

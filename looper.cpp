@@ -298,9 +298,8 @@ void Looper::Write(float input)
     if (freeze_ < 1.f && headsCrossFade.IsActive())
     {
         float currentValue = writeHead_.GetCurrentValue();
-        headsCrossFade.Process(input, 0);
+        headsCrossFade.Process(input, currentValue);
         input = headsCrossFade.GetOutput();
-        input = 0;
     }
 
     writeHead_.Write(input);
@@ -371,7 +370,7 @@ bool Looper::UpdateWritePos()
             if (samples > 0 && samples <= writeHead_.GetSamplesToFade())
             {
                 crossPointFound_ = false;
-                headsCrossFade.Init(Fader::FadeType::FADE_SINGLE, samples, writeRate_);
+                headsCrossFade.Init(Fader::FadeType::FADE_OUT_IN, samples * 2, writeRate_);
             }
         }
     }

@@ -251,7 +251,9 @@ float Looper::Read(float input)
     {
         if (Fader::FadeStatus::ENDED == loopFade.Process(readHeads_[!activeReadHead_].Read(input), value))
         {
-            readHeads_[!activeReadHead_].SetRunStatus(RunStatus::STOPPED);
+            // FIXME: This sometimes causes the looper to fall silent, not sure
+            // if it's even needed at this point...
+            //readHeads_[!activeReadHead_].SetRunStatus(RunStatus::STOPPED);
             readHeads_[!activeReadHead_].SetLoopLength(loopLength_);
         }
         else
@@ -293,14 +295,12 @@ float Looper::Read(float input)
 
 void Looper::Write(float input)
 {
-    if (freeze_ < 1.f && crossPointFade_)
+    if (freeze_ < 1.f && headsCrossFade.IsActive())
     {
         float currentValue = writeHead_.GetCurrentValue();
-        if (Fader::FadeStatus::ENDED == headsCrossFade.Process(input, currentValue))
-        {
-            crossPointFade_ = false;
-        }
+        headsCrossFade.Process(input, 0);
         input = headsCrossFade.GetOutput();
+        input = 0;
     }
 
     writeHead_.Write(input);
@@ -346,15 +346,15 @@ bool Looper::UpdateWritePos()
     // In delay mode, keep in sync the reading and the writing heads' position
     // each time the latter reaches either the start or the end of the loop
     // (depending on the reading direction).
-    if (triggered && loopSync_ && mustSyncHeads_)
+    if (triggered && loopSync_ && mustSyncHeads_ && readRate_ == 1.f)
     {
-        readHeads_[activeReadHead_].SetIndex(writePos_);
+        //readHeads_[activeReadHead_].SetIndex(writePos_);
         mustSyncHeads_ = false;
     }
 
     // Handle when reading and writing speeds differ or we're going
     // backwards.
-    if (freeze_ < 1.f && !crossPointFade_ && (readSpeed_ != writeSpeed_ || !IsGoingForward()))
+    if (freeze_ < 1.f && !headsCrossFade.IsActive() && (readSpeed_ != writeSpeed_ || !IsGoingForward()))
     {
         headsDistance_ = CalculateDistance(readPos_, writePos_, readSpeed_, writeSpeed_, direction_);
 
@@ -371,8 +371,7 @@ bool Looper::UpdateWritePos()
             if (samples > 0 && samples <= writeHead_.GetSamplesToFade())
             {
                 crossPointFound_ = false;
-                crossPointFade_ = true;
-                headsCrossFade.Init(Fader::FadeType::FADE_OUT_IN, samples * 2, writeRate_);
+                headsCrossFade.Init(Fader::FadeType::FADE_SINGLE, samples, writeRate_);
             }
         }
     }

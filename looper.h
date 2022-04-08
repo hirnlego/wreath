@@ -127,7 +127,6 @@ namespace wreath
         bool looping_{};
         bool loopSync_{};
         bool mustSyncHeads_{};
-        bool crossPointFade_{};
         float crossPoint_{};
         bool crossPointFound_{};
 

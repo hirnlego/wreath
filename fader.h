@@ -4,7 +4,7 @@
 
 namespace wreath
 {
-    constexpr float kSamplesToFade{48.f * 50}; // 10ms @ 48KHz
+    constexpr float kSamplesToFade{48.f * 50}; // 50ms @ 48KHz
     constexpr float kEqualCrossFadeP{1.25f};
 
     class Fader
@@ -79,7 +79,7 @@ namespace wreath
             return from * d * d + to * c * c;
         }
 
-        FadeStatus Process(float fromInput, float toInput, bool autoInc = true)
+        FadeStatus Process(float fromInput, float toInput)
         {
             input_ = fromInput;
 
@@ -101,8 +101,8 @@ namespace wreath
                 from = toInput;
                 to = fromInput;
             }
-            output_ = EqualCrossFade(from, to, index_ * freq_);
-
+            output_ = EqualCrossFade(0, 0, index_ * freq_);
+            index_ += rate_;
             if (index_ >= samples_)
             {
                 if (FadeType::FADE_OUT_IN == type_)
@@ -119,11 +119,6 @@ namespace wreath
                 return status_;
             }
 
-            if (autoInc)
-            {
-                index_ += rate_;
-            }
-
             return status_;
         }
 
@@ -134,7 +129,7 @@ namespace wreath
 
         float GetOutput()
         {
-            return FadeStatus::FADING == status_ ? output_ : input_;
+            return output_;
         }
 
         bool IsActive()

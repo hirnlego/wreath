@@ -103,6 +103,16 @@ namespace wreath
             return loopLength_;
         }
 
+        void SetLoopStartAndLength(float start, float length)
+        {
+            loopStart_ = start;
+            intLoopStart_ = loopStart_;
+            loopLength_ = length;
+            intLoopLength_ = loopLength_;
+            CalculateLoopEnd();
+            samplesToFade_ = std::min(kSamplesToFade, loopLength_ / 2.f);
+        }
+
         inline void SetFreeze(float amount)
         {
             freezeAmount_ = amount;

@@ -31,7 +31,7 @@ void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t max
     writeSpeed_ = sampleRate_ * writeRate_;
     //writeHead_.SetActive(true);
     writeHead_.SetLooping(true);
-    writeHead_.SetRunStatus(RunStatus::RUNNING);
+    //writeHead_.SetRunStatus(RunStatus::RUNNING);
 }
 
 void Looper::Reset()
@@ -83,52 +83,33 @@ void Looper::StopBuffering()
     loopLengthSeconds_ = loopLength_ / sampleRate_;
 }
 
-bool Looper::Start(bool now)
+void Looper::Start(bool now)
 {
     if (now)
     {
-        readHeads_[activeReadHead_].SetRunStatus(RunStatus::RUNNING);
-
-        return true;
+        readingActive_ = true;
     }
-
-    RunStatus status = readHeads_[activeReadHead_].GetRunStatus();
-    if (RunStatus::RUNNING != status && RunStatus::STARTING != status)
+    else
     {
-        status = readHeads_[activeReadHead_].Start();
+        startFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
     }
-    if (RunStatus::RUNNING == status)
-    {
-        return true;
-    }
-
-    return false;
 }
 
-bool Looper::Stop(bool now)
+void Looper::Stop(bool now)
 {
     if (now)
     {
-        readHeads_[activeReadHead_].SetRunStatus(RunStatus::STOPPED);
-
-        return true;
+        readingActive_ = false;
     }
-
-    RunStatus status = readHeads_[activeReadHead_].GetRunStatus();
-    if (RunStatus::STOPPED != status && RunStatus::STOPPING != status)
+    else
     {
-        status = readHeads_[activeReadHead_].Stop();
+        stopFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
     }
-    if (RunStatus::STOPPED == status)
-    {
-        return true;
-    }
-
-    return false;
 }
 
 void Looper::Trigger()
 {
+    Start(true);
     triggerFade.Init(Fader::FadeType::FADE_OUT_IN, readHeads_[activeReadHead_].GetSamplesToFade() * 2, readRate_);
 }
 
@@ -263,25 +244,47 @@ void Looper::SetLoopSync(bool loopSync)
 
 float Looper::Read(float input)
 {
-    float value = readHeads_[activeReadHead_].Read(input);
+    float value = readHeads_[activeReadHead_].Read();
+
+    if (startFade.IsActive())
+    {
+        if (Fader::FadeStatus::ENDED == startFade.Process(0, value))
+        {
+            readingActive_ = true;
+        }
+        value = startFade.GetOutput();
+    }
+    else if (stopFade.IsActive())
+    {
+        if (Fader::FadeStatus::ENDED == stopFade.Process(value, 0))
+        {
+            readingActive_ = false;
+        }
+        value = stopFade.GetOutput();
+    }
+    else if (!readingActive_)
+    {
+        return 0.f;
+    }
+
     if (loopFade.IsActive())
     {
-        if (Fader::FadeStatus::ENDED == loopFade.Process(readHeads_[!activeReadHead_].Read(input), value))
+        if (Fader::FadeStatus::ENDED == loopFade.Process(readHeads_[!activeReadHead_].Read(), value))
         {
-            readHeads_[!activeReadHead_].SetRunStatus(RunStatus::STOPPED);
+            //readHeads_[!activeReadHead_].SetRunStatus(RunStatus::STOPPED);
             readHeads_[!activeReadHead_].SetLoopStartAndLength(loopStart_, loopLength_);
             readHeads_[!activeReadHead_].SetIndex(readPos_);
-
-
         }
         value = loopFade.GetOutput();
     }
 
     if (freeze_ > 0)
     {
+        // Crossfade with the frozen buffer.
         value = Fader::EqualCrossFade(value, readHeads_[activeReadHead_].ReadFrozen(), freeze_);
     }
 
+    /*
     // Handle fade on re-triggering.
     if (triggerFade.IsActive())
     {
@@ -297,20 +300,25 @@ float Looper::Read(float input)
             {
                 writeHead_.ResetPosition();
             }
-            readHeads_[activeReadHead_].SetRunStatus(RunStatus::RUNNING);
+            //readHeads_[activeReadHead_].SetRunStatus(RunStatus::RUNNING);
         }
         value = triggerFade.GetOutput();
     }
+    */
 
     return value;
 }
 
 void Looper::Write(float input)
 {
+    if (!writingActive_)
+    {
+        return;
+    }
+
     if (freeze_ < 1.f && headsCrossFade.IsActive())
     {
-        float currentValue = writeHead_.GetCurrentValue();
-        headsCrossFade.Process(input, currentValue);
+        headsCrossFade.Process(input, writeHead_.Read());
         input = headsCrossFade.GetOutput();
     }
 
@@ -353,7 +361,7 @@ void Looper::SwitchReadingHeads()
     // Swap the heads: the active one will fade out and the inactive one will
     // fade in at the start position.
 
-    readHeads_[!activeReadHead_].SetRunStatus(RunStatus::RUNNING);
+    //readHeads_[!activeReadHead_].SetRunStatus(RunStatus::RUNNING);
     if (loopLengthGrown_ )
     {
         readHeads_[activeReadHead_].ResetPosition();
@@ -371,29 +379,32 @@ void Looper::SwitchReadingHeads()
     activeReadHead_ = !activeReadHead_;
 }
 
-bool Looper::UpdateReadPos()
+void Looper::UpdateReadPos()
 {
-    readHeads_[activeReadHead_].UpdatePosition();
-    bool triggered = readHeads_[!activeReadHead_].UpdatePosition();
+    Head::Action activeAction = readHeads_[activeReadHead_].UpdatePosition();
+    Head::Action inactiveAction = readHeads_[!activeReadHead_].UpdatePosition();
+    Head::Action action = loopSync_ ? activeAction : inactiveAction;
 
     // When looping, the active reading head should fade out and proceed reading
     // ignoring the loop boundaries, while the inactive reading head should begin
     // a fade in from the other side of the loop.
-    if (triggered && !loopSync_ && (loopChanged_ || loopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_))
+    if (Head::Action::LOOP == action && !loopSync_ && (loopChanged_ || loopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_))
     {
         SwitchReadingHeads();
         loopChanged_ = false;
     }
-    else if (triggered && loopSync_)
+    else if (Head::Action::LOOP == action && loopSync_)
     {
         //readHeads_[0].ResetPosition();
         //readHeads_[1].ResetPosition();
     }
+    else if (Head::Action::STOP == action)
+    {
+        Stop(true);
+    }
 
     readPos_ = readHeads_[activeReadHead_].GetPosition();
     readPosSeconds_ = readPos_ / sampleRate_;
-
-    return triggered;
 }
 
 /*
@@ -402,9 +413,9 @@ writing head must reset position upon looping when in delay mode, but not if the
 
 */
 
-bool Looper::UpdateWritePos()
+void Looper::UpdateWritePos()
 {
-    bool triggered = writeHead_.UpdatePosition();
+    Head::Action action = writeHead_.UpdatePosition();
     writePos_ = writeHead_.GetIntPosition();
 /*
     if (triggered && loopSync_)
@@ -423,7 +434,7 @@ loopLengthFade_ = false;
     // In delay mode, keep in sync the reading and the writing heads' position
     // each time the latter reaches either the start or the end of the loop
     // (depending on the reading direction).
-    if (triggered && loopSync_ && mustSyncHeads_ && readRate_ == 1.f)
+    if (Head::Action::LOOP == action && loopSync_ && mustSyncHeads_ && readRate_ == 1.f)
     {
         readHeads_[0].SetIndex(writePos_);
         readHeads_[1].SetIndex(writePos_);
@@ -453,8 +464,6 @@ loopLengthFade_ = false;
             }
         }
     }
-
-    return triggered;
 }
 
 void Looper::ToggleDirection()
@@ -469,25 +478,6 @@ void Looper::SetFreeze(float amount)
     readHeads_[0].SetFreeze(amount);
     readHeads_[1].SetFreeze(amount);
     writeHead_.SetFreeze(amount);
-}
-
-void Looper::SetTriggerMode(TriggerMode mode)
-{
-    switch (mode)
-    {
-    case TriggerMode::GATE:
-        SetReadPos(GetWritePos());
-        SetLooping(true);
-        break;
-    case TriggerMode::TRIGGER:
-        SetLooping(false);
-        break;
-    case TriggerMode::LOOP:
-        SetLooping(true);
-        break;
-    }
-
-    triggerMode_ = mode;
 }
 
 void Looper::SetDegradation(float amount)

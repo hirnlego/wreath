@@ -72,7 +72,6 @@ namespace wreath
         struct Conf
         {
             Mode mode;
-            Looper::TriggerMode triggerMode;
             Movement movement;
             Direction direction;
             float rate;
@@ -114,9 +113,6 @@ namespace wreath
         float nextLeftFreeze{};
         float nextRightFreeze{};
 
-        Looper::TriggerMode leftTriggerMode{};
-        Looper::TriggerMode rightTriggerMode{};
-
         bool mustStart{};
         bool mustStop{};
         bool mustRetrigger{};
@@ -147,8 +143,6 @@ namespace wreath
         inline bool IsCrossMode() { return Mode::CROSS == conf_.mode; }
         inline bool IsDualMode() { return Mode::DUAL == conf_.mode; }
         inline Mode GetMode() { return conf_.mode; }
-        inline Looper::TriggerMode GetTriggerMode() { return leftTriggerMode; }
-        inline bool IsGateMode() { return Looper::TriggerMode::GATE == leftTriggerMode; }
 
         void Init(int32_t sampleRate, Conf conf)
         {
@@ -219,26 +213,10 @@ namespace wreath
             loopers_[RIGHT].SetReadPos(pos);
         }
 
-        void SetTriggerMode(Looper::TriggerMode mode)
+        void SetLooping(bool active)
         {
-            leftTriggerMode = mode;
-            rightTriggerMode = mode;
-            switch (mode)
-            {
-            case Looper::TriggerMode::GATE:
-                dryLevel = 0.f;
-                mustStart = true;
-                break;
-            case Looper::TriggerMode::TRIGGER:
-                dryLevel = 1.f;
-                mustStop = true;
-                break;
-            case Looper::TriggerMode::LOOP:
-                dryLevel = 1.f;
-                mustStart = true;
-                break;
-            }
-            conf_.triggerMode = mode;
+            loopers_[LEFT].SetLooping(active);
+            loopers_[RIGHT].SetLooping(active);
         }
 
         void SetMovement(int channel, Movement movement)
@@ -362,16 +340,6 @@ namespace wreath
             }
         }
 
-        void Gate(bool on)
-        {
-            dryLevel = on ? 1.f : 0.f;
-            if (on)
-            {
-                loopers_[LEFT].SetWritePos(loopers_[LEFT].GetReadPos());
-                loopers_[RIGHT].SetWritePos(loopers_[RIGHT].GetReadPos());
-            }
-        }
-
         void Start()
         {
             if (State::READY == state_)
@@ -472,45 +440,49 @@ namespace wreath
 
                 if (mustStart)
                 {
-                    bool doneLeft{loopers_[LEFT].Start(false)};
-                    bool doneRight{loopers_[RIGHT].Start(false)};
-                    if (doneLeft && doneRight)
-                    {
-                        mustStart = false;
-                    }
+                    loopers_[LEFT].Start(false);
+                    loopers_[RIGHT].Start(false);
+                    mustStart = false;
                 }
 
                 if (mustStop)
                 {
-                    bool doneLeft{loopers_[LEFT].Stop(false)};
-                    bool doneRight{loopers_[RIGHT].Stop(false)};
-                    if (doneLeft && doneRight)
-                    {
-                        mustStop = false;
-                    }
+                    loopers_[LEFT].Stop(false);
+                    loopers_[RIGHT].Stop(false);
+                    mustStop = false;
                 }
 
+                float leftFeedback{};
                 leftWet = loopers_[LEFT].Read(leftDry);
-                rightWet = loopers_[RIGHT].Read(rightDry);
-
-                // Feedback path.
-                float leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
-                float rightFeedback = loopers_[RIGHT].Degrade(rightWet * feedback);
+                leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
                 float leftFiltered = filterLevel * Filter(leftFeedback) * feedback;
-                float rightFiltered = filterLevel * Filter(rightFeedback) * feedback;
                 leftFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(leftFiltered));
-                rightFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(rightFiltered));
                 leftFeedback = Mix(leftFeedback, leftFiltered);
-                rightFeedback = Mix(rightFeedback, rightFiltered);
-
-                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
-                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
-
-                loopers_[LEFT].UpdateWritePos();
-                loopers_[RIGHT].UpdateWritePos();
-
                 loopers_[LEFT].UpdateReadPos();
+                if (loopers_[LEFT].IsReading())
+                {
+                }
+                float rightFeedback{};
+                rightWet = loopers_[RIGHT].Read(rightDry);
+                rightFeedback = loopers_[RIGHT].Degrade(rightWet * feedback);
+                float rightFiltered = filterLevel * Filter(rightFeedback) * feedback;
+                rightFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(rightFiltered));
+                rightFeedback = Mix(rightFeedback, rightFiltered);
                 loopers_[RIGHT].UpdateReadPos();
+                if (loopers_[RIGHT].IsReading())
+                {
+                }
+
+                if (loopers_[LEFT].IsWriting())
+                {
+                    loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
+                    loopers_[LEFT].UpdateWritePos();
+                }
+                if (loopers_[RIGHT].IsWriting())
+                {
+                    loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
+                    loopers_[RIGHT].UpdateWritePos();
+                }
 
                 // Mix some of the filtered fed back signal with the wet when frozen.
                 leftWet = Mix(leftWet, filterLevel * Filter(leftFeedback) * freeze_);
@@ -548,7 +520,6 @@ namespace wreath
             loopers_[RIGHT].Reset();
 
             // SetMode(conf_.mode);
-            SetTriggerMode(conf_.triggerMode);
             SetMovement(BOTH, conf_.movement);
             SetDirection(BOTH, conf_.direction);
             SetReadRate(BOTH, conf_.rate);
@@ -578,15 +549,6 @@ namespace wreath
 
         void UpdateParameters()
         {
-            if (leftTriggerMode != loopers_[LEFT].GetTriggerMode())
-            {
-                loopers_[LEFT].SetTriggerMode(leftTriggerMode);
-            }
-            if (rightTriggerMode != loopers_[RIGHT].GetTriggerMode())
-            {
-                loopers_[RIGHT].SetTriggerMode(rightTriggerMode);
-            }
-
             if (leftDirection != loopers_[LEFT].GetDirection())
             {
                 loopers_[LEFT].SetDirection(leftDirection);

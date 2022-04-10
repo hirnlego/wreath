@@ -12,13 +12,6 @@ namespace wreath
         Looper() {}
         ~Looper() {}
 
-        enum TriggerMode
-        {
-            TRIGGER,
-            GATE,
-            LOOP,
-        };
-
         void Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t maxBufferSamples);
         void Reset();
         void ClearBuffer();
@@ -35,20 +28,21 @@ namespace wreath
         float Read(float input);
         void Write(float input);
         float Degrade(float input);
-        bool UpdateReadPos();
-        bool UpdateWritePos();
+        void UpdateReadPos();
+        void UpdateWritePos();
         void SwitchReadingHeads();
         void HandleCrossPointFade();
-        bool Start(bool now);
-        bool Stop(bool now);
+        void Start(bool now);
+        void Stop(bool now);
         void Trigger();
         void SetLoopStart(float start);
         int32_t GetRandomPosition();
         void SetDirection(Direction direction);
         void ToggleDirection();
         void SetFreeze(float amount);
-        void SetTriggerMode(TriggerMode mode);
         void SetDegradation(float amount);
+        void SetReading(bool active) { readingActive_ = active; }
+        void SetWriting(bool active) { writingActive_ = active; }
 
         void SetSamplesToFade(float samples);
 
@@ -80,12 +74,14 @@ namespace wreath
         inline Direction GetDirection() { return direction_; }
         inline bool IsDrunkMovement() { return Movement::DRUNK == movement_; }
         inline bool IsGoingForward() { return Direction::FORWARD == direction_; }
-        inline TriggerMode GetTriggerMode() { return triggerMode_; }
 
         inline float GetHeadsDistance() { return headsDistance_; }
         inline float GetCrossPoint() { return crossPoint_; }
         inline bool CrossPointFound() { return crossPointFound_; }
         float CalculateDistance(float a, float b, float aSpeed, float bSpeed, Direction direction);
+
+        bool IsReading() { return readingActive_; }
+        bool IsWriting() { return writingActive_; }
 
     private:
         enum Fade
@@ -129,9 +125,8 @@ namespace wreath
         bool mustSyncHeads_{};
         float crossPoint_{};
         bool crossPointFound_{};
-
-        TriggerMode triggerMode_{};
-
+        bool readingActive_{true};
+        bool writingActive_{true};
         float lengthFadePos_{};
         bool loopChanged_{};
         bool loopLengthFade_{};
@@ -149,6 +144,8 @@ namespace wreath
         Fader headsCrossFade;
         Fader loopLengthFade;
         Fader frozenFade;
+        Fader startFade;
+        Fader stopFade;
 
         Movement movement_{}; // The current movement type of the looper
     };

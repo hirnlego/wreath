@@ -23,14 +23,6 @@ namespace wreath
         WRITE,
     };
 
-    enum Action
-    {
-        NO_ACTION,
-        LOOP,
-        INVERT,
-        STOP,
-    };
-
     enum Movement
     {
         NORMAL,
@@ -44,20 +36,19 @@ namespace wreath
         FORWARD = 1
     };
 
-    enum RunStatus
-    {
-        STOPPED,
-        RUNNING,
-        STOPPING,
-        STARTING,
-        RESTARTING,
-    };
-
     class Head
     {
     public:
         Head(Type type) : type_{type} {}
         ~Head() {}
+
+        enum class Action
+        {
+            NO_ACTION,
+            LOOP,
+            INVERT,
+            STOP,
+        };
 
         void Reset()
         {
@@ -74,7 +65,6 @@ namespace wreath
             maxBufferSamples_ = maxBufferSamples;
             rate_ = 1.f;
             looping_ = false;
-            runStatus_ = RunStatus::STOPPED;
             movement_ = Movement::NORMAL;
             direction_ = Direction::FORWARD;
             samplesToFade_ = std::min(kSamplesToFade, loopLength_ / 2.f);
@@ -165,41 +155,26 @@ namespace wreath
             SetIndex(FORWARD == direction_ ? loopStart_ : loopEnd_);
         }
 
-        bool UpdatePosition()
+        Action UpdatePosition()
         {
-            if (RunStatus::STOPPED == runStatus_)
-            {
-                //return false;
-            }
-
             float index = index_ + (rate_ * direction_);
             SetIndex(index);
             Action action = HandleLoopAction();
 
             switch (action)
             {
-            case STOP:
-                if (READ == type_)
-                {
-                    Stop();
-                }
-                return true;
-
-            case INVERT:
+            case Action::INVERT:
                 if (READ == type_)
                 {
                     ToggleDirection();
                 }
-                return true;
-
-            case LOOP:
-                return true;
+                break;
 
             default:
                 break;
             }
 
-            return false;
+            return action;
         }
 
         float GetSamplesToFade()
@@ -217,42 +192,9 @@ namespace wreath
             return frozen_ ? ReadAt(freezeBuffer_, index_) : 0;
         }
 
-        float Read(float valueToFade)
+        float Read()
         {
-            if (RunStatus::STOPPED == runStatus_)
-            {
-                return 0.f;
-            }
-
-            float value = ReadAt(buffer_, index_);
-            currentValue_ = value;
-
-            valueToFade = 0.f;
-
-            // Gradually start reading, fading from the input signal to the
-            // buffered value.
-            if (RunStatus::STARTING == runStatus_)
-            {
-                value = Fader::CrossFade(valueToFade, value, fadeIndex_ * (1.f / samplesToFade_));
-                if (fadeIndex_ >= samplesToFade_)
-                {
-                    runStatus_ = RunStatus::RUNNING;
-                }
-                fadeIndex_ += rate_;
-            }
-            // Gradually stop reading, fading from the buffered value to the
-            // input signal.
-            else if (RunStatus::STOPPING == runStatus_)
-            {
-                value = Fader::CrossFade(value, valueToFade, fadeIndex_ * (1.f / samplesToFade_));
-                if (fadeIndex_ >= samplesToFade_)
-                {
-                    runStatus_ = RunStatus::STOPPED;
-                }
-                fadeIndex_ += rate_;
-            }
-
-            return value;
+            return ReadAt(buffer_, index_);
         }
 
         float ReadBufferAt(float index, bool wrap = false)
@@ -324,32 +266,6 @@ namespace wreath
         void Write(float input)
         {
             HandleFreeze(input);
-
-            currentValue_ = buffer_[intIndex_];
-
-            // Gradually start writing, fading from the buffered value to the input
-            // signal.
-            if (RunStatus::STARTING == runStatus_)
-            {
-                input = Fader::CrossFade(currentValue_, input, fadeIndex_ * (1.f / samplesToFade_));
-                if (fadeIndex_ >= samplesToFade_)
-                {
-                    runStatus_ = RunStatus::RUNNING;
-                }
-                fadeIndex_ += rate_;
-            }
-            // Gradually stop writing, fading from the input signal to the buffered
-            // value.
-            else if (RunStatus::STOPPING == runStatus_)
-            {
-                input = Fader::CrossFade(input, currentValue_, fadeIndex_ * (1.f / samplesToFade_));
-                if (fadeIndex_ >= samplesToFade_)
-                {
-                    runStatus_ = RunStatus::STOPPED;
-                }
-                fadeIndex_ += rate_;
-            }
-
             buffer_[intIndex_] = input;
         }
 
@@ -407,50 +323,6 @@ namespace wreath
             return direction_;
         }
 
-        inline void SetRunStatus(RunStatus status)
-        {
-            runStatus_ = status;
-            fadeIndex_ = 0;
-        }
-
-        RunStatus Start()
-        {
-            // Start right away if the loop length is smaller than the minimum
-            // number of samples needed for a tone.
-            RunStatus status = loopLength_ > samplesToFade_ ? RunStatus::STARTING : RunStatus::RUNNING;
-            SetRunStatus(status);
-
-            return status;
-        }
-
-        RunStatus Stop()
-        {
-            // Stop right away if the loop length is smaller than the minimum
-            // number of samples needed for a tone.
-            RunStatus status = loopLength_ > samplesToFade_ ? RunStatus::STOPPING : RunStatus::STOPPED;
-            SetRunStatus(status);
-
-            return status;
-        }
-
-        void Activate()
-        {
-            active_ = true;
-            ResetPosition();
-            Start();
-        }
-
-        void Deactivate()
-        {
-            active_ = false;
-            Stop();
-        }
-
-        void SetActive(bool active)
-        {
-            active_ = active;
-        }
-
         void SetLooping(bool looping)
         {
             looping_ = looping;
@@ -468,9 +340,6 @@ namespace wreath
         inline float GetPosition() { return index_; }
         inline int32_t GetIntPosition() { return intIndex_; }
         bool IsGoingForward() { return Direction::FORWARD == direction_; }
-        bool IsRunning() { return RunStatus::RUNNING == runStatus_; }
-        RunStatus GetRunStatus() { return runStatus_; }
-        float GetCurrentValue() { return currentValue_; }
 
     private:
         const Type type_;
@@ -494,13 +363,10 @@ namespace wreath
         int32_t intLoopLength_{};
 
         bool looping_{};
-        bool active_{};
-        RunStatus runStatus_{};
 
         Movement movement_{};
         Direction direction_{};
 
-        float currentValue_{};
         float freezeAmount_{};
         float degradationAmount_{};
         bool frozen_{};
@@ -582,7 +448,7 @@ namespace wreath
                     }
                     // When the head is not looping, and while it's not already
                     // stopping, stop it and allow for a fade out.
-                    else if (RunStatus::RUNNING == runStatus_ && !looping_ && intIndex_ > intLoopEnd_ - samplesToFade_)
+                    else if (!looping_ && intIndex_ > intLoopEnd_ - samplesToFade_)
                     {
                         return Action::STOP;
                     }
@@ -609,13 +475,6 @@ namespace wreath
                     // stopping, stop it and allow for a fade out.
                     else if (!looping_ && intIndex_ < intLoopStart_ + samplesToFade_)
                     {
-                        if (RunStatus::STOPPING == runStatus_)
-                        {
-                            SetIndex((loopEnd_ - std::abs(loopStart_ - index_)) + 1);
-
-                            return Action::LOOP;
-                        }
-
                         return Action::STOP;
                     }
                 }

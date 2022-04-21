@@ -15,7 +15,7 @@ namespace wreath
 
     constexpr int32_t kSampleRate{48000};
     // constexpr int kBufferSeconds{150}; // 2:30 minutes max, with 2 buffers
-    constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
+    constexpr int kBufferSeconds{1}; // 1:20 minutes, max with 4 buffers
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];

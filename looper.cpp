@@ -26,6 +26,8 @@ void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t max
     readHeads_[1].SetRate(readRate_);
     readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
+    readHeads_[0].SetLooping(true);
+    readHeads_[1].SetLooping(true);
     writeRate_ = 1.f;
     writeHead_.SetRate(writeRate_);
     writeSpeed_ = sampleRate_ * writeRate_;
@@ -383,7 +385,13 @@ void Looper::UpdateReadPos()
 {
     Head::Action activeAction = readHeads_[activeReadHead_].UpdatePosition();
     Head::Action inactiveAction = readHeads_[!activeReadHead_].UpdatePosition();
-    Head::Action action = loopSync_ ? activeAction : inactiveAction;
+    Head::Action action = loopSync_ || loopLengthGrown_ ? activeAction : inactiveAction;
+
+    // Note that in delay mode we don't need to fade the loop, and we couldn't do
+    // it anyway because it'd need a few samples from outside the loop and these
+    // samples are probably dirty.
+    // Fading when changing the loop size yields the same problem, but it may be
+    // necessary (which evil is the worse?).
 
     // When looping, the active reading head should fade out and proceed reading
     // ignoring the loop boundaries, while the inactive reading head should begin

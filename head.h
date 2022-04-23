@@ -381,161 +381,44 @@ namespace wreath
 
         Action HandleLoopAction()
         {
-            if (!loopSync_)
-            {
-                // Handle normal loop boundaries.
-                if (intLoopEnd_ > intLoopStart_)
-                {
-                    if (intIndex_ > intLoopEnd_)
-                    {
-                        if (intIndex_ >= bufferSamples_)
-                        {
-                            SetIndex(index_ - bufferSamples_);
-                        }
-
-                        return looping_ ? Action::LOOP : Action::STOP;
-                    }
-                    else if (intIndex_ < intLoopStart_)
-                    {
-                        if (intIndex_ < 0)
-                        {
-                            SetIndex(bufferSamples_ + index_);
-                        }
-
-                        return looping_ ? Action::LOOP : Action::STOP;
-                    }
-                }
-                // Handle inverted loop boundaries (end point comes before start point).
-                else
-                {
-                    if (intIndex_ > intLoopEnd_ && intIndex_ < intLoopStart_)
-                    {
-                        return looping_ ? Action::LOOP : Action::STOP;
-                    }
-                    else if (intIndex_ >= bufferSamples_)
-                    {
-                        SetIndex(index_ - bufferSamples_);
-                    }
-                    else if (intIndex_ < 0)
-                    {
-                        SetIndex(bufferSamples_ + index_);
-                    }
-                }
-
-                return Action::NO_ACTION;
-            }
-
             // Handle normal loop boundaries.
             if (intLoopEnd_ > intLoopStart_)
             {
-                // Forward direction.
-                if (Direction::FORWARD == direction_)
+                float length = !loopSync_ && Type::WRITE == type_ ? bufferSamples_ : loopLength_;
+                if (intIndex_ > intLoopEnd_)
                 {
-                    if (looping_ && intIndex_ > intLoopEnd_)
+                    int32_t intLength = !loopSync_ && Type::WRITE == type_ ? bufferSamples_ : intLoopLength_;
+                    if (intIndex_ >= intLength)
                     {
-                        if (Movement::PENDULUM == movement_ && looping_)
-                        {
-                            SetIndex(loopEnd_ - (index_ - loopEnd_));
-
-                            return Action::INVERT;
-                        }
-                        else
-                        {
-                            SetIndex((loopStart_ + (index_ - loopEnd_)) - 1);
-
-                            return Action::LOOP;
-                        }
+                        SetIndex(index_ - length);
                     }
-                    // When the head is not looping, and while it's not already
-                    // stopping, stop it and allow for a fade out.
-                    else if (!looping_ && intIndex_ > intLoopEnd_ - samplesToFade_)
-                    {
-                        return Action::STOP;
-                    }
+
+                    return looping_ ? Action::LOOP : Action::STOP;
                 }
-                // Backwards direction.
-                else
+                else if (intIndex_ < intLoopStart_)
                 {
-                    if (looping_ && intIndex_ < intLoopStart_)
+                    if (intIndex_ < 0)
                     {
-                        if (Movement::PENDULUM == movement_ && looping_)
-                        {
-                            SetIndex(loopStart_ + (loopStart_ - index_));
-
-                            return Action::INVERT;
-                        }
-                        else
-                        {
-                            SetIndex((loopEnd_ - std::abs(loopStart_ - index_)) + 1);
-
-                            return Action::LOOP;
-                        }
+                        SetIndex(length + index_);
                     }
-                    // When the head is not looping, and while it's not already
-                    // stopping, stop it and allow for a fade out.
-                    else if (!looping_ && intIndex_ < intLoopStart_ + samplesToFade_)
-                    {
-                        return Action::STOP;
-                    }
+
+                    return looping_ ? Action::LOOP : Action::STOP;
                 }
             }
             // Handle inverted loop boundaries (end point comes before start point).
             else
             {
-                float frame = bufferSamples_ - 1;
-                if (Direction::FORWARD == direction_)
+                if (intIndex_ > intLoopEnd_ && intIndex_ < intLoopStart_)
                 {
-                    if (intIndex_ > frame)
-                    {
-                        // Wrap-around.
-                        SetIndex((index_ - frame) - 1);
-
-                        return looping_ ? Action::LOOP : Action::STOP;
-                    }
-                    else if (intIndex_ > intLoopEnd_ && intIndex_ < intLoopStart_)
-                    {
-                        if (Movement::PENDULUM == movement_ && looping_)
-                        {
-                            // Max to avoid overflow.
-                            SetIndex(std::max(loopEnd_ - (index_ - loopEnd_), 0.f));
-
-                            return Action::INVERT;
-                        }
-                        else
-                        {
-                            // Min to avoid overflow.
-                            SetIndex(std::min(loopStart_ + (index_ - loopEnd_) - 1, frame));
-
-                            return looping_ ? Action::LOOP : Action::STOP;
-                        }
-                    }
+                    return looping_ ? Action::LOOP : Action::STOP;
                 }
-                else
+                else if (intIndex_ >= bufferSamples_)
                 {
-                    if (intIndex_ < 0)
-                    {
-                        // Wrap-around.
-                        SetIndex((frame - std::abs(index_)) + 1);
-
-                        return looping_ ? Action::LOOP : Action::STOP;
-                    }
-                    else if (intIndex_ > intLoopEnd_ && intIndex_ < intLoopStart_)
-                    {
-                        if (Movement::PENDULUM == movement_ && looping_)
-                        {
-                            // Min to avoid overflow.
-                            SetIndex(std::min(loopStart_ + (loopStart_ - index_), frame));
-
-                            return Action::INVERT;
-                        }
-                        else
-                        {
-                            // Max to avoid overflow.
-                            SetIndex(std::max(loopEnd_ - (loopStart_ - index_) + 1, 0.f));
-
-                            return looping_ ? Action::LOOP : Action::STOP;
-                        }
-                    }
+                    SetIndex(index_ - bufferSamples_);
+                }
+                else if (intIndex_ < 0)
+                {
+                    SetIndex(bufferSamples_ + index_);
                 }
             }
 

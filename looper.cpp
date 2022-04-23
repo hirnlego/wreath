@@ -136,11 +136,6 @@ void Looper::SetLoopStart(float start)
     }
     loopStart_ = readHeads_[!activeReadHead_].SetLoopStart(start);
     intLoopStart_ = loopStart_;
-    if (loopSync_)
-    {
-        readHeads_[activeReadHead_].SetLoopStart(loopStart_);
-        writeHead_.SetLoopStart(loopStart_);
-    }
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
     loopEnd_ = readHeads_[!activeReadHead_].GetLoopEnd();
     intLoopEnd_ = loopEnd_;
@@ -158,11 +153,6 @@ void Looper::SetLoopLength(float length)
     loopChanged_ = length != loopLength_;
     loopLength_ = readHeads_[!activeReadHead_].SetLoopLength(length);
     intLoopLength_ = loopLength_;
-    if (loopSync_)
-    {
-        readHeads_[activeReadHead_].SetLoopLength(loopLength_);
-        writeHead_.SetLoopLength(loopLength_);
-    }
     loopLengthSeconds_ = loopLength_ / sampleRate_;
     loopEnd_ = readHeads_[!activeReadHead_].GetLoopEnd();
     intLoopEnd_ = loopEnd_;
@@ -276,6 +266,13 @@ float Looper::Read(float input)
             //readHeads_[!activeReadHead_].SetRunStatus(RunStatus::STOPPED);
             readHeads_[!activeReadHead_].SetLoopStartAndLength(loopStart_, loopLength_);
             readHeads_[!activeReadHead_].SetIndex(readPos_);
+
+            // Keep synchronized the writing head in delay mode.
+            if (loopSync_)
+            {
+                writeHead_.SetLoopStartAndLength(loopStart_, loopLength_);
+                writeHead_.ResetPosition();
+            }
         }
         value = loopFade.GetOutput();
     }
@@ -346,20 +343,6 @@ void Looper::SwitchReadingHeads()
         return;
     }
 
-    // Keep synchronized the writing head in delay mode.
-    if (loopSync_ && loopChanged_)
-    {
-        //writeHead_.SetLoopStartAndLength(loopStart_, loopLength_);
-        if (!loopLengthGrown_)
-        {
-            //writeHead_.ResetPosition();
-        }
-        if (loopLengthGrown_)
-        {
-            loopLengthFade_ = true;
-        }
-    }
-
     // Swap the heads: the active one will fade out and the inactive one will
     // fade in at the start position.
 
@@ -385,26 +368,20 @@ void Looper::UpdateReadPos()
 {
     Head::Action activeAction = readHeads_[activeReadHead_].UpdatePosition();
     Head::Action inactiveAction = readHeads_[!activeReadHead_].UpdatePosition();
-    Head::Action action = loopSync_ || loopLengthGrown_ ? activeAction : inactiveAction;
+    Head::Action action = loopLengthGrown_ ? activeAction : inactiveAction;
 
-    // Note that in delay mode we don't need to fade the loop, and we couldn't do
+    // Note that in delay mode we don't need to fade the loop, and we wouldn't do
     // it anyway because it'd need a few samples from outside the loop and these
     // samples are probably dirty.
-    // Fading when changing the loop size yields the same problem, but it may be
-    // necessary (which evil is the worse?).
+    // Fading when the loop changes yields the same problem, but it sounds better
+    // than if we don't.
 
-    // When looping, the active reading head should fade out and proceed reading
-    // ignoring the loop boundaries, while the inactive reading head should begin
-    // a fade in from the other side of the loop.
-    if (Head::Action::LOOP == action && !loopSync_ && (loopChanged_ || loopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_))
+    // Switch the reading heads when looping in looper mode or when we're going
+    // backwards or when the loop changed length or start point.
+    if (Head::Action::LOOP == action && (loopChanged_ || (!loopSync_ && (loopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_))))
     {
         SwitchReadingHeads();
         loopChanged_ = false;
-    }
-    else if (Head::Action::LOOP == action && loopSync_)
-    {
-        //readHeads_[0].ResetPosition();
-        //readHeads_[1].ResetPosition();
     }
     else if (Head::Action::STOP == action)
     {
@@ -415,30 +392,11 @@ void Looper::UpdateReadPos()
     readPosSeconds_ = readPos_ / sampleRate_;
 }
 
-/*
-
-writing head must reset position upon looping when in delay mode, but not if the loop has grown
-
-*/
-
 void Looper::UpdateWritePos()
 {
     Head::Action action = writeHead_.UpdatePosition();
     writePos_ = writeHead_.GetIntPosition();
-/*
-    if (triggered && loopSync_)
-    {
-        if (loopLengthFade_)
-        {
-loopLengthFade_ = false;
-        }
-        else
-        {
 
-            writeHead_.ResetPosition();
-        }
-    }
-*/
     // In delay mode, keep in sync the reading and the writing heads' position
     // each time the latter reaches either the start or the end of the loop
     // (depending on the reading direction).

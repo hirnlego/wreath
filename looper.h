@@ -129,7 +129,6 @@ namespace wreath
         bool writingActive_{true};
         float lengthFadePos_{};
         bool loopChanged_{};
-        bool loopLengthFade_{};
         bool loopLengthGrown_{};
 
         float eRand_{};

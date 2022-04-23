@@ -197,16 +197,6 @@ namespace wreath
             return ReadAt(buffer_, index_);
         }
 
-        float ReadBufferAt(float index, bool wrap = false)
-        {
-            return ReadAt(buffer_, index, wrap);
-        }
-
-        float ReadFrozenAt(float index, bool wrap = false)
-        {
-            return ReadAt(freezeBuffer_, index, wrap);
-        }
-
         bool toggleOnset{true};
         int32_t previousE_{};
         bool BresenhamEuclidean(float pulses, float onsetAmount)
@@ -384,13 +374,11 @@ namespace wreath
             // Handle normal loop boundaries.
             if (intLoopEnd_ > intLoopStart_)
             {
-                float length = !loopSync_ && Type::WRITE == type_ ? bufferSamples_ : loopLength_;
                 if (intIndex_ > intLoopEnd_)
                 {
-                    int32_t intLength = !loopSync_ && Type::WRITE == type_ ? bufferSamples_ : intLoopLength_;
-                    if (intIndex_ >= intLength)
+                    if (intIndex_ >= bufferSamples_)
                     {
-                        SetIndex(index_ - length);
+                        SetIndex(index_ - bufferSamples_);
                     }
 
                     return looping_ ? Action::LOOP : Action::STOP;
@@ -399,7 +387,7 @@ namespace wreath
                 {
                     if (intIndex_ < 0)
                     {
-                        SetIndex(length + index_);
+                        SetIndex(bufferSamples_ + index_);
                     }
 
                     return looping_ ? Action::LOOP : Action::STOP;
@@ -499,9 +487,9 @@ namespace wreath
             intLoopEnd_ = loopEnd_;
         }
 
-        float ReadAt(float *buffer, float index, bool wrap = false)
+        float ReadAt(float *buffer, float index)
         {
-            int32_t intPos = wrap ? WrapIndex(index) : index;
+            int32_t intPos = index;
             float value = buffer[intPos];
             float frac = index - intPos;
 

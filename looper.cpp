@@ -15,7 +15,6 @@ void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t max
 {
     sampleRate_ = sampleRate;
     readHeads_[0].Init(buffer, buffer2, maxBufferSamples);
-    //readHeads_[0].SetActive(true);
     readHeads_[1].Init(buffer, buffer2, maxBufferSamples);
     writeHead_.Init(buffer, buffer2, maxBufferSamples);
     Reset();
@@ -31,9 +30,7 @@ void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t max
     writeRate_ = 1.f;
     writeHead_.SetRate(writeRate_);
     writeSpeed_ = sampleRate_ * writeRate_;
-    //writeHead_.SetActive(true);
     writeHead_.SetLooping(true);
-    //writeHead_.SetRunStatus(RunStatus::RUNNING);
 }
 
 void Looper::Reset()
@@ -140,6 +137,10 @@ void Looper::SetLoopStart(float start)
     loopEnd_ = readHeads_[!activeReadHead_].GetLoopEnd();
     intLoopEnd_ = loopEnd_;
     crossPointFound_ = false;
+    if (loopSync_)
+    {
+        writeHead_.SetLoopStart(loopStart_);
+    }
 }
 
 void Looper::SetLoopLength(float length)
@@ -157,6 +158,10 @@ void Looper::SetLoopLength(float length)
     loopEnd_ = readHeads_[!activeReadHead_].GetLoopEnd();
     intLoopEnd_ = loopEnd_;
     crossPointFound_ = false;
+    if (loopSync_)
+    {
+        writeHead_.SetLoopLength(loopLength_);
+    }
 }
 
 void Looper::SetReadRate(float rate)
@@ -167,7 +172,10 @@ void Looper::SetReadRate(float rate)
     readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
     crossPointFound_ = false;
-    mustSyncHeads_ = true;
+    if (rate == 1.f)
+    {
+       mustSyncHeads_ = true;
+    }
 }
 
 void Looper::SetWriteRate(float rate)
@@ -263,16 +271,8 @@ float Looper::Read(float input)
     {
         if (Fader::FadeStatus::ENDED == loopFade.Process(readHeads_[!activeReadHead_].Read(), value))
         {
-            //readHeads_[!activeReadHead_].SetRunStatus(RunStatus::STOPPED);
             readHeads_[!activeReadHead_].SetLoopStartAndLength(loopStart_, loopLength_);
             readHeads_[!activeReadHead_].SetIndex(readPos_);
-
-            // Keep synchronized the writing head in delay mode.
-            if (loopSync_)
-            {
-                writeHead_.SetLoopStartAndLength(loopStart_, loopLength_);
-                writeHead_.ResetPosition();
-            }
         }
         value = loopFade.GetOutput();
     }
@@ -346,7 +346,6 @@ void Looper::SwitchReadingHeads()
     // Swap the heads: the active one will fade out and the inactive one will
     // fade in at the start position.
 
-    //readHeads_[!activeReadHead_].SetRunStatus(RunStatus::RUNNING);
     if (loopLengthGrown_ )
     {
         readHeads_[activeReadHead_].ResetPosition();
@@ -368,7 +367,7 @@ void Looper::UpdateReadPos()
 {
     Head::Action activeAction = readHeads_[activeReadHead_].UpdatePosition();
     Head::Action inactiveAction = readHeads_[!activeReadHead_].UpdatePosition();
-    Head::Action action = loopLengthGrown_ ? activeAction : inactiveAction;
+    Head::Action action = loopLengthGrown_ || !loopChanged_ ? activeAction : inactiveAction;
 
     // Note that in delay mode we don't need to fade the loop, and we wouldn't do
     // it anyway because it'd need a few samples from outside the loop and these
@@ -382,6 +381,11 @@ void Looper::UpdateReadPos()
     {
         SwitchReadingHeads();
         loopChanged_ = false;
+    }
+    else if (Head::Action::LOOP == action && loopSync_ && loopLength_ < bufferSamples_)
+    {
+        readHeads_[0].ResetPosition();
+        readHeads_[1].ResetPosition();
     }
     else if (Head::Action::STOP == action)
     {
@@ -397,14 +401,22 @@ void Looper::UpdateWritePos()
     Head::Action action = writeHead_.UpdatePosition();
     writePos_ = writeHead_.GetIntPosition();
 
-    // In delay mode, keep in sync the reading and the writing heads' position
-    // each time the latter reaches either the start or the end of the loop
-    // (depending on the reading direction).
-    if (Head::Action::LOOP == action && loopSync_ && mustSyncHeads_ && readRate_ == 1.f)
+    if (Head::Action::LOOP == action && loopSync_)
     {
-        readHeads_[0].SetIndex(writePos_);
-        readHeads_[1].SetIndex(writePos_);
-        mustSyncHeads_ = false;
+        if (loopLength_ < bufferSamples_)
+        {
+            writeHead_.ResetPosition();
+        }
+
+        // In delay mode, keep in sync the reading and the writing heads'
+        // position each time the latter reaches either the start or the end of
+        // the loop (depending on the reading direction).
+        if (mustSyncHeads_)
+        {
+            readHeads_[0].ResetPosition();
+            readHeads_[1].ResetPosition();
+            mustSyncHeads_ = false;
+        }
     }
 
     // Handle when reading and writing speeds differ or we're going

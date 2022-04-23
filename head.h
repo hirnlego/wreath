@@ -157,12 +157,20 @@ namespace wreath
 
         Action UpdatePosition()
         {
+            if (!active_)
+            {
+                return Action::NO_ACTION;
+            }
+
             float index = index_ + (rate_ * direction_);
             SetIndex(index);
             Action action = HandleLoopAction();
 
             switch (action)
             {
+            case Action::STOP:
+                active_ = false;
+                break;
             case Action::INVERT:
                 if (READ == type_)
                 {
@@ -313,6 +321,11 @@ namespace wreath
             return direction_;
         }
 
+        void SetActive(bool active)
+        {
+            active_ = active;
+        }
+
         void SetLooping(bool looping)
         {
             looping_ = looping;
@@ -352,6 +365,7 @@ namespace wreath
         float loopLength_{};
         int32_t intLoopLength_{};
 
+        bool active_{};
         bool looping_{};
 
         Movement movement_{};

@@ -34,7 +34,7 @@ namespace wreath
         void HandleCrossPointFade();
         void Start(bool now);
         void Stop(bool now);
-        void Trigger();
+        void Trigger(bool restart);
         void SetLoopStart(float start);
         int32_t GetRandomPosition();
         void SetDirection(Direction direction);

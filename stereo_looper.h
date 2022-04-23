@@ -116,6 +116,7 @@ namespace wreath
         bool mustStart{};
         bool mustStop{};
         bool mustRetrigger{};
+        bool mustRestart{};
 
         inline int32_t GetBufferSamples(int channel) { return loopers_[channel].GetBufferSamples(); }
         inline float GetBufferSeconds(int channel) { return loopers_[channel].GetBufferSeconds(); }
@@ -433,9 +434,16 @@ namespace wreath
 
                 if (mustRetrigger)
                 {
-                    loopers_[LEFT].Trigger();
-                    loopers_[RIGHT].Trigger();
+                    loopers_[LEFT].Trigger(false);
+                    loopers_[RIGHT].Trigger(false);
                     mustRetrigger = false;
+                }
+
+                if (mustRestart)
+                {
+                    loopers_[LEFT].Trigger(true);
+                    loopers_[RIGHT].Trigger(true);
+                    mustRestart = false;
                 }
 
                 if (mustStart)

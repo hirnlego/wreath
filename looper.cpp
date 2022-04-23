@@ -25,11 +25,14 @@ void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t max
     readHeads_[1].SetRate(readRate_);
     readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
+    readHeads_[0].SetActive(true);
+    readHeads_[1].SetActive(true);
     readHeads_[0].SetLooping(true);
     readHeads_[1].SetLooping(true);
     writeRate_ = 1.f;
     writeHead_.SetRate(writeRate_);
     writeSpeed_ = sampleRate_ * writeRate_;
+    writeHead_.SetActive(true);
     writeHead_.SetLooping(true);
 }
 
@@ -86,6 +89,8 @@ void Looper::Start(bool now)
 {
     if (now)
     {
+        readHeads_[0].SetActive(true);
+        readHeads_[1].SetActive(true);
         readingActive_ = true;
     }
     else
@@ -98,6 +103,8 @@ void Looper::Stop(bool now)
 {
     if (now)
     {
+        readHeads_[0].SetActive(false);
+        readHeads_[1].SetActive(false);
         readingActive_ = false;
     }
     else
@@ -106,10 +113,23 @@ void Looper::Stop(bool now)
     }
 }
 
-void Looper::Trigger()
+void Looper::Trigger(bool restart)
 {
-    Start(true);
-    triggerFade.Init(Fader::FadeType::FADE_OUT_IN, readHeads_[activeReadHead_].GetSamplesToFade() * 2, readRate_);
+    if (restart)
+    {
+        readHeads_[0].ResetPosition();
+        readHeads_[1].ResetPosition();
+        if (loopSync_)
+        {
+            writeHead_.ResetPosition();
+        }
+        Start(true);
+        triggerFade.Init(Fader::FadeType::FADE_SINGLE, kMinLoopLengthSamples, readRate_);
+    }
+    else
+    {
+        triggerFade.Init(Fader::FadeType::FADE_OUT_IN, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
+    }
 }
 
 void Looper::SetSamplesToFade(float samples)
@@ -132,6 +152,10 @@ void Looper::SetLoopStart(float start)
         loopChanged_ = start != loopStart_;
     }
     loopStart_ = readHeads_[!activeReadHead_].SetLoopStart(start);
+    if (!readingActive_)
+    {
+        readHeads_[activeReadHead_].SetLoopStart(loopStart_);
+    }
     intLoopStart_ = loopStart_;
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
     loopEnd_ = readHeads_[!activeReadHead_].GetLoopEnd();
@@ -153,6 +177,10 @@ void Looper::SetLoopLength(float length)
     loopLengthGrown_ = length > loopLength_;
     loopChanged_ = length != loopLength_;
     loopLength_ = readHeads_[!activeReadHead_].SetLoopLength(length);
+    if (!readingActive_)
+    {
+        readHeads_[activeReadHead_].SetLoopLength(loopLength_);
+    }
     intLoopLength_ = loopLength_;
     loopLengthSeconds_ = loopLength_ / sampleRate_;
     loopEnd_ = readHeads_[!activeReadHead_].GetLoopEnd();
@@ -250,6 +278,8 @@ float Looper::Read(float input)
     {
         if (Fader::FadeStatus::ENDED == startFade.Process(0, value))
         {
+            readHeads_[0].SetActive(true);
+            readHeads_[1].SetActive(true);
             readingActive_ = true;
         }
         value = startFade.GetOutput();
@@ -258,6 +288,8 @@ float Looper::Read(float input)
     {
         if (Fader::FadeStatus::ENDED == stopFade.Process(value, 0))
         {
+            readHeads_[0].SetActive(false);
+            readHeads_[1].SetActive(false);
             readingActive_ = false;
         }
         value = stopFade.GetOutput();
@@ -283,27 +315,31 @@ float Looper::Read(float input)
         value = Fader::EqualCrossFade(value, readHeads_[activeReadHead_].ReadFrozen(), freeze_);
     }
 
-    /*
     // Handle fade on re-triggering.
     if (triggerFade.IsActive())
     {
         if (Fader::FadeStatus::ENDED == triggerFade.Process(value, 0))
         {
+            /*
             // Invert direction when in pendulum or drunk mode.
             if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
             {
                 direction_ = readHeads_[activeReadHead_].ToggleDirection();
             }
-            readHeads_[activeReadHead_].ResetPosition();
-            if (looping_ || loopSync_)
+            */
+
+            if (Fader::FadeType::FADE_OUT_IN == triggerFade.GetType())
             {
-                writeHead_.ResetPosition();
+                readHeads_[0].ResetPosition();
+                readHeads_[1].ResetPosition();
+                if (loopSync_)
+                {
+                    writeHead_.ResetPosition();
+                }
             }
-            //readHeads_[activeReadHead_].SetRunStatus(RunStatus::RUNNING);
         }
         value = triggerFade.GetOutput();
     }
-    */
 
     return value;
 }

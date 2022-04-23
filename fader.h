@@ -127,6 +127,11 @@ namespace wreath
             return index_;
         }
 
+        FadeType GetType()
+        {
+            return type_;
+        }
+
         float GetOutput()
         {
             return output_;

@@ -92,13 +92,10 @@ void Looper::StartReading(bool now)
         return;
     }
 
-    if (now)
-    {
-        readHeads_[0].SetActive(true);
-        readHeads_[1].SetActive(true);
-        readingActive_ = true;
-    }
-    else
+    readHeads_[0].SetActive(true);
+    readHeads_[1].SetActive(true);
+    readingActive_ = true;
+    if (!now)
     {
         startReadingFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
     }
@@ -123,32 +120,57 @@ void Looper::StopReading(bool now)
     }
 }
 
-void Looper::StartWriting()
+void Looper::StartWriting(bool now)
 {
+    if (writingActive_)
+    {
+        return;
+    }
+
     writingActive_ = true;
+    if (!now)
+    {
+        startWritingFade.Init(Fader::FadeType::FADE_SINGLE, writeHead_.GetSamplesToFade(), writeRate_);
+    }
 }
 
-void Looper::StopWriting()
+void Looper::StopWriting(bool now)
 {
-    writingActive_ = false;
+    if (!writingActive_)
+    {
+        return;
+    }
+
+    if (now)
+    {
+        writingActive_ = false;
+    }
+    else
+    {
+        stopWritingFade.Init(Fader::FadeType::FADE_SINGLE, writeHead_.GetSamplesToFade(), writeRate_);
+    }
 }
 
 void Looper::Trigger(bool restart)
 {
-    if (restart)
+    if (readingActive_)
     {
-        readHeads_[0].ResetPosition();
-        readHeads_[1].ResetPosition();
+        SwitchReadingHeads();
         if (loopSync_)
         {
             writeHead_.ResetPosition();
         }
-        StartReading(true);
-        triggerRestartFade.Init(Fader::FadeType::FADE_SINGLE, kMinLoopLengthSamples, readRate_);
     }
-    else
+    else if (restart)
     {
-        triggerFade.Init(Fader::FadeType::FADE_OUT_IN, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
+        StartReading(true);
+        readHeads_[0].ResetPosition();
+        readHeads_[1].ResetPosition();
+        triggerRestartFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
+        if (loopSync_)
+        {
+            writeHead_.ResetPosition();
+        }
     }
 }
 
@@ -290,18 +312,13 @@ void Looper::SetLoopSync(bool loopSync)
     crossPointFound_ = false;
 }
 
-float Looper::Read(float input)
+float Looper::Read()
 {
     float value = readHeads_[activeReadHead_].Read();
 
     if (startReadingFade.IsActive())
     {
-        if (Fader::FadeStatus::ENDED == startReadingFade.Process(0, value))
-        {
-            readHeads_[0].SetActive(true);
-            readHeads_[1].SetActive(true);
-            readingActive_ = true;
-        }
+        startReadingFade.Process(0, value);
         value = startReadingFade.GetOutput();
     }
     else if (stopReadingFade.IsActive())
@@ -351,7 +368,7 @@ float Looper::Read(float input)
     }
     else if (triggerRestartFade.IsActive())
     {
-        triggerRestartFade.Process(value, 0);
+        triggerRestartFade.Process(0, value);
         value = triggerRestartFade.GetOutput();
     }
 
@@ -360,7 +377,20 @@ float Looper::Read(float input)
 
 void Looper::Write(float input)
 {
-    if (!writingActive_)
+    if (startWritingFade.IsActive())
+    {
+        startWritingFade.Process(0, input);
+        input = startWritingFade.GetOutput();
+    }
+    else if (stopWritingFade.IsActive())
+    {
+        if (Fader::FadeStatus::ENDED == stopWritingFade.Process(input, 0))
+        {
+            writingActive_ = false;
+        }
+        input = stopWritingFade.GetOutput();
+    }
+    else if (!writingActive_)
     {
         return;
     }
@@ -439,7 +469,7 @@ void Looper::UpdateReadPos()
     }
     else if (Head::Action::STOP == action)
     {
-        StopReading(true);
+        StopReading(false);
     }
 
     readPos_ = readHeads_[activeReadHead_].GetPosition();

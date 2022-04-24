@@ -115,6 +115,8 @@ namespace wreath
 
         bool mustStartReading{};
         bool mustStopReading{};
+        bool mustStartWriting{};
+        bool mustStopWriting{};
         bool mustStartWritingLeft{};
         bool mustStopWritingLeft{};
         bool mustStartWritingRight{};
@@ -464,48 +466,64 @@ namespace wreath
                     mustStopReading = false;
                 }
 
+                if (mustStartWriting)
+                {
+                    loopers_[LEFT].StartWriting(true);
+                    loopers_[RIGHT].StartWriting(true);
+                    mustStartWriting = false;
+                }
+
+                if (mustStopWriting)
+                {
+                    loopers_[LEFT].StopWriting(true);
+                    loopers_[RIGHT].StopWriting(true);
+                    mustStopWriting = false;
+                }
+
                 if (mustStartWritingLeft)
                 {
-                    loopers_[LEFT].StartWriting();
+                    loopers_[LEFT].StartWriting(false);
                     mustStartWritingLeft = false;
                 }
 
                 if (mustStopWritingLeft)
                 {
-                    loopers_[LEFT].StopWriting();
+                    loopers_[LEFT].StopWriting(false);
                     mustStopWritingLeft = false;
                 }
 
                 if (mustStartWritingRight)
                 {
-                    loopers_[RIGHT].StartWriting();
+                    loopers_[RIGHT].StartWriting(false);
                     mustStartWritingRight = false;
                 }
 
                 if (mustStopWritingRight)
                 {
-                    loopers_[RIGHT].StopWriting();
+                    loopers_[RIGHT].StopWriting(false);
                     mustStopWritingRight = false;
                 }
 
-                leftWet = loopers_[LEFT].Read(leftDry);
-                float leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
-                float leftFiltered = filterLevel * Filter(leftFeedback) * feedback;
-                leftFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(leftFiltered));
-                leftFeedback = Mix(leftFeedback, leftFiltered);
-                loopers_[LEFT].UpdateReadPos();
+                leftWet = loopers_[LEFT].Read();
+                rightWet = loopers_[RIGHT].Read();
 
-                rightWet = loopers_[RIGHT].Read(rightDry);
+                // Feedback path.
+                float leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
                 float rightFeedback = loopers_[RIGHT].Degrade(rightWet * feedback);
+                float leftFiltered = filterLevel * Filter(leftFeedback) * feedback;
                 float rightFiltered = filterLevel * Filter(rightFeedback) * feedback;
+                leftFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(leftFiltered));
                 rightFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(rightFiltered));
+                leftFeedback = Mix(leftFeedback, leftFiltered);
                 rightFeedback = Mix(rightFeedback, rightFiltered);
+
+                loopers_[LEFT].UpdateReadPos();
                 loopers_[RIGHT].UpdateReadPos();
 
                 loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
-                loopers_[LEFT].UpdateWritePos();
-
                 loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
+
+                loopers_[LEFT].UpdateWritePos();
                 loopers_[RIGHT].UpdateWritePos();
 
                 // Mix some of the filtered fed back signal with the wet when frozen.

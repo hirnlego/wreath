@@ -168,9 +168,6 @@ namespace wreath
 
             switch (action)
             {
-            case Action::STOP:
-                active_ = false;
-                break;
             case Action::INVERT:
                 if (READ == type_)
                 {

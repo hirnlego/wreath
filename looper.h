@@ -32,8 +32,10 @@ namespace wreath
         void UpdateWritePos();
         void SwitchReadingHeads();
         void HandleCrossPointFade();
-        void Start(bool now);
-        void Stop(bool now);
+        void StartReading(bool now);
+        void StopReading(bool now);
+        void StartWriting();
+        void StopWriting();
         void Trigger(bool restart);
         void SetLoopStart(float start);
         int32_t GetRandomPosition();
@@ -140,11 +142,12 @@ namespace wreath
 
         Fader loopFade;
         Fader triggerFade;
+        Fader triggerRestartFade;
         Fader headsCrossFade;
         Fader loopLengthFade;
         Fader frozenFade;
-        Fader startFade;
-        Fader stopFade;
+        Fader startReadingFade;
+        Fader stopReadingFade;
 
         Movement movement_{}; // The current movement type of the looper
     };

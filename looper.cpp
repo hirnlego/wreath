@@ -85,8 +85,13 @@ void Looper::StopBuffering()
     loopLengthSeconds_ = loopLength_ / sampleRate_;
 }
 
-void Looper::Start(bool now)
+void Looper::StartReading(bool now)
 {
+    if (readingActive_)
+    {
+        return;
+    }
+
     if (now)
     {
         readHeads_[0].SetActive(true);
@@ -95,12 +100,17 @@ void Looper::Start(bool now)
     }
     else
     {
-        startFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
+        startReadingFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
     }
 }
 
-void Looper::Stop(bool now)
+void Looper::StopReading(bool now)
 {
+    if (!readingActive_)
+    {
+        return;
+    }
+
     if (now)
     {
         readHeads_[0].SetActive(false);
@@ -109,8 +119,18 @@ void Looper::Stop(bool now)
     }
     else
     {
-        stopFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
+        stopReadingFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
     }
+}
+
+void Looper::StartWriting()
+{
+    writingActive_ = true;
+}
+
+void Looper::StopWriting()
+{
+    writingActive_ = false;
 }
 
 void Looper::Trigger(bool restart)
@@ -123,8 +143,8 @@ void Looper::Trigger(bool restart)
         {
             writeHead_.ResetPosition();
         }
-        Start(true);
-        triggerFade.Init(Fader::FadeType::FADE_SINGLE, kMinLoopLengthSamples, readRate_);
+        StartReading(true);
+        triggerRestartFade.Init(Fader::FadeType::FADE_SINGLE, kMinLoopLengthSamples, readRate_);
     }
     else
     {
@@ -274,25 +294,25 @@ float Looper::Read(float input)
 {
     float value = readHeads_[activeReadHead_].Read();
 
-    if (startFade.IsActive())
+    if (startReadingFade.IsActive())
     {
-        if (Fader::FadeStatus::ENDED == startFade.Process(0, value))
+        if (Fader::FadeStatus::ENDED == startReadingFade.Process(0, value))
         {
             readHeads_[0].SetActive(true);
             readHeads_[1].SetActive(true);
             readingActive_ = true;
         }
-        value = startFade.GetOutput();
+        value = startReadingFade.GetOutput();
     }
-    else if (stopFade.IsActive())
+    else if (stopReadingFade.IsActive())
     {
-        if (Fader::FadeStatus::ENDED == stopFade.Process(value, 0))
+        if (Fader::FadeStatus::ENDED == stopReadingFade.Process(value, 0))
         {
             readHeads_[0].SetActive(false);
             readHeads_[1].SetActive(false);
             readingActive_ = false;
         }
-        value = stopFade.GetOutput();
+        value = stopReadingFade.GetOutput();
     }
     else if (!readingActive_)
     {
@@ -320,25 +340,19 @@ float Looper::Read(float input)
     {
         if (Fader::FadeStatus::ENDED == triggerFade.Process(value, 0))
         {
-            /*
-            // Invert direction when in pendulum or drunk mode.
-            if (Movement::PENDULUM == movement_ || Movement::DRUNK == movement_)
+            readHeads_[0].ResetPosition();
+            readHeads_[1].ResetPosition();
+            if (loopSync_)
             {
-                direction_ = readHeads_[activeReadHead_].ToggleDirection();
-            }
-            */
-
-            if (Fader::FadeType::FADE_OUT_IN == triggerFade.GetType())
-            {
-                readHeads_[0].ResetPosition();
-                readHeads_[1].ResetPosition();
-                if (loopSync_)
-                {
-                    writeHead_.ResetPosition();
-                }
+                writeHead_.ResetPosition();
             }
         }
         value = triggerFade.GetOutput();
+    }
+    else if (triggerRestartFade.IsActive())
+    {
+        triggerRestartFade.Process(value, 0);
+        value = triggerRestartFade.GetOutput();
     }
 
     return value;
@@ -425,7 +439,7 @@ void Looper::UpdateReadPos()
     }
     else if (Head::Action::STOP == action)
     {
-        Stop(true);
+        StopReading(true);
     }
 
     readPos_ = readHeads_[activeReadHead_].GetPosition();

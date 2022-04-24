@@ -137,7 +137,7 @@ void TestBoundaries()
     {
         looper.Reset();
         looper.SetTriggerMode(Looper::TriggerMode::LOOP);
-        looper.Start(true);
+        looper.StartReading(true);
         std::cout << "Scenario " << scenario.desc << "\n";
         looper.SetLoopStart(scenario.loopStart);
         std::cout << "Loop start: " << scenario.loopStart << "\n";
@@ -274,7 +274,7 @@ void TestCrossPoint()
     //looper.SetWritePos(std::floor(inverted ? looper.GetLoopStart() : looper.GetLoopEnd()));
     looper.SetReadPos(40000);
     looper.SetWritePos(30000);
-    looper.Start(true);
+    looper.StartReading(true);
 
     std::cout << "Read rate: " << looper.GetReadRate() << "\n";
     std::cout << "Write rate: " << looper.GetWriteRate() << "\n";
@@ -366,7 +366,7 @@ void TestHeadsDistance()
     looper.SetTriggerMode(Looper::TriggerMode::LOOP);
     looper.SetMovement(Movement::NORMAL);
     looper.SetLoopSync(true);
-    looper.Start(true);
+    looper.StartReading(true);
 
     struct Scenario
     {

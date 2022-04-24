@@ -113,8 +113,12 @@ namespace wreath
         float nextLeftFreeze{};
         float nextRightFreeze{};
 
-        bool mustStart{};
-        bool mustStop{};
+        bool mustStartReading{};
+        bool mustStopReading{};
+        bool mustStartWritingLeft{};
+        bool mustStopWritingLeft{};
+        bool mustStartWritingRight{};
+        bool mustStopWritingRight{};
         bool mustRetrigger{};
         bool mustRestart{};
 
@@ -345,8 +349,8 @@ namespace wreath
         {
             if (State::READY == state_)
             {
-                loopers_[LEFT].Start(true);
-                loopers_[RIGHT].Start(true);
+                loopers_[LEFT].StartReading(true);
+                loopers_[RIGHT].StartReading(true);
                 state_ = freeze_ == 1.f ? State::FROZEN : State::RECORDING;
             }
         }
@@ -424,8 +428,8 @@ namespace wreath
                 if (mustResetLooper)
                 {
                     mustResetLooper = false;
-                    loopers_[LEFT].Stop(true);
-                    loopers_[RIGHT].Stop(true);
+                    loopers_[LEFT].StopReading(true);
+                    loopers_[RIGHT].StopReading(true);
                     Reset();
                     state_ = State::BUFFERING;
 
@@ -446,51 +450,63 @@ namespace wreath
                     mustRestart = false;
                 }
 
-                if (mustStart)
+                if (mustStartReading)
                 {
-                    loopers_[LEFT].Start(false);
-                    loopers_[RIGHT].Start(false);
-                    mustStart = false;
+                    loopers_[LEFT].StartReading(true);
+                    loopers_[RIGHT].StartReading(true);
+                    mustStartReading = false;
                 }
 
-                if (mustStop)
+                if (mustStopReading)
                 {
-                    loopers_[LEFT].Stop(false);
-                    loopers_[RIGHT].Stop(false);
-                    mustStop = false;
+                    loopers_[LEFT].StopReading(true);
+                    loopers_[RIGHT].StopReading(true);
+                    mustStopReading = false;
                 }
 
-                float leftFeedback{};
+                if (mustStartWritingLeft)
+                {
+                    loopers_[LEFT].StartWriting();
+                    mustStartWritingLeft = false;
+                }
+
+                if (mustStopWritingLeft)
+                {
+                    loopers_[LEFT].StopWriting();
+                    mustStopWritingLeft = false;
+                }
+
+                if (mustStartWritingRight)
+                {
+                    loopers_[RIGHT].StartWriting();
+                    mustStartWritingRight = false;
+                }
+
+                if (mustStopWritingRight)
+                {
+                    loopers_[RIGHT].StopWriting();
+                    mustStopWritingRight = false;
+                }
+
                 leftWet = loopers_[LEFT].Read(leftDry);
-                leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
+                float leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
                 float leftFiltered = filterLevel * Filter(leftFeedback) * feedback;
                 leftFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(leftFiltered));
                 leftFeedback = Mix(leftFeedback, leftFiltered);
                 loopers_[LEFT].UpdateReadPos();
-                if (loopers_[LEFT].IsReading())
-                {
-                }
-                float rightFeedback{};
+
                 rightWet = loopers_[RIGHT].Read(rightDry);
-                rightFeedback = loopers_[RIGHT].Degrade(rightWet * feedback);
+                float rightFeedback = loopers_[RIGHT].Degrade(rightWet * feedback);
                 float rightFiltered = filterLevel * Filter(rightFeedback) * feedback;
                 rightFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(rightFiltered));
                 rightFeedback = Mix(rightFeedback, rightFiltered);
                 loopers_[RIGHT].UpdateReadPos();
-                if (loopers_[RIGHT].IsReading())
-                {
-                }
 
-                if (loopers_[LEFT].IsWriting())
-                {
-                    loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
-                    loopers_[LEFT].UpdateWritePos();
-                }
-                if (loopers_[RIGHT].IsWriting())
-                {
-                    loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
-                    loopers_[RIGHT].UpdateWritePos();
-                }
+                loopers_[LEFT].Write(Mix(leftDry * dryLevel, leftFeedback));
+                loopers_[LEFT].UpdateWritePos();
+
+                loopers_[RIGHT].Write(Mix(rightDry * dryLevel, rightFeedback));
+                loopers_[RIGHT].UpdateWritePos();
 
                 // Mix some of the filtered fed back signal with the wet when frozen.
                 leftWet = Mix(leftWet, filterLevel * Filter(leftFeedback) * freeze_);

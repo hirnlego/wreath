@@ -155,7 +155,7 @@ void Looper::Trigger(bool restart)
 {
     if (readingActive_)
     {
-        SwitchReadingHeads();
+        FadeReadingToResetPosition();
         if (loopSync_)
         {
             writeHead_.ResetPosition();
@@ -163,14 +163,13 @@ void Looper::Trigger(bool restart)
     }
     else if (restart)
     {
-        StartReading(true);
         readHeads_[0].ResetPosition();
         readHeads_[1].ResetPosition();
-        triggerRestartFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
         if (loopSync_)
         {
             writeHead_.ResetPosition();
         }
+        StartReading(false);
     }
 }
 
@@ -355,21 +354,8 @@ float Looper::Read()
     // Handle fade on re-triggering.
     if (triggerFade.IsActive())
     {
-        if (Fader::FadeStatus::ENDED == triggerFade.Process(value, 0))
-        {
-            readHeads_[0].ResetPosition();
-            readHeads_[1].ResetPosition();
-            if (loopSync_)
-            {
-                writeHead_.ResetPosition();
-            }
-        }
+        triggerFade.Process(0, value);
         value = triggerFade.GetOutput();
-    }
-    else if (triggerRestartFade.IsActive())
-    {
-        triggerRestartFade.Process(0, value);
-        value = triggerRestartFade.GetOutput();
     }
 
     return value;
@@ -416,15 +402,12 @@ float Looper::Degrade(float input)
     return input;
 }
 
-void Looper::SwitchReadingHeads()
+void Looper::FadeReadingToResetPosition()
 {
     if (loopFade.IsActive())
     {
         return;
     }
-
-    // Swap the heads: the active one will fade out and the inactive one will
-    // fade in at the start position.
 
     if (loopLengthGrown_ )
     {
@@ -455,11 +438,9 @@ void Looper::UpdateReadPos()
     // Fading when the loop changes yields the same problem, but it sounds better
     // than if we don't.
 
-    // Switch the reading heads when looping in looper mode or when we're going
-    // backwards or when the loop changed length or start point.
     if (Head::Action::LOOP == action && (loopChanged_ || (!loopSync_ && (loopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_))))
     {
-        SwitchReadingHeads();
+        FadeReadingToResetPosition();
         loopChanged_ = false;
     }
     else if (Head::Action::LOOP == action && loopSync_ && loopLength_ < bufferSamples_)

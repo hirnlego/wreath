@@ -166,6 +166,15 @@ namespace wreath
             SetIndex(index);
             Action action = HandleLoopAction();
 
+            if (intIndex_ >= bufferSamples_)
+            {
+                SetIndex(index_ - bufferSamples_);
+            }
+            else if (intIndex_ < 0)
+            {
+                SetIndex(bufferSamples_ + index_);
+            }
+
             switch (action)
             {
             case Action::INVERT:
@@ -385,39 +394,25 @@ namespace wreath
             // Handle normal loop boundaries.
             if (intLoopEnd_ > intLoopStart_)
             {
-                if (intIndex_ > intLoopEnd_)
+                if (looping_ && ((Direction::FORWARD == direction_ && intIndex_ > intLoopEnd_) || (Direction::BACKWARDS == direction_ && intIndex_ < intLoopStart_)))
                 {
-                    if (intIndex_ >= bufferSamples_)
-                    {
-                        SetIndex(index_ - bufferSamples_);
-                    }
-
-                    return looping_ ? Action::LOOP : Action::STOP;
+                   return Action::LOOP;
                 }
-                else if (intIndex_ < intLoopStart_)
+                else if (!looping_ && ((Direction::FORWARD == direction_ && intIndex_ >= intLoopEnd_ - samplesToFade_) || (Direction::BACKWARDS == direction_ && intIndex_ <= intLoopStart_ + samplesToFade_)))
                 {
-                    if (intIndex_ < 0)
-                    {
-                        SetIndex(bufferSamples_ + index_);
-                    }
-
-                    return looping_ ? Action::LOOP : Action::STOP;
+                    return Action::STOP;
                 }
             }
             // Handle inverted loop boundaries (end point comes before start point).
             else
             {
-                if (intIndex_ > intLoopEnd_ && intIndex_ < intLoopStart_)
+                if (looping_ && intIndex_ > intLoopEnd_ && intIndex_ < intLoopStart_)
                 {
-                    return looping_ ? Action::LOOP : Action::STOP;
+                    return Action::LOOP;
                 }
-                else if (intIndex_ >= bufferSamples_)
+                else if (!looping_ && ((Direction::FORWARD == direction_ && intIndex_ >= intLoopEnd_ - samplesToFade_ && intIndex_ < intLoopStart_) || (Direction::BACKWARDS == direction_ && intIndex_ <= intLoopStart_ + samplesToFade_ && intIndex_ > intLoopEnd_)))
                 {
-                    SetIndex(index_ - bufferSamples_);
-                }
-                else if (intIndex_ < 0)
-                {
-                    SetIndex(bufferSamples_ + index_);
+                    return Action::STOP;
                 }
             }
 

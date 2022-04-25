@@ -30,7 +30,7 @@ namespace wreath
         float Degrade(float input);
         void UpdateReadPos();
         void UpdateWritePos();
-        void SwitchReadingHeads();
+        void FadeReadingToResetPosition();
         void HandleCrossPointFade();
         void StartReading(bool now);
         void StopReading(bool now);
@@ -142,7 +142,6 @@ namespace wreath
 
         Fader loopFade;
         Fader triggerFade;
-        Fader triggerRestartFade;
         Fader headsCrossFade;
         Fader loopLengthFade;
         Fader frozenFade;

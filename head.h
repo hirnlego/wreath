@@ -150,9 +150,14 @@ namespace wreath
             intIndex_ = std::floor(index_);
         }
 
+        inline void SetOffset(float offset)
+        {
+            offset_ = offset;
+        }
+
         inline void ResetPosition()
         {
-            SetIndex(FORWARD == direction_ ? loopStart_ : loopEnd_);
+            SetIndex(FORWARD == direction_ ? loopStart_ + offset_ : loopEnd_ - offset_);
         }
 
         Action UpdatePosition()
@@ -347,6 +352,7 @@ namespace wreath
         inline float GetLoopLength() { return loopLength_; }
         inline float GetRate() { return rate_; }
         inline float GetPosition() { return index_; }
+        inline float GetOffset() { return offset_; }
         inline int32_t GetIntPosition() { return intIndex_; }
         bool IsGoingForward() { return Direction::FORWARD == direction_; }
 
@@ -389,29 +395,39 @@ namespace wreath
 
         float samplesToFade_{kSamplesToFade};
 
+        float offset_{};
+
         Action HandleLoopAction()
         {
             // Handle normal loop boundaries.
             if (intLoopEnd_ > intLoopStart_)
             {
-                if (looping_ && ((Direction::FORWARD == direction_ && intIndex_ > intLoopEnd_) || (Direction::BACKWARDS == direction_ && intIndex_ < intLoopStart_)))
+                if (looping_ && ((Direction::FORWARD == direction_ && index_ > loopEnd_) || (Direction::BACKWARDS == direction_ && index_ < loopStart_)))
                 {
-                   return Action::LOOP;
+                    offset_ = rate_ != 1.f ? (Direction::FORWARD == direction_ ? index_ - loopEnd_ : loopStart_ - index_) : 0;
+
+                    return Action::LOOP;
                 }
-                else if (!looping_ && ((Direction::FORWARD == direction_ && intIndex_ >= intLoopEnd_ - samplesToFade_) || (Direction::BACKWARDS == direction_ && intIndex_ <= intLoopStart_ + samplesToFade_)))
+                if (!looping_ && ((Direction::FORWARD == direction_ && index_ >= loopEnd_ - samplesToFade_) || (Direction::BACKWARDS == direction_ && index_ <= loopStart_ + samplesToFade_)))
                 {
+                    offset_ = 0;
+
                     return Action::STOP;
                 }
             }
             // Handle inverted loop boundaries (end point comes before start point).
             else
             {
-                if (looping_ && intIndex_ > intLoopEnd_ && intIndex_ < intLoopStart_)
+                if (looping_ && index_ > loopEnd_ && index_ < loopStart_)
                 {
+                    offset_ = rate_ != 1.f ? (Direction::FORWARD == direction_ ? index_ - loopEnd_ : loopStart_ - index_) : 0;
+
                     return Action::LOOP;
                 }
-                else if (!looping_ && ((Direction::FORWARD == direction_ && intIndex_ >= intLoopEnd_ - samplesToFade_ && intIndex_ < intLoopStart_) || (Direction::BACKWARDS == direction_ && intIndex_ <= intLoopStart_ + samplesToFade_ && intIndex_ > intLoopEnd_)))
+                if (!looping_ && ((Direction::FORWARD == direction_ && index_ >= loopEnd_ - samplesToFade_ && index_ < loopStart_) || (Direction::BACKWARDS == direction_ && index_ <= loopStart_ + samplesToFade_ && index_ > loopEnd_)))
                 {
+                    offset_ = 0;
+
                     return Action::STOP;
                 }
             }

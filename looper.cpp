@@ -97,7 +97,7 @@ void Looper::StartReading(bool now)
     readingActive_ = true;
     if (!now)
     {
-        startReadingFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
+        startReadingFade.Init(Fader::FadeType::FADE_SINGLE, kSamplesToFadeTrigger, readRate_);
     }
 }
 
@@ -116,7 +116,7 @@ void Looper::StopReading(bool now)
     }
     else
     {
-        stopReadingFade.Init(Fader::FadeType::FADE_SINGLE, readHeads_[activeReadHead_].GetSamplesToFade(), readRate_);
+        stopReadingFade.Init(Fader::FadeType::FADE_SINGLE, kSamplesToFadeTrigger, readRate_);
     }
 }
 
@@ -130,7 +130,7 @@ void Looper::StartWriting(bool now)
     writingActive_ = true;
     if (!now)
     {
-        startWritingFade.Init(Fader::FadeType::FADE_SINGLE, writeHead_.GetSamplesToFade(), writeRate_);
+        startWritingFade.Init(Fader::FadeType::FADE_SINGLE, kSamplesToFadeTrigger, writeRate_);
     }
 }
 
@@ -147,7 +147,7 @@ void Looper::StopWriting(bool now)
     }
     else
     {
-        stopWritingFade.Init(Fader::FadeType::FADE_SINGLE, writeHead_.GetSamplesToFade(), writeRate_);
+        stopWritingFade.Init(Fader::FadeType::FADE_SINGLE, kSamplesToFadeTrigger, writeRate_);
     }
 }
 
@@ -155,11 +155,8 @@ void Looper::Trigger(bool restart)
 {
     if (readingActive_)
     {
-        FadeReadingToResetPosition();
-        if (loopSync_)
-        {
-            writeHead_.ResetPosition();
-        }
+        StopReading(false);
+        triggered_ = true;
     }
     else if (restart)
     {
@@ -241,7 +238,7 @@ void Looper::SetReadRate(float rate)
     readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
     crossPointFound_ = false;
-    if (rate == 1.f)
+    if (loopSync_ && rate == 1.f)
     {
        mustSyncHeads_ = true;
     }
@@ -327,6 +324,17 @@ float Looper::Read()
             readHeads_[0].SetActive(false);
             readHeads_[1].SetActive(false);
             readingActive_ = false;
+            if (triggered_)
+            {
+                readHeads_[0].ResetPosition();
+                readHeads_[1].ResetPosition();
+                if (loopSync_)
+                {
+                    writeHead_.ResetPosition();
+                }
+                StartReading(false);
+                triggered_ = false;
+            }
         }
         value = stopReadingFade.GetOutput();
     }
@@ -341,6 +349,10 @@ float Looper::Read()
         {
             readHeads_[!activeReadHead_].SetLoopStartAndLength(loopStart_, loopLength_);
             readHeads_[!activeReadHead_].SetIndex(readPos_);
+            if (loopSync_)
+            {
+                writeHead_.SetIndex(readPos_);
+            }
         }
         value = loopFade.GetOutput();
     }
@@ -412,11 +424,23 @@ void Looper::FadeReadingToResetPosition()
     if (loopLengthGrown_ )
     {
         readHeads_[activeReadHead_].ResetPosition();
+        // When going backwards, if we don't have enough space for the fading of
+        // the inactive reading head, we must reset its position.
+        if (!IsGoingForward() && loopStart_ <= readHeads_[!activeReadHead_].GetSamplesToFade())
+        {
+            readHeads_[!activeReadHead_].ResetPosition();
+        }
         loopLengthGrown_ = false;
     }
     else
     {
         readHeads_[!activeReadHead_].ResetPosition();
+        // When going backwards, if we don't have enough space for the fading of
+        // the active reading head, we must reset its position.
+        if (!IsGoingForward() && loopStart_ <= readHeads_[activeReadHead_].GetSamplesToFade())
+        {
+            readHeads_[activeReadHead_].ResetPosition();
+        }
     }
 
     // Active: length - buffer
@@ -428,17 +452,27 @@ void Looper::FadeReadingToResetPosition()
 
 void Looper::UpdateReadPos()
 {
-    Head::Action activeAction = readHeads_[activeReadHead_].UpdatePosition();
-    Head::Action inactiveAction = readHeads_[!activeReadHead_].UpdatePosition();
-    Head::Action action = loopLengthGrown_ || !loopChanged_ ? activeAction : inactiveAction;
+    Head::Action action = readHeads_[activeReadHead_].UpdatePosition();
+
+    // When the loop length shrunk, the inactive reading head dictates when
+    // looping occurs, so we need to update its position as well.
+    if (loopChanged_ && !loopLengthGrown_)
+    {
+        action = readHeads_[!activeReadHead_].UpdatePosition();
+    }
+    // Otherwise, just sync it with the active reading head.
+    else
+    {
+        readHeads_[!activeReadHead_].SetIndex(readHeads_[activeReadHead_].GetPosition());
+        readHeads_[!activeReadHead_].SetOffset(readHeads_[activeReadHead_].GetOffset());
+    }
 
     // Note that in delay mode we don't need to fade the loop, and we wouldn't do
     // it anyway because it'd need a few samples from outside the loop and these
     // samples are probably dirty.
     // Fading when the loop changes yields the same problem, but it sounds better
     // than if we don't.
-
-    if (Head::Action::LOOP == action && (loopChanged_ || (!loopSync_ && (loopLength_ < bufferSamples_ || Direction::BACKWARDS == direction_))))
+    if (Head::Action::LOOP == action && (loopChanged_ || (!loopSync_ && loopLength_ < bufferSamples_)))
     {
         FadeReadingToResetPosition();
         loopChanged_ = false;
@@ -480,8 +514,9 @@ void Looper::UpdateWritePos()
         }
     }
 
-    // Handle when reading and writing speeds differ or we're going
-    // backwards.
+    // When reading and writing speeds differ or we're going backwards, we
+    // calculate the point where the two heads will meet and set up a writing
+    // fade at that point.
     if (freeze_ < 1.f && !headsCrossFade.IsActive() && (readSpeed_ != writeSpeed_ || !IsGoingForward()))
     {
         headsDistance_ = CalculateDistance(readPos_, writePos_, readSpeed_, writeSpeed_, direction_);

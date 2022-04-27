@@ -218,6 +218,9 @@ namespace wreath
 
         bool toggleOnset{true};
         int32_t previousE_{};
+        /**
+         * @brief Bresenham implementation of an Euclidean Rhythm Algorithm.
+         */
         bool BresenhamEuclidean(float pulses, float onsetAmount)
         {
             float ratio = bufferSamples_ / pulses;

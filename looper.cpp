@@ -153,11 +153,14 @@ void Looper::StopWriting(bool now)
 
 void Looper::Trigger(bool restart)
 {
+    // When a trigger is received while playing we fade out and then in the
+    // reading, resetting the heads position in between.
     if (readingActive_)
     {
         StopReading(false);
         triggered_ = true;
     }
+    // Otherwise, just read from the start.
     else if (restart)
     {
         readHeads_[0].ResetPosition();
@@ -238,6 +241,8 @@ void Looper::SetReadRate(float rate)
     readSpeed_ = sampleRate_ * readRate_;
     sampleRateSpeed_ = static_cast<int32_t>(sampleRate_ / readRate_);
     crossPointFound_ = false;
+    // In delay mode, when setting the rate back to 1 we flag for a realignment
+    // of the heads at the next loop to keep the correct delay time.
     if (loopSync_ && rate == 1.f)
     {
        mustSyncHeads_ = true;
@@ -292,6 +297,8 @@ void Looper::SetLooping(bool looping)
 
 void Looper::SetLoopSync(bool loopSync)
 {
+    // If loopSync = true it means we're in delay mode, so the writing head must
+    // loop when the reading head does.
     if (loopSync_ && !loopSync)
     {
         writeHead_.SetLoopLength(bufferSamples_);
@@ -304,7 +311,6 @@ void Looper::SetLoopSync(bool loopSync)
     readHeads_[0].SetLoopSync(loopSync_);
     readHeads_[1].SetLoopSync(loopSync_);
     writeHead_.SetLoopSync(loopSync_);
-
     crossPointFound_ = false;
 }
 
@@ -312,11 +318,13 @@ float Looper::Read()
 {
     float value = readHeads_[activeReadHead_].Read();
 
+    // Fade in reading.
     if (startReadingFade.IsActive())
     {
         startReadingFade.Process(0, value);
         value = startReadingFade.GetOutput();
     }
+    // Fade out reading.
     else if (stopReadingFade.IsActive())
     {
         if (Fader::FadeStatus::ENDED == stopReadingFade.Process(value, 0))
@@ -324,6 +332,8 @@ float Looper::Read()
             readHeads_[0].SetActive(false);
             readHeads_[1].SetActive(false);
             readingActive_ = false;
+            // If the looper had been re-triggered while playing, at the end of
+            // the fade out we reset the heads and then fade in reading.
             if (triggered_)
             {
                 readHeads_[0].ResetPosition();
@@ -375,11 +385,13 @@ float Looper::Read()
 
 void Looper::Write(float input)
 {
+    // Fade in writing.
     if (startWritingFade.IsActive())
     {
         startWritingFade.Process(0, input);
         input = startWritingFade.GetOutput();
     }
+    // Fade out writing.
     else if (stopWritingFade.IsActive())
     {
         if (Fader::FadeStatus::ENDED == stopWritingFade.Process(input, 0))
@@ -408,6 +420,8 @@ float Looper::Degrade(float input)
     {
         float d = 1.f - ((std::rand() / (float)RAND_MAX) * degradation_) * 0.5f;
 
+        // Use an Euclidean rhythm generator to apply degradation at fixed
+        // buffer points
         return writeHead_.BresenhamEuclidean(eRand_ * 64, degradation_) ? input : input * d;
     }
 
@@ -443,6 +457,7 @@ void Looper::FadeReadingToResetPosition()
         }
     }
 
+    // TODO: Probably the samples to fade could be calculated more precisely.
     // Active: length - buffer
     // inactive: length
     float samples = std::min(readHeads_[activeReadHead_].GetSamplesToFade(), readHeads_[!activeReadHead_].GetSamplesToFade());
@@ -469,7 +484,7 @@ void Looper::UpdateReadPos()
 
     // Note that in delay mode we don't need to fade the loop, and we wouldn't do
     // it anyway because it'd need a few samples from outside the loop and these
-    // samples are probably dirty.
+    // samples are probably unrelated.
     // Fading when the loop changes yields the same problem, but it sounds better
     // than if we don't.
     if (Head::Action::LOOP == action && (loopChanged_ || (!loopSync_ && loopLength_ < bufferSamples_)))
@@ -477,6 +492,7 @@ void Looper::UpdateReadPos()
         FadeReadingToResetPosition();
         loopChanged_ = false;
     }
+    // Here we handle normal looping in delay mode.
     else if (Head::Action::LOOP == action && loopSync_ && loopLength_ < bufferSamples_)
     {
         readHeads_[0].ResetPosition();
@@ -498,6 +514,7 @@ void Looper::UpdateWritePos()
 
     if (Head::Action::LOOP == action && loopSync_)
     {
+        // Loop the writing head.
         if (loopLength_ < bufferSamples_)
         {
             writeHead_.ResetPosition();
@@ -574,22 +591,22 @@ float Looper::CalculateDistance(float a, float b, float aSpeed, float bSpeed, Di
         // Broken loop, case where a is in the second segment and b in the first.
         if (a >= loopStart_ && b <= loopEnd_)
         {
-            return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopLength_ - ((loopEnd_ - b) + (a - loopStart_)) : (loopEnd_ - b) + (a - loopStart_);
+            return (IsGoingForward() && aSpeed > bSpeed) ? loopLength_ - ((loopEnd_ - b) + (a - loopStart_)) : (loopEnd_ - b) + (a - loopStart_);
         }
 
         // Broken loop, case where b is in the second segment and a in the first.
         if (b >= loopStart_ && a <= loopEnd_)
         {
-            return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopLength_ - ((loopEnd_ - a) + (b - loopStart_)) : (loopEnd_ - a) + (b - loopStart_);
+            return (!IsGoingForward() || bSpeed > aSpeed) ? loopLength_ - ((loopEnd_ - a) + (b - loopStart_)) : (loopEnd_ - a) + (b - loopStart_);
         }
     }
 
     if (a > b)
     {
-        return (Direction::FORWARD == direction && aSpeed > bSpeed) ? loopLength_ - (a - b) : a - b;
+        return (IsGoingForward() && aSpeed > bSpeed) ? loopLength_ - (a - b) : a - b;
     }
 
-    return (Direction::BACKWARDS == direction || bSpeed > aSpeed) ? loopLength_ - (b - a) : b - a;
+    return (!IsGoingForward() || bSpeed > aSpeed) ? loopLength_ - (b - a) : b - a;
 }
 
 void Looper::CalculateCrossPoint()

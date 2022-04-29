@@ -157,7 +157,7 @@ namespace wreath
 
         inline void ResetPosition()
         {
-            SetIndex(FORWARD == direction_ ? loopStart_ + offset_ : loopEnd_ - offset_);
+            SetIndex(FORWARD == direction_ ? WrapIndex(loopStart_ + offset_) : WrapIndex(loopEnd_ - offset_));
         }
 
         Action UpdatePosition()

@@ -182,7 +182,7 @@ void Looper::SetSamplesToFade(float samples)
 
 void Looper::SetLoopStart(float start)
 {
-    if (loopFade.IsActive())
+    if (loopFade.IsActive() && loopLength_ > kMinSamplesForFlanger)
     {
         return;
     }
@@ -192,10 +192,18 @@ void Looper::SetLoopStart(float start)
         loopLengthGrown_ = start > loopStart_;
         loopChanged_ = start != loopStart_;
     }
-    loopStart_ = readHeads_[!activeReadHead_].SetLoopStart(start);
-    if (!readingActive_)
+    if (loopLength_ > kMinSamplesForFlanger)
     {
-        readHeads_[activeReadHead_].SetLoopStart(loopStart_);
+        loopStart_ = readHeads_[!activeReadHead_].SetLoopStart(start);
+        if (!readingActive_)
+        {
+            readHeads_[activeReadHead_].SetLoopStart(loopStart_);
+        }
+    }
+    else
+    {
+        loopStart_ = readHeads_[0].SetLoopStart(start);
+        readHeads_[1].SetLoopStart(start);
     }
     intLoopStart_ = loopStart_;
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
@@ -210,17 +218,25 @@ void Looper::SetLoopStart(float start)
 
 void Looper::SetLoopLength(float length)
 {
-    if (loopFade.IsActive())
+    if (loopFade.IsActive() && loopLength_ > kMinSamplesForFlanger)
     {
         return;
     }
 
     loopLengthGrown_ = length > loopLength_;
     loopChanged_ = length != loopLength_;
-    loopLength_ = readHeads_[!activeReadHead_].SetLoopLength(length);
-    if (!readingActive_)
+    if (length > kMinSamplesForFlanger)
     {
-        readHeads_[activeReadHead_].SetLoopLength(loopLength_);
+        loopLength_ = readHeads_[!activeReadHead_].SetLoopLength(length);
+        if (!readingActive_)
+        {
+            readHeads_[activeReadHead_].SetLoopLength(loopLength_);
+        }
+    }
+    else
+    {
+        loopLength_ = readHeads_[0].SetLoopLength(length);
+        readHeads_[1].SetLoopLength(length);
     }
     intLoopLength_ = loopLength_;
     loopLengthSeconds_ = loopLength_ / sampleRate_;
@@ -487,13 +503,14 @@ void Looper::UpdateReadPos()
     // samples are probably unrelated.
     // Fading when the loop changes yields the same problem, but it sounds better
     // than if we don't.
-    if (Head::Action::LOOP == action && (loopChanged_ || (!loopSync_ && loopLength_ < bufferSamples_)))
+    if (Head::Action::LOOP == action && loopLength_ > kMinSamplesForFlanger && (loopChanged_ || (!loopSync_ && loopLength_ < bufferSamples_)))
     {
         FadeReadingToResetPosition();
         loopChanged_ = false;
     }
-    // Here we handle normal looping in delay mode.
-    else if (Head::Action::LOOP == action && loopSync_ && loopLength_ < bufferSamples_)
+    // Here we handle normal looping in delay mode or when the loop length is
+    // small.
+    else if (Head::Action::LOOP == action && (loopLength_ <= kMinSamplesForFlanger || loopSync_) && loopLength_ < bufferSamples_)
     {
         readHeads_[0].ResetPosition();
         readHeads_[1].ResetPosition();

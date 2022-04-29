@@ -182,6 +182,7 @@ void Looper::SetSamplesToFade(float samples)
 
 void Looper::SetLoopStart(float start)
 {
+    // Do not change value if there's a loop fade going.
     if (loopFade.IsActive() && loopLength_ > kMinSamplesForFlanger)
     {
         return;
@@ -204,6 +205,13 @@ void Looper::SetLoopStart(float start)
     {
         loopStart_ = readHeads_[0].SetLoopStart(start);
         readHeads_[1].SetLoopStart(start);
+        // Also, always keep the heads inside the loop.
+        readHeads_[0].ResetPosition();
+        readHeads_[1].ResetPosition();
+        if (loopSync_)
+        {
+            writeHead_.ResetPosition();
+        }
     }
     intLoopStart_ = loopStart_;
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
@@ -218,6 +226,7 @@ void Looper::SetLoopStart(float start)
 
 void Looper::SetLoopLength(float length)
 {
+    // Do not change value if there's a loop fade going.
     if (loopFade.IsActive() && loopLength_ > kMinSamplesForFlanger)
     {
         return;

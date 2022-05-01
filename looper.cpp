@@ -153,6 +153,10 @@ void Looper::StopWriting(bool now)
 
 void Looper::Trigger(bool restart)
 {
+    // Update the loop start
+    readHeads_[0].SetLoopStart(loopStart_);
+    readHeads_[1].SetLoopStart(loopStart_);
+
     // When a trigger is received while playing we fade out and then in the
     // reading, resetting the heads position in between.
     if (readingActive_)
@@ -188,11 +192,9 @@ void Looper::SetLoopStart(float start)
         return;
     }
 
-    if (loopLength_ < bufferSamples_)
-    {
-        loopLengthGrown_ = start > loopStart_;
-        loopChanged_ = start != loopStart_;
-    }
+    loopLengthGrown_ = start > loopStart_;
+    loopChanged_ = start != loopStart_;
+
     if (loopLength_ > kMinSamplesForFlanger)
     {
         loopStart_ = readHeads_[!activeReadHead_].SetLoopStart(start);

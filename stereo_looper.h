@@ -541,8 +541,8 @@ namespace wreath
                 loopers_[RIGHT].UpdateWritePos();
 
                 // Mix some of the filtered fed back signal with the wet when frozen.
-                //leftWet = Mix(leftWet, filterLevel * Filter(leftFeedback) * freeze_);
-                //rightWet = Mix(rightWet, filterLevel * Filter(rightFeedback) * freeze_);
+                leftWet = Mix(leftWet, filterLevel * Filter(leftFeedback) * freeze_);
+                rightWet = Mix(rightWet, filterLevel * Filter(rightFeedback) * freeze_);
             }
             default:
                 break;

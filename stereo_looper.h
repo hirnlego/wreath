@@ -85,6 +85,9 @@ namespace wreath
         float dryWetMix{0.5f};
         float feedback{0.f};
         float feedbackLevel{1.f};
+        bool feedbackOnly{};
+        float leftFeedbackPath{0.f};
+        float rightFeedbackPath{1.f};
         float filterLevel{0.3f};
         float rateSlew{0.f};
         float stereoWidth{1.f};
@@ -169,11 +172,18 @@ namespace wreath
         {
             return loopSync_;
         }
-        void SetLoopSync(bool loopSync)
+        void SetLoopSync(int channel, bool loopSync)
         {
-            loopSync_ = loopSync;
-            loopers_[LEFT].SetLoopSync(loopSync);
-            loopers_[RIGHT].SetLoopSync(loopSync);
+            if (BOTH == channel)
+            {
+                loopers_[LEFT].SetLoopSync(loopSync);
+                loopers_[RIGHT].SetLoopSync(loopSync);
+                loopSync_ = loopSync;
+            }
+            else
+            {
+                loopers_[channel].SetLoopSync(loopSync);
+            }
         }
 
         bool HasLoopSync()
@@ -365,6 +375,9 @@ namespace wreath
             float leftWet{};
             float rightWet{};
 
+            float leftFeedback{};
+            float rightFeedback{};
+
             switch (state_)
             {
             case State::STARTUP:
@@ -506,13 +519,10 @@ namespace wreath
                 leftWet = loopers_[LEFT].Read();
                 rightWet = loopers_[RIGHT].Read();
 
-                // Feedback path.
-                float leftFeedback{};
-                float rightFeedback{};
                 if (feedback > 0.f)
                 {
-                    leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
-                    rightFeedback = loopers_[RIGHT].Degrade(rightWet * feedback);
+                    leftFeedback = loopers_[LEFT].Degrade(Mix(leftWet * (1.f - leftFeedbackPath), rightWet * (1.f - rightFeedbackPath)) * feedback);
+                    rightFeedback = loopers_[RIGHT].Degrade(Mix(leftWet * leftFeedbackPath, rightWet * rightFeedbackPath) * feedback);
                     float leftFiltered = filterLevel * Filter(leftFeedback) * feedback;
                     float rightFiltered = filterLevel * Filter(rightFeedback) * feedback;
                     leftFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(leftFiltered));
@@ -531,15 +541,15 @@ namespace wreath
                 loopers_[RIGHT].UpdateWritePos();
 
                 // Mix some of the filtered fed back signal with the wet when frozen.
-                leftWet = Mix(leftWet, filterLevel * Filter(leftFeedback) * freeze_);
-                rightWet = Mix(rightWet, filterLevel * Filter(rightFeedback) * freeze_);
+                //leftWet = Mix(leftWet, filterLevel * Filter(leftFeedback) * freeze_);
+                //rightWet = Mix(rightWet, filterLevel * Filter(rightFeedback) * freeze_);
             }
             default:
                 break;
             }
 
             // Mid-side processing for stereo widening.
-            float mid = ((leftWet + rightWet) / fastroot(2, 10));
+            float mid = (leftWet + rightWet) / fastroot(2, 10);
             float side = ((leftWet - rightWet) / fastroot(2, 10)) * stereoWidth;
             float stereoLeft = (mid + side) / fastroot(2, 10);
             float stereoRight = (mid - side) / fastroot(2, 10);
@@ -547,6 +557,12 @@ namespace wreath
             // Output gain stage.
             leftOut = SoftClip(Fader::EqualCrossFade(leftDry, stereoLeft, dryWetMix) * outputGain);
             rightOut = SoftClip(Fader::EqualCrossFade(rightDry, stereoRight, dryWetMix) * outputGain);
+
+            if (feedbackOnly)
+            {
+                leftOut = SoftClip(leftFeedback);
+                rightOut = SoftClip(rightFeedback);
+            }
         }
 
     private:

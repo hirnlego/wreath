@@ -86,6 +86,7 @@ namespace wreath
         float feedback{0.f};
         float feedbackLevel{1.f};
         bool feedbackOnly{};
+        bool crossedFeedback{};
         float leftFeedbackPath{0.f};
         float rightFeedbackPath{1.f};
         float filterLevel{0.3f};
@@ -521,8 +522,16 @@ namespace wreath
 
                 if (feedback > 0.f)
                 {
-                    leftFeedback = loopers_[LEFT].Degrade(Mix(leftWet * (1.f - leftFeedbackPath), rightWet * (1.f - rightFeedbackPath)) * feedback);
-                    rightFeedback = loopers_[RIGHT].Degrade(Mix(leftWet * leftFeedbackPath, rightWet * rightFeedbackPath) * feedback);
+                    if (crossedFeedback)
+                    {
+                        leftFeedback = loopers_[LEFT].Degrade(Mix(leftWet * (1.f - leftFeedbackPath), rightWet * (1.f - rightFeedbackPath)) * feedback);
+                        rightFeedback = loopers_[RIGHT].Degrade(Mix(leftWet * leftFeedbackPath, rightWet * rightFeedbackPath) * feedback);
+                    }
+                    else
+                    {
+                        leftFeedback = loopers_[LEFT].Degrade(leftWet * feedback);
+                        rightFeedback = loopers_[RIGHT].Degrade(rightWet * feedback);
+                    }
                     float leftFiltered = filterLevel * Filter(leftFeedback) * feedback;
                     float rightFiltered = filterLevel * Filter(rightFeedback) * feedback;
                     leftFiltered *= (feedbackLevel - filterEnvelope_.GetEnv(leftFiltered));

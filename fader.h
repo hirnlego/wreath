@@ -4,10 +4,15 @@
 
 namespace wreath
 {
-    constexpr float kSamplesToFade{48.f * 100}; // 100ms @ 48KHz
+    constexpr float kSamplesToFade{48.f * 100};       // 100ms @ 48KHz
     constexpr float kSamplesToFadeTrigger{48.f * 10}; // 10ms @ 48KHz
     constexpr float kEqualCrossFadeP{1.25f};
 
+    /**
+     * @brief Handles different types of cross-fading between two sources.
+     * @author Roberto Noris
+     * @date Mar 2022
+     */
     class Fader
     {
     public:
@@ -141,11 +146,6 @@ namespace wreath
         bool IsActive()
         {
             return FadeStatus::PENDING == status_ || FadeStatus::FADING == status_;
-        }
-
-        void IncIndex()
-        {
-            index_ += rate_;
         }
 
     private:

@@ -272,7 +272,7 @@ void Looper::SetReadRate(float rate)
     // of the heads at the next loop to keep the correct delay time.
     if (loopSync_ && rate == 1.f)
     {
-       mustSyncHeads_ = true;
+        mustSyncHeads_ = true;
     }
 }
 
@@ -462,7 +462,7 @@ void Looper::FadeReadingToResetPosition()
         return;
     }
 
-    if (loopLengthGrown_ )
+    if (loopLengthGrown_)
     {
         readHeads_[activeReadHead_].ResetPosition();
         // When going backwards, if we don't have enough space for the fading of

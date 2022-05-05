@@ -6,6 +6,11 @@
 
 namespace wreath
 {
+    /**
+     * @brief Represents the main looper, with a reading and a writing head.
+     * @author Roberto Noris
+     * @date Nov 2021
+     */
     class Looper
     {
     public:

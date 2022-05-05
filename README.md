@@ -2,25 +2,10 @@
 
 A multifaceted looper for the Daisy platform.
 
-BUGS
+## License
 
-1) clicks when going backwards or at a speed different than the write one
-2) in pendulum sometimes a flanger-like effect is produced (check feedback and (1))
-3) when modifying the loop start point while frozen, if the start point "pushes" the read position smearing occurs
-7) fade is broken when frozen across the boundary
-9) strange behaviour when speed < 1 (the feedback disappears)
+Wreath uses the MIT license.
 
-TODO
+It can be used in both closed source and commercial projects, and does not provide a warranty of any kind.
 
-- one-shot/looping
-- loop envelopes
-- loop length < 100 ms = grain
-- grains rhythms
-- CV modulation matrix
-- sample rate reduction
-- mimeo: when clocked, there should be a way to clock the looper, speed is a divisor/multiplier
-- extend initial buffer
-- link loopers (eg. play in series)
-- stutter (stops and goes, repeats), drag, jitter
-- more play heads
-- parameters transitions / Markov chain
+For the full license, read the LICENSE file in the root directory.

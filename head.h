@@ -1,8 +1,3 @@
-/**
- * Inspired by Monome softcut's subhead class:
- * https://github.com/monome/softcut-lib/blob/main/softcut-lib/src/SubHead.cpp
- */
-
 #pragma once
 
 #include "fader.h"
@@ -36,6 +31,14 @@ namespace wreath
         FORWARD = 1
     };
 
+    /**
+     * @brief Represents a reading or writing head.
+     * @author Roberto Noris
+     * @date Dec 2021
+     *
+     * Inspired by Monome softcut's subhead class:
+     * https://github.com/monome/softcut-lib/blob/main/softcut-lib/src/SubHead.cpp
+     */
     class Head
     {
     public:

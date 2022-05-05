@@ -17,12 +17,20 @@ namespace wreath
     constexpr int kBufferSeconds{80}; // 1:20 minutes, max with 4 buffers
     const int32_t kBufferSamples{kSampleRate * kBufferSeconds};
 
+    // Looper buffers.
     float DSY_SDRAM_BSS leftBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightBuffer_[kBufferSamples];
 
+    // Freeze buffers.
     float DSY_SDRAM_BSS leftFreezeBuffer_[kBufferSamples];
     float DSY_SDRAM_BSS rightFreezeBuffer_[kBufferSamples];
 
+    /**
+     * @brief The higher level class of the looper, this is the one you want to
+     *  instantiate.
+     * @author Roberto Noris
+     * @date Dec 2021
+     */
     class StereoLooper
     {
     public:
@@ -93,6 +101,7 @@ namespace wreath
         float rateSlew{0.f};
         float stereoWidth{1.f};
         float dryLevel{1.f};
+        bool loopSync_{};
         FilterType filterType{FilterType::BP};
 
         NoteMode noteModeLeft{};
@@ -153,6 +162,7 @@ namespace wreath
         inline bool IsCrossMode() { return Mode::CROSS == conf_.mode; }
         inline bool IsDualMode() { return Mode::DUAL == conf_.mode; }
         inline Mode GetMode() { return conf_.mode; }
+        inline bool GetLoopSync() { return loopSync_; }
 
         void Init(int32_t sampleRate, Conf conf)
         {
@@ -168,11 +178,6 @@ namespace wreath
             loopers_[RIGHT].Reset();
         }
 
-        bool loopSync_{};
-        bool GetLoopSync()
-        {
-            return loopSync_;
-        }
         void SetLoopSync(int channel, bool loopSync)
         {
             if (BOTH == channel)
@@ -185,11 +190,6 @@ namespace wreath
             {
                 loopers_[channel].SetLoopSync(loopSync);
             }
-        }
-
-        bool HasLoopSync()
-        {
-            return loopSync_;
         }
 
         void ToggleFreeze()

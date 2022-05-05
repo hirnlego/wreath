@@ -260,24 +260,24 @@ namespace wreath
         void CalculateCrossPoint();
 
         float *buffer_{};           // The buffer
-        float *freezeBuffer_{};           // The buffer
+        float *freezeBuffer_{};     // The buffer
         float bufferSeconds_{};     // Written buffer length in seconds
         float readPos_{};           // The read position
         float readPosSeconds_{};    // Read position in seconds
         float loopStartSeconds_{};  // Start of the loop in seconds
         float loopLengthSeconds_{}; // Length of the loop in seconds
-        float readRate_{};         // Speed multiplier
+        float readRate_{};          // Speed multiplier
         float writeRate_{};         // Speed multiplier
         float readSpeed_{};         // Actual read speed
         float writeSpeed_{};        // Actual write speed
-        int32_t bufferSamples_{};    // The written buffer length in samples
-        float writePos_{};         // The write position
-        float loopStart_{};        // Loop start position
-        float loopEnd_{};          // Loop end position
-        float loopLength_{};       // Length of the loop in samples
+        int32_t bufferSamples_{};   // The written buffer length in samples
+        float writePos_{};          // The write position
+        float loopStart_{};         // Loop start position
+        float loopEnd_{};           // Loop end position
+        float loopLength_{};        // Length of the loop in samples
         int32_t intLoopLength_{};
-        int32_t intLoopStart_{};        // Loop start position
-        int32_t intLoopEnd_{};          // Loop end position
+        int32_t intLoopStart_{}; // Loop start position
+        int32_t intLoopEnd_{};   // Loop end position
         float headsDistance_{};
         int32_t sampleRate_{}; // The sample rate
         Direction direction_{};

@@ -36,7 +36,7 @@ namespace wreath
      * @author Roberto Noris
      * @date Dec 2021
      *
-     * Inspired by Monome softcut's subhead class:
+     * Inspired by Monome Softcut's subhead class:
      * https://github.com/monome/softcut-lib/blob/main/softcut-lib/src/SubHead.cpp
      */
     class Head

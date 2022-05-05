@@ -2,6 +2,7 @@
 
 ### v1.0.3 (current)
 
+- Updated libDaisy
 - Docs and comments
 
 ### v1.0.2

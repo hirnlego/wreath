@@ -4,7 +4,6 @@
 
 namespace wreath
 {
-
     /**
      * @brief A simple envelope follower
      * @author https://forum.electro-smith.com/t/audio-cuts-out-overflowing-floats/543/14
@@ -46,5 +45,4 @@ namespace wreath
             return avg_env;
         }
     };
-
-}
+} // namespace wreath

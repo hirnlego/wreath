@@ -163,7 +163,15 @@ namespace wreath
         inline bool IsDualMode() { return Mode::DUAL == conf_.mode; }
         inline Mode GetMode() { return conf_.mode; }
         inline bool GetLoopSync() { return loopSync_; }
+        inline float GetFilterValue() { return filterValue_; }
 
+
+        /**
+         * @brief Inits the looper. Call this before setting up the AudioCallback.
+         *
+         * @param sampleRate
+         * @param conf
+         */
         void Init(int32_t sampleRate, Conf conf)
         {
             sampleRate_ = sampleRate;
@@ -178,6 +186,13 @@ namespace wreath
             loopers_[RIGHT].Reset();
         }
 
+        /**
+         * @brief Sets the looper loopSync parameter. If true, the writing head
+         * loop is kept in sync with that of the reading head (AKA delay mode).
+         *
+         * @param channel
+         * @param loopSync
+         */
         void SetLoopSync(int channel, bool loopSync)
         {
             if (BOTH == channel)
@@ -192,23 +207,12 @@ namespace wreath
             }
         }
 
-        void ToggleFreeze()
-        {
-            bool frozen = IsFrozen();
-            SetFreeze(BOTH, !frozen);
-        }
-
-        void SetSamplesToFade(float samples)
-        {
-            loopers_[LEFT].SetSamplesToFade(samples);
-            loopers_[RIGHT].SetSamplesToFade(samples);
-        }
-
-        float GetFilterValue()
-        {
-            return filterValue_;
-        }
-
+        /**
+         * @brief Sets the value for the filter, changing a bunch of parameters
+         * at once.
+         *
+         * @param value
+         */
         void SetFilterValue(float value)
         {
             filterValue_ = value;
@@ -217,6 +221,11 @@ namespace wreath
             feedbackFilter_.SetRes(fmap(1.f - feedback, 0.05f, 0.2f + (freeze_ * 0.2f)));
         }
 
+        /**
+         * @brief Sets the amount of degradation of the feedback.
+         *
+         * @param value
+         */
         void SetDegradation(float value)
         {
             degradation_ = value;
@@ -224,18 +233,26 @@ namespace wreath
             loopers_[RIGHT].SetDegradation(value);
         }
 
-        void OffsetLoopers(float value)
-        {
-            float pos = fclamp(loopers_[LEFT].GetReadPos() + value, 0, loopers_[RIGHT].GetLoopEnd());
-            loopers_[RIGHT].SetReadPos(pos);
-        }
-
+        /**
+         * @brief Sets whether the loopers should stop at the end or continue
+         * looping indefinitely.
+         *
+         * @param active
+         */
         void SetLooping(bool active)
         {
             loopers_[LEFT].SetLooping(active);
             loopers_[RIGHT].SetLooping(active);
         }
 
+        /**
+         * @brief Sets how the loopers' reading heads are moving, if either
+         * normally, with a pendulum motion (change of direction when looping)
+         * or randomly. Only the normal mode has been completely implemented.
+         *
+         * @param channel
+         * @param movement
+         */
         void SetMovement(int channel, Movement movement)
         {
             if (BOTH == channel)
@@ -250,6 +267,12 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Sets the direction of the reading head.
+         *
+         * @param channel
+         * @param direction
+         */
         void SetDirection(int channel, Direction direction)
         {
             if (LEFT == channel || BOTH == channel)
@@ -265,7 +288,7 @@ namespace wreath
                 conf_.direction = direction;
             }
             // Before the looper starts, if the direction is backwards set the
-            // read head at the end of the loop.
+            // reading head at the end of the loop.
             if (State::READY == state_ && Direction::BACKWARDS == direction)
             {
                 loopers_[LEFT].SetReadPos(loopers_[LEFT].GetLoopEnd());
@@ -273,6 +296,12 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Sets the loopers' start position (in samples).
+         *
+         * @param channel
+         * @param value
+         */
         void SetLoopStart(int channel, float value)
         {
             if (LEFT == channel || BOTH == channel)
@@ -285,6 +314,12 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Sets the loopers' freeze amount.
+         *
+         * @param channel
+         * @param amount
+         */
         void SetFreeze(int channel, float amount)
         {
             if (LEFT == channel || BOTH == channel)
@@ -302,6 +337,12 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Sets the speed of the reading head.
+         *
+         * @param channel
+         * @param rate
+         */
         void SetReadRate(int channel, float rate)
         {
             if (LEFT == channel || BOTH == channel)
@@ -315,6 +356,12 @@ namespace wreath
             conf_.rate = rate;
         }
 
+        /**
+         * @brief Sets the speed of the writing head.
+         *
+         * @param channel
+         * @param rate
+         */
         void SetWriteRate(int channel, float rate)
         {
             if (LEFT == channel || BOTH == channel)
@@ -327,6 +374,13 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Sets the loopers' loop length (in samples), also deciding
+         * whether note mode is active or not.
+         *
+         * @param channel
+         * @param length
+         */
         void SetLoopLength(int channel, float length)
         {
             if (LEFT == channel || BOTH == channel)
@@ -357,6 +411,10 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Starts reading for the first time. This must be called when
+         * the looper is ready to go.
+         */
         void Start()
         {
             if (State::READY == state_)
@@ -367,6 +425,15 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Processes the input signals and outputs something. This goes
+         * in the main loop of your code.
+         *
+         * @param leftIn
+         * @param rightIn
+         * @param leftOut
+         * @param rightOut
+         */
         void Process(const float leftIn, const float rightIn, float &leftOut, float &rightOut)
         {
             // Input gain stage.
@@ -585,6 +652,9 @@ namespace wreath
         float filterValue_{};
         Conf conf_{};
 
+        /**
+         * @brief Resets the loopers to their initial state.
+         */
         void Reset()
         {
             loopers_[LEFT].Reset();
@@ -597,11 +667,24 @@ namespace wreath
             SetWriteRate(BOTH, conf_.rate);
         }
 
+        /**
+         * @brief Simple mixing and clipping of two signals.
+         *
+         * @param a
+         * @param b
+         * @return float
+         */
         float Mix(float a, float b)
         {
             return SoftClip(a + b);
         }
 
+        /**
+         * @brief Filters the provided signal and returns the result.
+         *
+         * @param value
+         * @return float
+         */
         float Filter(float value)
         {
             feedbackFilter_.Process(value);
@@ -618,6 +701,11 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Updates the loopers' parameters. This is called at the
+         * beginning of the Process() method to ensure that the parameters are
+         * changed at the right moment.
+         */
         void UpdateParameters()
         {
             if (leftDirection != loopers_[LEFT].GetDirection())
@@ -695,4 +783,4 @@ namespace wreath
         }
     };
 
-}
+} // namespace wreath

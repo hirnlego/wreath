@@ -33,6 +33,12 @@ namespace wreath
             ENDED,
         };
 
+        /**
+         * @brief Resets a fader that had already been initialised.
+         *
+         * @param samples
+         * @param rate
+         */
         void Reset(float samples, float rate)
         {
             samples_ = FadeType::FADE_OUT_IN == type_ ? samples / 2.f : samples;
@@ -43,6 +49,13 @@ namespace wreath
             toggle_ = false;
         }
 
+        /**
+         * @brief Initialises a fader for the first time.
+         *
+         * @param type
+         * @param samples
+         * @param rate
+         */
         void Init(FadeType type = FadeType::FADE_SINGLE, float samples = kSamplesToFade, float rate = 1.f)
         {
             if (FadeStatus::CREATED == status_ || FadeStatus::ENDED == status_)
@@ -51,6 +64,15 @@ namespace wreath
                 Reset(samples, rate);
             }
         }
+
+        /**
+         * @brief Equal-power crossfade.
+         *
+         * @param from
+         * @param to
+         * @param pos
+         * @return float
+         */
         static float CrossFade(float from, float to, float pos)
         {
             float in = std::sin(pos * 1.570796326794897);
@@ -59,6 +81,14 @@ namespace wreath
             return from * out + to * in;
         }
 
+        /**
+         * @brief A simple linear crossfade.
+         *
+         * @param from
+         * @param to
+         * @param pos
+         * @return float
+         */
         static float LinearCrossFade(float from, float to, float pos)
         {
             return from * (1.f - pos) + to;
@@ -85,6 +115,13 @@ namespace wreath
             return from * d * d + to * c * c;
         }
 
+        /**
+         * @brief Processes the crossfade of the provided inputs.
+         *
+         * @param fromInput
+         * @param toInput
+         * @return FadeStatus
+         */
         FadeStatus Process(float fromInput, float toInput)
         {
             input_ = fromInput;
@@ -159,4 +196,4 @@ namespace wreath
         float output_{};
         bool toggle_{};
     };
-}
+} // namespace wreath

@@ -131,8 +131,6 @@ namespace wreath
             }
         }
 
-        inline void SetDegradation(float amount) { degradationAmount_ = amount; }
-
         inline void SetRate(float rate)
         {
             rate_ = std::abs(rate);
@@ -163,6 +161,11 @@ namespace wreath
             SetIndex(FORWARD == direction_ ? WrapIndex(loopStart_ + offset_) : WrapIndex(loopEnd_ - offset_));
         }
 
+        /**
+         * @brief Updates the heads index depending on the speed and direction.
+         *
+         * @return Action
+         */
         Action UpdatePosition()
         {
             if (!active_)
@@ -249,6 +252,11 @@ namespace wreath
             return toggleOnset;
         }
 
+        /**
+         * @brief Handles the freeze buffer on writing.
+         *
+         * @param input
+         */
         void HandleFreeze(float input)
         {
             float frozenValue = freezeBuffer_[intIndex_];
@@ -278,18 +286,35 @@ namespace wreath
             }
         }
 
+        /**
+         * @brief Writes the given value in the buffer.
+         *
+         * @param input
+         */
         void Write(float input)
         {
             HandleFreeze(input);
             buffer_[intIndex_] = input;
         }
 
+        /**
+         * @brief Clears the buffers.
+         *
+         */
         void ClearBuffer()
         {
             memset(buffer_, 0.f, maxBufferSamples_);
             memset(freezeBuffer_, 0.f, maxBufferSamples_);
         }
 
+        /**
+         * @brief This is used by the buffering procedure, not sure if could be
+         * replaced with the regular writing.
+         *
+         * @param value
+         * @return true
+         * @return false
+         */
         bool Buffer(float value)
         {
             buffer_[intIndex_] = value;
@@ -307,6 +332,11 @@ namespace wreath
             return false;
         }
 
+        /**
+         * @brief Inits the buffer used by this head by passing its length.
+         *
+         * @param bufferSamples
+         */
         void InitBuffer(int32_t bufferSamples)
         {
             bufferSamples_ = bufferSamples;
@@ -317,6 +347,11 @@ namespace wreath
             samplesToFade_ = std::min(kSamplesToFade, loopLength_ / 2.f);
         }
 
+        /**
+         * @brief When the buffering procedure is complete call this method.
+         *
+         * @return int32_t
+         */
         int32_t StopBuffering()
         {
             index_ = 0.f;
@@ -390,7 +425,6 @@ namespace wreath
         Direction direction_{};
 
         float freezeAmount_{};
-        float degradationAmount_{};
         bool frozen_{};
 
         bool mustFreeze_{};
@@ -403,6 +437,12 @@ namespace wreath
 
         float offset_{};
 
+        /**
+         * @brief Checks the head's position relative to the loop boundaries and
+         * decides what to do next.
+         *
+         * @return Action
+         */
         Action HandleLoopAction()
         {
             // Handle normal loop boundaries.
@@ -441,6 +481,12 @@ namespace wreath
             return Action::NO_ACTION;
         }
 
+        /**
+         * @brief Wraps the provided index in the buffer.
+         *
+         * @param index
+         * @return int32_t
+         */
         int32_t WrapIndex(int32_t index)
         {
             // Handle normal loop boundaries.
@@ -502,6 +548,10 @@ namespace wreath
             return index;
         }
 
+        /**
+         * @brief Calculates the loop end point depending on the loop start
+         * point and length.
+         */
         void CalculateLoopEnd()
         {
             if (intLoopStart_ + intLoopLength_ > bufferSamples_)
@@ -515,6 +565,14 @@ namespace wreath
             intLoopEnd_ = loopEnd_;
         }
 
+        /**
+         * @brief Reads the value in the buffer of choice at the given index.
+         * Uses interpolation if the index is not integral.
+         *
+         * @param buffer
+         * @param index
+         * @return float
+         */
         float ReadAt(float *buffer, float index)
         {
             int32_t intPos = index;
@@ -530,4 +588,4 @@ namespace wreath
             return value;
         }
     };
-}
+} // namespace wreath

@@ -17,41 +17,195 @@ namespace wreath
         Looper() {}
         ~Looper() {}
 
+        /**
+         * @brief Initializes the looper the first time.
+         *
+         * @param sampleRate
+         * @param buffer
+         * @param maxBufferSamples
+         */
         void Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t maxBufferSamples);
+        /**
+         * @brief Resets the looper when needed.
+         */
         void Reset();
         void ClearBuffer();
-        void StopBuffering();
-        void SetReadRate(float rate);
-        void SetWriteRate(float rate);
-        void SetLoopLength(float length);
-        void SetMovement(Movement movement);
-        void SetLooping(bool looping);
-        void SetLoopSync(bool overdub);
+        /**
+         * @brief Writes the given value in the buffer during the buffering procedure.
+         *
+         * @param value
+         * @return true
+         * @return false
+         */
         bool Buffer(float value);
-        void SetReadPos(float position);
-        void SetWritePos(float position);
-        float Read();
-        void Write(float input);
-        float Degrade(float input);
-        void UpdateReadPos();
-        void UpdateWritePos();
-        void FadeReadingToResetPosition();
-        void HandleCrossPointFade();
+        /**
+         * @brief Completes the buffering procedure.
+         */
+        void StopBuffering();
+        /**
+         * @brief Starts the reading operation, either with a fade in or immediately
+         * depending on the parameter.
+         *
+         * @param now
+         */
         void StartReading(bool now);
+        /**
+         * @brief Stops the reading operation, either with a fade out or immediately
+         * depending on the parameter.
+         *
+         * @param now
+         */
         void StopReading(bool now);
+        /**
+         * @brief Starts the writing operation, either with a fade in or immediately
+         * depending on the parameter.
+         *
+         * @param now
+         */
         void StartWriting(bool now);
+        /**
+         * @brief Stops the writing operation, either with a fade out or immediately
+         * depending on the parameter.
+         *
+         * @param now
+         */
         void StopWriting(bool now);
+        /**
+         * @brief Triggers the looper playback, either mid playback or from a stopped
+         * status depending on the parameter.
+         *
+         * @param restart
+         */
         void Trigger(bool restart);
+        /**
+         * @brief Sets the number of samples to be used for fading.
+         *
+         * @param samples
+         */
+        void SetSamplesToFade(float samples);
+        /**
+         * @brief Set the loop start position, in samples.
+         *
+         * @param start
+         */
         void SetLoopStart(float start);
-        int32_t GetRandomPosition();
+        /**
+         * @brief Set the loop length, in samples.
+         *
+         * @param length
+         */
+        void SetLoopLength(float length);
+        /**
+         * @brief Sets the reading speed, in samples.
+         *
+         * @param rate
+         */
+        void SetReadRate(float rate);
+        /**
+         * @brief Sets the writing speed, in samples.
+         *
+         * @param rate
+         */
+        void SetWriteRate(float rate);
+        /**
+         * @brief Sets the reading head movement type.
+         *
+         * @param movement
+         */
+        void SetMovement(Movement movement);
+        /**
+         * @brief Sets the reading head direction.
+         *
+         * @param direction
+         */
         void SetDirection(Direction direction);
+        /**
+         * @brief Sets the reading position.
+         *
+         * @param position
+         */
+        void SetReadPos(float position);
+        /**
+         * @brief Sets the writing position.
+         *
+         * @param position
+         */
+        void SetWritePos(float position);
+        /**
+         * @brief Sets whether the playback is looped or not.
+         *
+         * @param looping
+         */
+        void SetLooping(bool looping);
+        /**
+         * @brief Sets whether the read and write loop are synched or not.
+         *
+         * @param loopSync
+         */
+        void SetLoopSync(bool loopSync);
+        /**
+         * @brief Reads the current value from the buffer.
+         *
+         * @return float
+         */
+        float Read();
+        /**
+         * @brief Writes the provided value to the buffer.
+         *
+         * @param input
+         */
+        void Write(float input);
+        /**
+         * @brief Applies degradation to the given signal.
+         *
+         * @param input
+         * @return float
+         */
+        float Degrade(float input);
+        /**
+         * @brief Sets up a fade between the two reading heads.
+         */
+        void FadeReadingToResetPosition();
+        /**
+         * @brief Updates the reading position.
+         */
+        void UpdateReadPos();
+        /**
+         * @brief Updates the writing position.
+         */
+        void UpdateWritePos();
+        /**
+         * @brief Toggles the playback direction between forward and backwards.
+         */
         void ToggleDirection();
+        /**
+         * @brief Sets the amount of freezing.
+         *
+         * @param amount
+         */
         void SetFreeze(float amount);
+        /**
+         * @brief Sets the amount of degradation.
+         *
+         * @param amount
+         */
         void SetDegradation(float amount);
+        /**
+         * @brief Calculates the distance between point a and b, taking into
+         * account their speed and direction. This is mainly used to calculate
+         * the distance between the active reading head and the writing head.
+         *
+         * @param a
+         * @param b
+         * @param aSpeed
+         * @param bSpeed
+         * @param direction
+         * @return float
+         */
+        float CalculateDistance(float a, float b, float aSpeed, float bSpeed, Direction direction);
+
         void SetReading(bool active) { readingActive_ = active; }
         void SetWriting(bool active) { writingActive_ = active; }
-
-        void SetSamplesToFade(float samples);
 
         inline float GetSamplesToFade() { return readHeads_[activeReadHead_].GetSamplesToFade(); }
 
@@ -85,7 +239,6 @@ namespace wreath
         inline float GetHeadsDistance() { return headsDistance_; }
         inline float GetCrossPoint() { return crossPoint_; }
         inline bool CrossPointFound() { return crossPointFound_; }
-        float CalculateDistance(float a, float b, float aSpeed, float bSpeed, Direction direction);
 
         bool IsReading() { return readingActive_; }
         bool IsWriting() { return writingActive_; }
@@ -100,6 +253,10 @@ namespace wreath
             FADE_TRIGGER,
         };
 
+        /**
+         * @brief Calculates where in the buffer the active reading head and the
+         * writing head will meet.
+         */
         void CalculateCrossPoint();
 
         float *buffer_{};           // The buffer

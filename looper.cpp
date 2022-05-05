@@ -4,13 +4,6 @@
 using namespace wreath;
 using namespace daisysp;
 
-/**
- * @brief Initializes the looper.
- *
- * @param sampleRate
- * @param buffer
- * @param maxBufferSamples
- */
 void Looper::Init(int32_t sampleRate, float *buffer, float *buffer2, int32_t maxBufferSamples)
 {
     sampleRate_ = sampleRate;
@@ -195,31 +188,32 @@ void Looper::SetLoopStart(float start)
     loopLengthGrown_ = start > loopStart_;
     loopChanged_ = start != loopStart_;
 
-    if (loopLength_ > kMinSamplesForFlanger)
+    // Always change the inactive head first.
+    loopStart_ = readHeads_[!activeReadHead_].SetLoopStart(start);
+
+    // Also change the active one if the loop is short or we are not reading.
+    if (loopLength_ <= kMinSamplesForFlanger || !readingActive_)
     {
-        loopStart_ = readHeads_[!activeReadHead_].SetLoopStart(start);
-        if (!readingActive_)
+        readHeads_[activeReadHead_].SetLoopStart(loopStart_);
+        if (loopLength_ <= kMinSamplesForFlanger)
         {
-            readHeads_[activeReadHead_].SetLoopStart(loopStart_);
+            // Keep the heads inside the loop.
+            readHeads_[0].ResetPosition();
+            readHeads_[1].ResetPosition();
+            if (loopSync_)
+            {
+                writeHead_.ResetPosition();
+            }
         }
     }
-    else
-    {
-        loopStart_ = readHeads_[0].SetLoopStart(start);
-        readHeads_[1].SetLoopStart(start);
-        // Also, always keep the heads inside the loop.
-        readHeads_[0].ResetPosition();
-        readHeads_[1].ResetPosition();
-        if (loopSync_)
-        {
-            writeHead_.ResetPosition();
-        }
-    }
+
     intLoopStart_ = loopStart_;
     loopStartSeconds_ = loopStart_ / static_cast<float>(sampleRate_);
     loopEnd_ = readHeads_[!activeReadHead_].GetLoopEnd();
     intLoopEnd_ = loopEnd_;
     crossPointFound_ = false;
+
+    // In delay mode, keep the loop synched.
     if (loopSync_)
     {
         writeHead_.SetLoopStart(loopStart_);
@@ -236,24 +230,23 @@ void Looper::SetLoopLength(float length)
 
     loopLengthGrown_ = length > loopLength_;
     loopChanged_ = length != loopLength_;
-    if (length > kMinSamplesForFlanger)
+
+    // Always change the inactive head first.
+    loopLength_ = readHeads_[!activeReadHead_].SetLoopLength(length);
+
+    // Also change the active one if the loop is short or we are not reading.
+    if (length <= kMinSamplesForFlanger || !readingActive_)
     {
-        loopLength_ = readHeads_[!activeReadHead_].SetLoopLength(length);
-        if (!readingActive_)
-        {
-            readHeads_[activeReadHead_].SetLoopLength(loopLength_);
-        }
+        readHeads_[activeReadHead_].SetLoopLength(loopLength_);
     }
-    else
-    {
-        loopLength_ = readHeads_[0].SetLoopLength(length);
-        readHeads_[1].SetLoopLength(length);
-    }
+
     intLoopLength_ = loopLength_;
     loopLengthSeconds_ = loopLength_ / sampleRate_;
     loopEnd_ = readHeads_[!activeReadHead_].GetLoopEnd();
     intLoopEnd_ = loopEnd_;
     crossPointFound_ = false;
+
+    // In delay mode, keep the loop synched.
     if (loopSync_)
     {
         writeHead_.SetLoopLength(loopLength_);
@@ -602,9 +595,6 @@ void Looper::SetFreeze(float amount)
 void Looper::SetDegradation(float amount)
 {
     degradation_ = amount;
-    readHeads_[0].SetDegradation(amount);
-    readHeads_[1].SetDegradation(amount);
-    writeHead_.SetDegradation(amount);
 }
 
 float Looper::CalculateDistance(float a, float b, float aSpeed, float bSpeed, Direction direction)

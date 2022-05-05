@@ -136,7 +136,6 @@ void TestBoundaries()
     for (Scenario scenario : scenarios)
     {
         looper.Reset();
-        looper.SetTriggerMode(Looper::TriggerMode::LOOP);
         looper.StartReading(true);
         std::cout << "Scenario " << scenario.desc << "\n";
         looper.SetLoopStart(scenario.loopStart);
@@ -172,7 +171,7 @@ void TestRead()
     float index = bufferSamples - 1;
 
     looper.SetReadPos(index);
-    float value = looper.Read(0);
+    float value = looper.Read();
     std::cout << "Value at " << index << ": " << value << "\n";
 }
 
@@ -254,7 +253,6 @@ void TestCrossPoint()
 
     Buffer(false);
 
-    looper.SetTriggerMode(Looper::TriggerMode::LOOP);
     looper.SetMovement(Movement::NORMAL);
     looper.SetLoopSync(true);
 
@@ -285,11 +283,9 @@ void TestCrossPoint()
     std::cout << "Read pos: " << looper.GetReadPos() << "\n";
     std::cout << "Write pos: " << looper.GetWritePos() << "\n";
     float min{48000};
-    looper.HandleCrossPointFade();
     std::cout << "Heads distance: " << looper.GetHeadsDistance() << "\n\n";
     while (!looper.CrossPointFound())
     {
-        looper.HandleCrossPointFade();
         looper.UpdateWritePos();
         looper.UpdateReadPos();
         /*
@@ -363,7 +359,6 @@ void TestHeadsDistance()
 {
     Buffer(false);
 
-    looper.SetTriggerMode(Looper::TriggerMode::LOOP);
     looper.SetMovement(Movement::NORMAL);
     looper.SetLoopSync(true);
     looper.StartReading(true);

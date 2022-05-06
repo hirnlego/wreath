@@ -2,6 +2,7 @@
 
 ### v1.0.3 (current)
 
+- Fixed the "dragging" effect that occurred when changing loop length while going backwards
 - Updated libDaisy
 - Docs and comments
 

@@ -504,10 +504,11 @@ void Looper::UpdateReadPos()
 
     // Note that in delay mode we don't need to fade the loop, and we wouldn't do
     // it anyway because it'd need a few samples from outside the loop and these
-    // samples are probably unrelated.
-    // Fading when the loop changes yields the same problem, but it sounds better
-    // than if we don't.
-    if (Head::Action::LOOP == action && loopLength_ > kMinSamplesForFlanger && (loopChanged_ || (!loopSync_ && loopLength_ < bufferSamples_)))
+    // samples are probably unrelated.Fading when the loop changes yields the
+    // same problem, but it sounds better than if we don't.
+    // Also note that when going backwards, when the loop changes we fade right
+    // away.
+    if ((loopChanged_ && !IsGoingForward()) || (Head::Action::LOOP == action && loopLength_ > kMinSamplesForFlanger && (loopChanged_ || (!loopSync_ && loopLength_ < bufferSamples_))))
     {
         FadeReadingToResetPosition();
         loopChanged_ = false;

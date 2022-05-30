@@ -6,9 +6,27 @@ The concept of this looper was inspired by [Make Noise Mimeophon](https://www.ma
 
 ##  Disclaimer
 
-This is my first C++ project and my first foray into embedded system programming, so the code is bound to be naive, unoptimized and, generally speaking, bad. It
-kind of works, though, and I did my best to comment it for my future self and for anybody who may ask what the hell am I doing. Nevertheless, there are still
-uncommented parts, and chances are that they will stay that way, unless someone is willing to fill in the blanks.
+This is my first C++ project and my first foray into embedded system programming, so the code is bound to be naive, unoptimized and, generally speaking, bad. It kind of works, though, and I did my best to comment it for my future self and for anybody who may ask what the hell am I doing. Nevertheless, there are still uncommented parts, and chances are that they will stay that way, unless someone is willing to fill in the blanks.
+
+## License
+
+This software is released under the MIT license, please see the LICENSE file included in the repo.
+
+TL;DR: the firmware and the source code are provided as-is without any kind of warranty or support.
+
+## Modifying the source code
+
+Clone the repository with:
+
+git clone --recurse-submodules https://github.com/hirnlego/wreath
+
+Inside the root directory there are two Electrosmith packages, ```libDaisy``` and ```DaisySP``` that needs compiling by launching ```make``` from inside the respective directory.
+
+Once done, everything should be ready.
+
+I've used Microsoft Visual Studio Code as IDE and the project configuration is included in the repository. Also, a makefile is present.
+
+To set up your development environment, learn how to debug with a probe and for general help with Daisy and the Electrosmith packages, please refer to their wiki.
 
 ## Structure
 
@@ -45,11 +63,3 @@ Taking inspiration from Monome Softcut, the looper is structured like this:
 ## API
 
 You should interact with the looper through the StereoLooper API. Take a look at stereo_looper.h, the methods are documented.
-
-## License
-
-Wreath uses the MIT license.
-
-It can be used in both closed source and commercial projects, and does not provide a warranty of any kind.
-
-For the full license, read the LICENSE file in the root directory.
